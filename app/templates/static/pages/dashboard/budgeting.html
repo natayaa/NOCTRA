@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Noctra Budgeting</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/budgeting_ui.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+
+<body>
+
+    <div class="dashboard">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+
+            <div class="brand">
+
+                <div class="brand-icon">
+                    <i class="ri-tools-line"></i>
+                </div>
+
+                <div>
+                    <h2>NOCTRA</h2>
+                    <span>AUTOWORKS</span>
+                </div>
+
+            </div>
+
+            <nav class="menu">
+
+                <a>
+                    <i class="ri-dashboard-line"></i>
+                    Dashboard
+                </a>
+
+                <a class="active">
+                    <i class="ri-wallet-3-line"></i>
+                    Budgeting
+                </a>
+
+                <a>
+                    <i class="ri-tools-line"></i>
+                    Projects
+                </a>
+
+                <a>
+                    <i class="ri-bar-chart-box-line"></i>
+                    Analytics
+                </a>
+
+                <a>
+                    <i class="ri-alert-line"></i>
+                    Risk
+                </a>
+
+            </nav>
+
+        </aside>
+
+        <!-- MAIN -->
+        <main class="main">
+
+            <!-- TOP -->
+            <header class="topbar">
+
+                <div>
+                    <h1>Budgeting</h1>
+                    <p>Workshop financial management overview.</p>
+                </div>
+
+                <button class="budget-btn" id="openModal">
+                    <i class="ri-add-line"></i>
+                    Add Expense
+                </button>
+
+            </header>
+
+            <!-- KPI -->
+            <section class="kpi-grid">
+
+                <div class="kpi-card">
+
+                    <span>Total Budget</span>
+                    <h2>Rp 24.5M</h2>
+
+                    <div class="progress">
+                        <div class="progress-fill blue"></div>
+                    </div>
+
+                </div>
+
+                <div class="kpi-card">
+
+                    <span>Operational Cost</span>
+                    <h2>Rp 8.1M</h2>
+
+                    <div class="progress">
+                        <div class="progress-fill green"></div>
+                    </div>
+
+                </div>
+
+                <div class="kpi-card">
+
+                    <span>Paint Materials</span>
+                    <h2>Rp 6.8M</h2>
+
+                    <div class="progress">
+                        <div class="progress-fill purple"></div>
+                    </div>
+
+                </div>
+
+                <div class="kpi-card">
+
+                    <span>Net Profit</span>
+                    <h2>Rp 11.2M</h2>
+
+                    <div class="progress">
+                        <div class="progress-fill orange"></div>
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!-- CHART -->
+            <section class="chart-grid">
+
+                <div class="card">
+
+                    <div class="card-header">
+                        <h3>Monthly Expenses</h3>
+                    </div>
+
+                    <canvas id="expenseChart"></canvas>
+
+                </div>
+
+                <div class="card">
+
+                    <div class="card-header">
+                        <h3>Budget Distribution</h3>
+                    </div>
+
+                    <canvas id="budgetChart"></canvas>
+
+                </div>
+
+            </section>
+
+            <!-- TABLE -->
+            <section class="table-grid">
+
+                <!-- EXPENSE -->
+                <div class="card">
+
+                    <div class="card-header">
+                        <h3>Recent Expenses</h3>
+                    </div>
+
+                    <table>
+
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Category</th>
+                                <th>Cost</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+
+                            <tr>
+                                <td>2K Clear Coat</td>
+                                <td>Paint</td>
+                                <td>Rp 450K</td>
+                            </tr>
+
+                            <tr>
+                                <td>Compound Kit</td>
+                                <td>Detailing</td>
+                                <td>Rp 320K</td>
+                            </tr>
+
+                            <tr>
+                                <td>Electric Bill</td>
+                                <td>Operational</td>
+                                <td>Rp 1.2M</td>
+                            </tr>
+
+                            <tr>
+                                <td>Sandpaper P2000</td>
+                                <td>Material</td>
+                                <td>Rp 180K</td>
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+                <!-- RISK -->
+                <div class="card">
+
+                    <div class="card-header">
+                        <h3>Budget Alerts</h3>
+                    </div>
+
+                    <div class="alert red">
+                        Paint material expenses increased 24%.
+                    </div>
+
+                    <div class="alert yellow">
+                        Clear coat stock running low.
+                    </div>
+
+                    <div class="alert blue">
+                        Operational costs stable this month.
+                    </div>
+
+                </div>
+
+            </section>
+
+        </main>
+
+    </div>
+
+    <!-- POPUP -->
+
+    <div class="modal-overlay" id="expenseModal">
+
+        <div class="modal">
+
+            <div class="modal-header">
+
+                <h2>Add Expense</h2>
+
+                <button id="closeModal">
+                    <i class="ri-close-line"></i>
+                </button>
+
+            </div>
+
+            <form class="expense-form">
+
+                <div class="form-group">
+
+                    <label>Expense Name</label>
+
+                    <input type="text" placeholder="Example: Clear Coat">
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Category</label>
+
+                    <select>
+
+                        <option>Paint</option>
+                        <option>Operational</option>
+                        <option>Detailing</option>
+                        <option>Tools</option>
+
+                    </select>
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Cost</label>
+
+                    <input type="number" placeholder="500000">
+
+                </div>
+
+                <div class="form-group">
+
+                    <label>Description</label>
+
+                    <textarea rows="4" placeholder="Expense details..."></textarea>
+
+                </div>
+
+                <button type="submit" class="submit-btn">
+                    Save Expense
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+    <script src="/js/budgeting.js"></script>
+
+</body>
+
+</html>
