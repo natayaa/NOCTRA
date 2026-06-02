@@ -1,166 +1,74 @@
-// EXPENSE CHART
+const expenseModal = document.getElementById("expenseModal");
 
-const expenseCtx = document
-    .getElementById("expenseChart");
-
-new Chart(expenseCtx, {
-
-    type: "line",
-
-    data: {
-
-        labels: [
-            "Jan",
-            "Feb",
-            "Mar",
-            "Apr",
-            "May",
-            "Jun"
-        ],
-
-        datasets: [{
-
-            label: "Expenses",
-
-            data: [
-                3,
-                4,
-                5,
-                7,
-                6,
-                8
-            ],
-
-            borderColor: "#00d5ff",
-
-            backgroundColor: "rgba(0,213,255,.12)",
-
-            fill: true,
-
-            tension: .4
-
-        }]
-
-    },
-
-    options: {
-
-        responsive: true,
-
-        plugins: {
-            legend: {
-                labels: {
-                    color: "#fff"
-                }
-            }
-        },
-
-        scales: {
-
-            x: {
-                ticks: {
-                    color: "#8d98b3"
-                },
-
-                grid: {
-                    color: "rgba(255,255,255,.04)"
-                }
-            },
-
-            y: {
-                ticks: {
-                    color: "#8d98b3"
-                },
-
-                grid: {
-                    color: "rgba(255,255,255,.04)"
-                }
-            }
-
-        }
-
-    }
-
+document.getElementById("addExpenseBtn").addEventListener("click", () => {
+  expenseModal.classList.add("active");
 });
 
-
-// BUDGET DISTRIBUTION
-
-const budgetCtx = document
-    .getElementById("budgetChart");
-
-new Chart(budgetCtx, {
-
-    type: "doughnut",
-
-    data: {
-
-        labels: [
-            "Operational",
-            "Paint",
-            "Detailing",
-            "Tools"
-        ],
-
-        datasets: [{
-
-            data: [
-                40,
-                30,
-                20,
-                10
-            ],
-
-            backgroundColor: [
-                "#00d5ff",
-                "#9747ff",
-                "#00ff88",
-                "#ffb020"
-            ],
-
-            borderWidth: 0
-
-        }]
-
-    },
-
-    options: {
-
-        plugins: {
-            legend: {
-                labels: {
-                    color: "#fff"
-                }
-            }
-        }
-
-    }
-
+document.getElementById("closeExpenseModal").addEventListener("click", () => {
+  expenseModal.classList.remove("active");
 });
 
-// MODAL
+document.getElementById("expenseForm").addEventListener("submit", (e) => {
+  e.preventDefault();
 
-const modal = document.getElementById("expenseModal");
+  const date = document.getElementById("expenseDate").value;
 
-const openBtn = document.getElementById("openModal");
+  const category = document.getElementById("expenseCategory").value;
 
-const closeBtn = document.getElementById("closeModal");
+  const description = document.getElementById("expenseDescription").value;
 
+  const amount = document.getElementById("expenseAmount").value;
 
-openBtn.addEventListener("click", () => {
-    modal.classList.add("active");
+  const row = document.createElement("tr");
+
+  row.innerHTML = `
+            <td>${date}</td>
+            <td>${category}</td>
+            <td>${description}</td>
+            <td>Rp ${Number(amount).toLocaleString("id-ID")}</td>
+        `;
+
+  document.getElementById("expenseTable").appendChild(row);
+
+  expenseModal.classList.remove("active");
+
+  e.target.reset();
 });
 
+// Expense Trend
 
-closeBtn.addEventListener("click", () => {
-    modal.classList.remove("active");
+new Chart(document.getElementById("expenseChart"), {
+  type: "line",
+
+  data: {
+    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+
+    datasets: [
+      {
+        label: "Expenses",
+
+        data: [2, 3, 2.5, 4, 3.8, 5],
+
+        borderColor: "#00d5ff",
+
+        tension: 0.4,
+      },
+    ],
+  },
 });
 
+// Expense Breakdown
 
-modal.addEventListener("click", (e) => {
+new Chart(document.getElementById("expensePieChart"), {
+  type: "doughnut",
 
-    if (e.target === modal) {
-        modal.classList.remove("active");
-    }
+  data: {
+    labels: ["Material", "Labor", "Operational", "Equipment"],
 
+    datasets: [
+      {
+        data: [40, 30, 20, 10],
+      },
+    ],
+  },
 });

@@ -11,11 +11,21 @@ async def landing_page(request: Request):
     konteks = {
         "request": request, "title": "",
     }
-    return templates.TemplateResponse("ui.html", context=konteks, status_code=status.HTTP_200_OK)
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context=konteks,
+        status_code=status.HTTP_200_OK
+    )
 
 @pages.get("/inquiry", response_class=HTMLResponse)
 async def inquiry_page(request: Request):
     context = {
         "request": request
     }
-    return templates.TemplateResponse("inquiry.html", context=context, status_code=status.HTTP_200_OK)
+    return templates.TemplateResponse(
+        request=request,
+        name="inquiry.html", 
+        context=context, 
+        status_code=status.HTTP_200_OK
+    )

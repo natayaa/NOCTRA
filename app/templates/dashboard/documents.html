@@ -1,0 +1,129 @@
+{% extends "base.html" %} {% block title %} Documents | NOCTRA {% endblock
+%} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/documents.css') }}"
+/>
+{% endblock %} {% block page_title %} Documents {% endblock %} {% block
+page_subtitle %} Document Management System {% endblock %} {% block content %}
+
+<div class="documents-toolbar">
+  <button class="btn-primary" id="uploadDocumentBtn">Upload Document</button>
+</div>
+
+<div class="documents-stats">
+  <div class="stat-card">
+    <span>Total Documents</span>
+
+    <h2>324</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Project Files</span>
+
+    <h2>142</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Customer Files</span>
+
+    <h2>96</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Media Files</span>
+
+    <h2>86</h2>
+  </div>
+</div>
+
+<div class="documents-card">
+  <div class="table-toolbar">
+    <input type="search" id="documentSearch" placeholder="Search document..." />
+
+    <select id="documentFilter">
+      <option value="">All Types</option>
+
+      <option>STNK</option>
+
+      <option>Invoice</option>
+
+      <option>Quotation</option>
+
+      <option>Photo</option>
+    </select>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Customer</th>
+        <th>Date</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+
+    <tbody id="documentTable">
+      <tr>
+        <td>STNK_Mio_Sporty.pdf</td>
+
+        <td>STNK</td>
+
+        <td>Ivan</td>
+
+        <td>2026-06-01</td>
+
+        <td>
+          <button>View</button>
+
+          <button>Download</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- UPLOAD MODAL -->
+
+<div class="modal-overlay" id="documentModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Upload Document</h2>
+
+      <button id="closeDocumentModal">×</button>
+    </div>
+
+    <form id="documentForm" enctype="multipart/form-data">
+      <input
+        type="text"
+        id="documentName"
+        placeholder="Document Name"
+        required
+      />
+
+      <select id="documentType">
+        <option>STNK</option>
+
+        <option>BPKB</option>
+
+        <option>Invoice</option>
+
+        <option>Quotation</option>
+
+        <option>Photo</option>
+      </select>
+
+      <input type="text" id="customerName" placeholder="Customer" />
+
+      <input type="file" id="documentFile" required />
+
+      <button type="submit" class="btn-primary">Upload</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/documents.js') }}"></script>
+{% endblock %}

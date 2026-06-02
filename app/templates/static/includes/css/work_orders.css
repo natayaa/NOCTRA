@@ -1,0 +1,84 @@
+.wo-grid {
+  display: grid;
+
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 24px;
+}
+
+.wo-column {
+  background: var(--card);
+
+  border-radius: 24px;
+
+  border: 1px solid var(--border);
+
+  min-height: 700px;
+}
+
+.column-header {
+  padding: 20px;
+
+  border-bottom: 1px solid var(--border);
+}
+
+.wo-list {
+  padding: 16px;
+}
+
+.wo-card {
+  background: #08101f;
+
+  padding: 18px;
+
+  border-radius: 18px;
+
+  margin-bottom: 12px;
+
+  cursor: pointer;
+}
+
+.drawer {
+  position: fixed;
+
+  top: 0;
+  right: -450px;
+
+  width: 450px;
+
+  height: 100vh;
+
+  background: var(--card);
+
+  transition: 0.3s;
+
+  z-index: 999;
+}
+
+.drawer.active {
+  right: 0;
+}
+
+.drawer-header {
+  padding: 24px;
+
+  display: flex;
+
+  justify-content: space-between;
+}
+
+.drawer-body {
+  padding: 24px;
+}
+
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.checklist {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 10px;
+}

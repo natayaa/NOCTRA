@@ -1,0 +1,71 @@
+{% extends "base.html" %} {% block title %} Notifications {% endblock %}
+{% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/notifications.css') }}"
+/>
+{% endblock %} {% block page_title %} Notifications {% endblock %} {% block
+page_subtitle %} Automation & Alerts {% endblock %} {% block content %}
+
+<div class="notification-settings">
+  <div class="settings-card">
+    <h3>WhatsApp</h3>
+
+    <label class="switch">
+      <input type="checkbox" checked />
+
+      <span> Enable WhatsApp Alerts </span>
+    </label>
+  </div>
+
+  <div class="settings-card">
+    <h3>Email</h3>
+
+    <label class="switch">
+      <input type="checkbox" checked />
+
+      <span> Enable Email Alerts </span>
+    </label>
+  </div>
+
+  <div class="settings-card">
+    <h3>Inventory Alerts</h3>
+
+    <label class="switch">
+      <input type="checkbox" checked />
+
+      <span> Low Stock Alerts </span>
+    </label>
+  </div>
+</div>
+
+<div class="notification-history">
+  <div class="card-header">
+    <h3>Notification History</h3>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Channel</th>
+        <th>Recipient</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr>
+        <td>2026-06-02</td>
+
+        <td>WhatsApp</td>
+
+        <td>Ivan</td>
+
+        <td>Delivered</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

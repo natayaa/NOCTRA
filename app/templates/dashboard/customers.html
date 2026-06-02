@@ -1,0 +1,148 @@
+{% extends "base.html" %} {% block title %} Customers | NOCTRA {% endblock
+%} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/customers.css') }}"
+/>
+{% endblock %} {% block page_title %} Customers CRM {% endblock %} {% block
+page_subtitle %} Customer Relationship Management {% endblock %} {% block
+content %}
+
+<div class="customers-layout">
+  <div class="customer-list">
+    <div class="panel-header">
+      <h3>Customers</h3>
+
+      <input
+        type="search"
+        id="customerSearch"
+        placeholder="Search customer..."
+      />
+    </div>
+
+    <div id="customerContainer">
+      <div class="customer-card active" data-customer="Ivan">
+        <h4>Ivan</h4>
+
+        <p>3 Vehicles</p>
+      </div>
+
+      <div class="customer-card" data-customer="Budi">
+        <h4>Budi</h4>
+
+        <p>1 Vehicle</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="customer-detail">
+    <div class="customer-header">
+      <div>
+        <h2 id="customerName">Ivan</h2>
+
+        <p id="customerPhone">08123456789</p>
+      </div>
+
+      <button class="btn-primary" id="addVehicleBtn">Add Vehicle</button>
+    </div>
+
+    <div class="customer-kpis">
+      <div class="stat-card">
+        <span>Total Projects</span>
+
+        <h2>12</h2>
+      </div>
+
+      <div class="stat-card">
+        <span>Total Spending</span>
+
+        <h2>Rp 42M</h2>
+      </div>
+
+      <div class="stat-card">
+        <span>Vehicles</span>
+
+        <h2>3</h2>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="vehicles">Vehicles</button>
+
+      <button class="tab" data-tab="history">Service History</button>
+
+      <button class="tab" data-tab="gallery">Gallery</button>
+
+      <button class="tab" data-tab="notes">Notes</button>
+    </div>
+
+    <!-- VEHICLES -->
+
+    <div class="tab-content active" id="vehicles">
+      <div class="vehicle-grid">
+        <div class="vehicle-card">
+          <h3>Yamaha Mio Sporty</h3>
+
+          <p>B 1234 XYZ</p>
+
+          <span> 2010 </span>
+        </div>
+
+        <div class="vehicle-card">
+          <h3>Ninja 250R</h3>
+
+          <p>D 9876 ABC</p>
+
+          <span> 2011 </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SERVICE HISTORY -->
+
+    <div class="tab-content" id="history">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Service</th>
+            <th>Vehicle</th>
+            <th>Cost</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr>
+            <td>2026-05-01</td>
+
+            <td>Full Restoration</td>
+
+            <td>Mio Sporty</td>
+
+            <td>Rp 7.500.000</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- GALLERY -->
+
+    <div class="tab-content" id="gallery">
+      <div class="gallery-grid">
+        <div class="gallery-item">Before</div>
+
+        <div class="gallery-item">After</div>
+      </div>
+    </div>
+
+    <!-- NOTES -->
+
+    <div class="tab-content" id="notes">
+      <textarea rows="10" placeholder="Customer notes..."></textarea>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/customers.js') }}"></script>
+{% endblock %}

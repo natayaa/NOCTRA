@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>NOCTRA Inquiry</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css"
+      rel="stylesheet"
+    />
+
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', path='css/inquiry.css') }}"
+    />
+  </head>
+
+  <body>
+    <div class="page">
+      <!-- LEFT -->
+
+      <!--div class="left-side">
+        <div class="overlay"></div>
+
+        <div class="hero-content">
+          <div class="tag">Premium Workshop Inquiry</div>
+
+          <h1>
+            NOCTRA <br />
+            AUTOWORKS
+          </h1>
+
+          <p>
+            Request premium repaint, restoration, detailing and custom
+            motorcycle services.
+          </p>
+
+          <div class="features">
+            <div class="feature">
+              <i class="ri-check-line"></i>
+              Premium paint quality
+            </div>
+
+            <div class="feature">
+              <i class="ri-check-line"></i>
+              Restoration specialists
+            </div>
+
+            <div class="feature">
+              <i class="ri-check-line"></i>
+              Fast customer response
+            </div>
+          </div>
+        </div>
+      </div-->
+
+      <!-- RIGHT -->
+
+      <div class="right-side">
+        <form class="inquiry-form">
+          <div class="wizard-progress">
+            <div class="progress-line"></div>
+
+            <div class="step active" data-step="1">
+              <span>1</span>
+              <small>Vehicle</small>
+            </div>
+
+            <div class="step" data-step="2">
+              <span>2</span>
+              <small>Service</small>
+            </div>
+
+            <div class="step" data-step="3">
+              <span>3</span>
+              <small>Details</small>
+            </div>
+          </div>
+
+          <!-- STEP 1 -->
+
+          <div class="wizard-page active">
+            <div class="form-header">
+              <h2>Vehicle Information</h2>
+
+              <p>Tell us about your motorcycle.</p>
+            </div>
+
+            <div class="input-group">
+              <label>Nama Lengkap</label>
+              <input id="fullname" type="text" />
+            </div>
+
+            <div class="input-group">
+              <label>Nomor WhatsApp</label>
+              <input id="phone_number" type="text" />
+            </div>
+
+            <div class="input-group">
+              <label>Nomor Polisi</label>
+
+              <div class="plate-input">
+                <input class="plate-prefix" maxlength="2" placeholder="D" />
+
+                <span>-</span>
+
+                <input class="plate-number" maxlength="4" placeholder="6637" />
+
+                <span>-</span>
+
+                <input class="plate-suffix" maxlength="3" placeholder="KK" />
+              </div>
+            </div>
+
+            <div class="grid">
+              <div class="input-group">
+                <label>Merk</label>
+
+                <select id="bike_brand">
+                  <option>YAMAHA</option>
+                  <option>HONDA</option>
+                  <option>KAWASAKI</option>
+                  <option>SUZUKI</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label>Model</label>
+
+                <input id="bike_model" type="text" />
+              </div>
+            </div>
+          </div>
+
+          <!-- STEP 2 -->
+
+          <div class="wizard-page">
+            <div class="form-header">
+              <h2>Requested Services</h2>
+            </div>
+
+            <div class="service-grid">
+              <label class="service-card">
+                <input type="checkbox" />
+
+                <i class="ri-brush-line"></i>
+
+                <span>Body Repaint</span>
+              </label>
+
+              <label class="service-card">
+                <input type="checkbox" />
+
+                <i class="ri-tools-line"></i>
+
+                <span>Restoration</span>
+              </label>
+
+              <label class="service-card">
+                <input type="checkbox" />
+
+                <i class="ri-settings-3-line"></i>
+
+                <span>Velg Repaint</span>
+              </label>
+
+              <label class="service-card">
+                <input type="checkbox" />
+
+                <i class="ri-speed-up-line"></i>
+
+                <span>CVT Service</span>
+              </label>
+
+              <label class="service-card">
+                <input type="checkbox" />
+
+                <i class="ri-gas-station-line"></i>
+
+                <span>Carburetor</span>
+              </label>
+            </div>
+
+            <div class="input-group">
+              <label>Kondisi Kendaraan</label>
+
+              <select id="body_condition">
+                <option>Goresan Ringan</option>
+                <option>Rusak Sedang</option>
+                <option>Rusak Berat</option>
+                <option>Full Restoration</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- STEP 3 -->
+
+          <div class="wizard-page">
+            <div class="form-header">
+              <h2>Project Details</h2>
+            </div>
+
+            <div class="input-group">
+              <label>Deskripsi</label>
+
+              <textarea id="project_details" rows="5"></textarea>
+            </div>
+
+            <div class="input-group">
+              <label>Reference Link</label>
+
+              <input id="reference_link" type="text" />
+            </div>
+
+            <div class="input-group">
+              <label>Upload Photos</label>
+
+              <input
+                id="project_photos"
+                type="file"
+                multiple
+                accept="image/*"
+              />
+            </div>
+          </div>
+
+          <div class="wizard-actions">
+            <button type="button" id="prevBtn" class="btn-secondary">
+              Back
+            </button>
+
+            <button type="button" id="nextBtn" class="btn-primary">
+              Continue
+            </button>
+
+            <button type="submit" id="submitBtn" class="submit-btn">
+              Submit Project
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="{{ url_for('static', path='/js/inquiry.js') }}"></script>
+  </body>
+</html>

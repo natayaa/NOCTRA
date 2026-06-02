@@ -5,40 +5,18 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from routes.pages.pages import pages
+from routes.pages.dashboard import dashboard
+
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="templates/includes"), name="static")
-templates = Jinja2Templates(directory="templates/")
+app.mount("/static", StaticFiles(directory="templates/static/includes"), name="static")
+templates = Jinja2Templates(directory="templates/static")
 
-
-# Indonesia
-@app.get("/")
-@app.get("/id")
-async def indonesia():
-    return FileResponse(
-        "templates/static/pages/id/index_id.html"
-    )
-
-
-# English
-@app.get("/en")
-async def english():
-    return FileResponse(
-        "templates/static/pages/en/index.html"
-    )
+app.include_router(pages)
 
 # dashboard
-@app.get("/dashboard")
-async def dashboard():
-    return FileResponse("templates/static/pages/dashboard/ui.html")
-
-@app.get("/budgeting")
-async def budgeting():
-    return FileResponse("templates/static/pages/dashboard/budgeting.html")
-
-@app.get("/inquiry")
-async def inquiry():
-    return FileResponse("templates/static/pages/inquiry.html")
+app.include_router(dashboard)
 
 if __name__ == "__main__":
     uvicorn.run(

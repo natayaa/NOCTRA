@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}
+Dashboard | NOCTRA
+{% endblock %}
+
+{% block page_title %}
+Dashboard
+{% endblock %}
+
+{% block content %}
+
+<div class="stats-grid">
+
+    <div class="stat-card">
+        <span>Revenue</span>
+        <h2>Rp 48.2M</h2>
+        <small>+18.2%</small>
+    </div>
+
+    <div class="stat-card">
+        <span>Profit</span>
+        <h2>Rp 16.8M</h2>
+        <small>+7.3%</small>
+    </div>
+
+    <div class="stat-card">
+        <span>Projects</span>
+        <h2>12</h2>
+        <small>4 Active</small>
+    </div>
+
+    <div class="stat-card">
+        <span>Inquiries</span>
+        <h2>6</h2>
+        <small>2 New</small>
+    </div>
+
+</div>
+
+<div class="chart-card">
+
+    <div class="card-header">
+
+        <h3>
+            Revenue & Profit
+        </h3>
+
+    </div>
+
+    <canvas id="profitChart"></canvas>
+
+</div>
+
+<div class="bottom-grid">
+
+    <div class="card">
+
+        <h3>
+            Recent Projects
+        </h3>
+
+        <div class="project-list">
+
+            <div class="project-item">
+                Mio Sporty Restoration
+            </div>
+
+            <div class="project-item">
+                Ninja 250 Full Repaint
+            </div>
+
+            <div class="project-item">
+                Aerox Custom Color
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="card">
+
+        <h3>
+            Inventory Alerts
+        </h3>
+
+        <div class="alert-list">
+
+            <div class="alert-item warning">
+                Clear Coat Low Stock
+            </div>
+
+            <div class="alert-item warning">
+                Primer Running Out
+            </div>
+
+            <div class="alert-item danger">
+                Sandpaper #1500 Critical
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,122 @@
+{% extends "base.html" %} {% block title %} Reports | NOCTRA {% endblock
+%} {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/reports.css') }}" />
+{% endblock %} {% block page_title %} Reports {% endblock %} {% block
+page_subtitle %} Business Reporting Center {% endblock %} {% block content %}
+
+<div class="reports-grid">
+  <div class="report-card">
+    <div class="report-icon">📄</div>
+
+    <h3>Quotations</h3>
+
+    <p>Generate customer quotations</p>
+
+    <button class="btn-primary" data-report="quotation">Generate</button>
+  </div>
+
+  <div class="report-card">
+    <div class="report-icon">💳</div>
+
+    <h3>Invoices</h3>
+
+    <p>Generate project invoices</p>
+
+    <button class="btn-primary" data-report="invoice">Generate</button>
+  </div>
+
+  <div class="report-card">
+    <div class="report-icon">📈</div>
+
+    <h3>Revenue Report</h3>
+
+    <p>Monthly revenue analysis</p>
+
+    <button class="btn-primary" data-report="revenue">Generate</button>
+  </div>
+
+  <div class="report-card">
+    <div class="report-icon">💸</div>
+
+    <h3>Expense Report</h3>
+
+    <p>Monthly expense summary</p>
+
+    <button class="btn-primary" data-report="expense">Generate</button>
+  </div>
+
+  <div class="report-card">
+    <div class="report-icon">💰</div>
+
+    <h3>Profit Report</h3>
+
+    <p>Profitability report</p>
+
+    <button class="btn-primary" data-report="profit">Generate</button>
+  </div>
+
+  <div class="report-card">
+    <div class="report-icon">👤</div>
+
+    <h3>Customer Report</h3>
+
+    <p>Customer spending analysis</p>
+
+    <button class="btn-primary" data-report="customer">Generate</button>
+  </div>
+</div>
+
+<div class="recent-reports">
+  <div class="card-header">
+    <h3>Recent Reports</h3>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Created</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+
+    <tbody id="reportTable">
+      <tr>
+        <td>Revenue-May-2026.pdf</td>
+
+        <td>Revenue</td>
+
+        <td>2026-06-01</td>
+
+        <td>
+          <button class="download-btn">Download</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- GENERATOR MODAL -->
+
+<div class="modal-overlay" id="reportModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Generate Report</h2>
+
+      <button id="closeReportModal">×</button>
+    </div>
+
+    <form id="reportForm">
+      <input type="date" id="fromDate" required />
+
+      <input type="date" id="toDate" required />
+
+      <button type="submit" class="btn-primary">Generate PDF</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/reports.js') }}"></script>
+{% endblock %}

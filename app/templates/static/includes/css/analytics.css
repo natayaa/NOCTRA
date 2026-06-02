@@ -1,0 +1,53 @@
+.analytics-grid {
+  display: grid;
+
+  grid-template-columns: repeat(2, 1fr);
+
+  gap: 24px;
+
+  margin-bottom: 24px;
+}
+
+.table-card {
+  background: var(--card);
+
+  border: 1px solid var(--border);
+
+  border-radius: 24px;
+
+  overflow: hidden;
+}
+
+.table-header {
+  padding: 24px;
+
+  border-bottom: 1px solid var(--border);
+}
+
+.kpi-list {
+  padding: 24px;
+}
+
+.kpi-item {
+  display: flex;
+
+  justify-content: space-between;
+
+  padding: 16px 0;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.kpi-item:last-child {
+  border: none;
+}
+
+.chart-card {
+  min-height: 420px;
+}
+
+@media (max-width: 1000px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,66 @@
+{% extends "base.html" %} {% block title %} Invoice Management {% endblock
+%} {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/invoice.css') }}" />
+{% endblock %} {% block page_title %} Invoice Management {% endblock %} {% block
+page_subtitle %} Payments & Billing {% endblock %} {% block content %}
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <span>Outstanding</span>
+
+    <h2>Rp 12.500.000</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Paid</span>
+
+    <h2>Rp 45.800.000</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Overdue</span>
+
+    <h2>Rp 3.200.000</h2>
+  </div>
+</div>
+
+<div class="invoice-card">
+  <div class="card-header">
+    <button class="btn-primary" id="createInvoice">Create Invoice</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Invoice</th>
+        <th>Customer</th>
+        <th>Total</th>
+        <th>Paid</th>
+        <th>Remaining</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr>
+        <td>INV-2026-001</td>
+
+        <td>Ivan</td>
+
+        <td>Rp 7.500.000</td>
+
+        <td>Rp 3.000.000</td>
+
+        <td>Rp 4.500.000</td>
+
+        <td>
+          <span class="status pending"> Partial </span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/invoice.js') }}"></script>
+{% endblock %}

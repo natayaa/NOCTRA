@@ -1,0 +1,90 @@
+{% extends "base.html" %} {% block title %} Inquiries | NOCTRA {% endblock
+%} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/inquiries.css') }}"
+/>
+{% endblock %} {% block page_title %} Customer Inquiries {% endblock %} {% block
+page_subtitle %} Manage incoming customer requests {% endblock %} {% block
+content %}
+
+<div class="inquiries-layout">
+  <div class="inquiry-list-panel">
+    <div class="panel-header">
+      <h3>Inquiries</h3>
+
+      <input type="search" id="searchInquiry" placeholder="Search..." />
+    </div>
+
+    <div class="inquiry-list" id="inquiryList">
+      <div
+        class="inquiry-card active"
+        data-customer="Ivan"
+        data-motorbike="Yamaha Mio Sporty"
+        data-service="Full Restoration"
+        data-budget="7500000"
+        data-phone="08123456789"
+      >
+        <h4>Ivan</h4>
+
+        <p>Yamaha Mio Sporty</p>
+
+        <span class="badge new"> NEW </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="inquiry-detail-panel">
+    <div class="detail-header">
+      <h2 id="customerName">Ivan</h2>
+
+      <button class="btn-primary" id="createProjectBtn">Create Project</button>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-item">
+        <label> Vehicle </label>
+
+        <p id="motorbikeName">Yamaha Mio Sporty</p>
+      </div>
+
+      <div class="detail-item">
+        <label> Requested Service </label>
+
+        <p id="serviceName">Full Restoration</p>
+      </div>
+
+      <div class="detail-item">
+        <label> Estimated Budget </label>
+
+        <p id="budget">Rp 7.500.000</p>
+      </div>
+
+      <div class="detail-item">
+        <label> Phone </label>
+
+        <p id="phone">08123456789</p>
+      </div>
+    </div>
+
+    <div class="action-section">
+      <button class="btn-success" id="approveBtn">Approve</button>
+
+      <button class="btn-primary" id="quoteBtn">Send Quote</button>
+
+      <button class="btn-danger" id="rejectBtn">Reject</button>
+
+      <button id="whatsappBtn">WhatsApp</button>
+    </div>
+
+    <div class="notes-section">
+      <h3>Notes</h3>
+
+      <textarea rows="8" placeholder="Customer notes..."></textarea>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/inquiries.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,158 @@
+{% extends "base.html" %} {% block title %} Budgeting | NOCTRA {% endblock
+%} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/budgeting.css') }}"
+/>
+{% endblock %} {% block page_title %} Budgeting {% endblock %} {% block
+page_subtitle %} Financial Management {% endblock %} {% block content %}
+
+<div class="budget-actions">
+  <button class="btn-primary" id="addExpenseBtn">Add Expense</button>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <span>Revenue</span>
+
+    <h2>Rp 48.200.000</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Expenses</span>
+
+    <h2>Rp 16.800.000</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Net Profit</span>
+
+    <h2>Rp 31.400.000</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Cashflow</span>
+
+    <h2>Rp 12.000.000</h2>
+  </div>
+</div>
+
+<div class="budget-grid">
+  <div class="chart-card">
+    <h3>Monthly Expenses</h3>
+
+    <canvas id="expenseChart"></canvas>
+  </div>
+
+  <div class="chart-card">
+    <h3>Expense Breakdown</h3>
+
+    <canvas id="expensePieChart"></canvas>
+  </div>
+</div>
+
+<div class="table-card">
+  <div class="table-header">
+    <h3>Expense History</h3>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Category</th>
+        <th>Description</th>
+        <th>Amount</th>
+      </tr>
+    </thead>
+
+    <tbody id="expenseTable">
+      <tr>
+        <td>2026-06-01</td>
+
+        <td>Material</td>
+
+        <td>2K Clear Coat</td>
+
+        <td>Rp 450.000</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- PROJECT PROFIT -->
+
+<div class="table-card">
+  <div class="table-header">
+    <h3>Project Profitability</h3>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Project</th>
+        <th>Revenue</th>
+        <th>Cost</th>
+        <th>Profit</th>
+        <th>Margin</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr>
+        <td>Mio Restoration</td>
+
+        <td>Rp 7.500.000</td>
+
+        <td>Rp 2.300.000</td>
+
+        <td>Rp 5.200.000</td>
+
+        <td>69%</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- MODAL -->
+
+<div class="modal-overlay" id="expenseModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Expense</h2>
+
+      <button id="closeExpenseModal">×</button>
+    </div>
+
+    <form id="expenseForm">
+      <input type="date" id="expenseDate" required />
+
+      <select id="expenseCategory">
+        <option>Material</option>
+
+        <option>Labor</option>
+
+        <option>Operational</option>
+
+        <option>Equipment</option>
+      </select>
+
+      <input
+        type="text"
+        id="expenseDescription"
+        placeholder="Description"
+        required
+      />
+
+      <input type="number" id="expenseAmount" placeholder="Amount" required />
+
+      <button type="submit" class="btn-primary">Save Expense</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="{{ url_for('static', path='js/budgeting.js') }}"></script>
+{% endblock %}

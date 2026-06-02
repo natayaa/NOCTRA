@@ -1,0 +1,131 @@
+{% extends "base.html" %} {% block title %} Analytics | NOCTRA {% endblock
+%} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/analytics.css') }}"
+/>
+{% endblock %} {% block page_title %} Analytics {% endblock %} {% block
+page_subtitle %} Business Intelligence & Performance {% endblock %} {% block
+content %}
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <span>Total Revenue</span>
+    <h2>Rp 48.2M</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Net Profit</span>
+    <h2>Rp 31.4M</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Conversion Rate</span>
+    <h2>78%</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Projects Completed</span>
+    <h2>124</h2>
+  </div>
+</div>
+
+<div class="analytics-grid">
+  <div class="chart-card">
+    <h3>Revenue vs Profit</h3>
+
+    <canvas id="revenueProfitChart"></canvas>
+  </div>
+
+  <div class="chart-card">
+    <h3>Inquiry Conversion</h3>
+
+    <canvas id="conversionChart"></canvas>
+  </div>
+</div>
+
+<div class="analytics-grid">
+  <div class="chart-card">
+    <h3>Service Breakdown</h3>
+
+    <canvas id="serviceChart"></canvas>
+  </div>
+
+  <div class="chart-card">
+    <h3>Material Consumption</h3>
+
+    <canvas id="materialChart"></canvas>
+  </div>
+</div>
+
+<div class="analytics-grid">
+  <div class="table-card">
+    <div class="table-header">
+      <h3>Top Services</h3>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Projects</th>
+          <th>Revenue</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr>
+          <td>Full Restoration</td>
+
+          <td>24</td>
+
+          <td>Rp 180M</td>
+        </tr>
+
+        <tr>
+          <td>Repaint</td>
+
+          <td>41</td>
+
+          <td>Rp 120M</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <h3>Operational KPIs</h3>
+    </div>
+
+    <div class="kpi-list">
+      <div class="kpi-item">
+        <span>Avg Project Duration</span>
+        <strong>14 Days</strong>
+      </div>
+
+      <div class="kpi-item">
+        <span>Project Success Rate</span>
+        <strong>97%</strong>
+      </div>
+
+      <div class="kpi-item">
+        <span>Avg Margin</span>
+        <strong>68%</strong>
+      </div>
+
+      <div class="kpi-item">
+        <span>Inventory Turnover</span>
+        <strong>5.8x</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="{{ url_for('static', path='js/analytics.js') }}"></script>
+
+{% endblock %}

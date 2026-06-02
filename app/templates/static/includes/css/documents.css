@@ -1,0 +1,105 @@
+.documents-toolbar {
+  display: flex;
+
+  justify-content: flex-end;
+
+  margin-bottom: 24px;
+}
+
+.documents-stats {
+  display: grid;
+
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 24px;
+
+  margin-bottom: 24px;
+}
+
+.documents-card {
+  background: var(--card);
+
+  border: 1px solid var(--border);
+
+  border-radius: 24px;
+
+  overflow: hidden;
+}
+
+.table-toolbar {
+  padding: 24px;
+
+  display: flex;
+
+  gap: 16px;
+
+  border-bottom: 1px solid var(--border);
+}
+
+.table-toolbar input {
+  flex: 1;
+}
+
+.modal-overlay {
+  position: fixed;
+
+  inset: 0;
+
+  background: rgba(0, 0, 0, 0.75);
+
+  display: none;
+
+  justify-content: center;
+
+  align-items: center;
+
+  z-index: 999;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal {
+  width: 500px;
+
+  background: var(--card);
+
+  border-radius: 24px;
+
+  padding: 24px;
+}
+
+.modal-header {
+  display: flex;
+
+  justify-content: space-between;
+
+  margin-bottom: 24px;
+}
+
+.modal-header button {
+  border: none;
+
+  background: none;
+
+  color: white;
+
+  cursor: pointer;
+
+  font-size: 1.5rem;
+}
+
+#documentForm {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 16px;
+}
+
+@media (max-width: 1000px) {
+  .documents-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

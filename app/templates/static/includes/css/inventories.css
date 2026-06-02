@@ -1,0 +1,88 @@
+.inventory-header {
+  display: flex;
+  justify-content: flex-end;
+
+  margin-bottom: 20px;
+}
+
+.inventory-toolbar {
+  display: flex;
+  gap: 16px;
+
+  margin-bottom: 20px;
+}
+
+.table-card {
+  background: var(--card);
+
+  border: 1px solid var(--border);
+
+  border-radius: 24px;
+
+  overflow: hidden;
+}
+
+.status-low {
+  color: #ff4d79;
+}
+
+.status-ok {
+  color: #00ff88;
+}
+
+.modal-overlay {
+  position: fixed;
+
+  inset: 0;
+
+  display: none;
+
+  justify-content: center;
+  align-items: center;
+
+  background: rgba(0, 0, 0, 0.7);
+
+  z-index: 999;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal {
+  width: 450px;
+
+  background: var(--card);
+
+  border-radius: 24px;
+
+  padding: 24px;
+}
+
+.modal-header {
+  display: flex;
+
+  justify-content: space-between;
+
+  margin-bottom: 20px;
+}
+
+.modal-header button {
+  border: none;
+
+  background: none;
+
+  color: white;
+
+  cursor: pointer;
+
+  font-size: 1.5rem;
+}
+
+#inventoryForm {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 16px;
+}

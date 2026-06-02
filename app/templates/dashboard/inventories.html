@@ -1,0 +1,125 @@
+{% extends "base.html" %} {% block title %} Inventory | NOCTRA {% endblock
+%} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/inventories.css') }}"
+/>
+{% endblock %} {% block page_title %} Inventory {% endblock %} {% block
+page_subtitle %} Material & Stock Management {% endblock %} {% block content %}
+
+<div class="inventory-header">
+  <button class="btn-primary" id="addItemBtn">Add Item</button>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <span>Total Value</span>
+
+    <h2>Rp 12.500.000</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Total Items</span>
+
+    <h2>146</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Low Stock</span>
+
+    <h2>8</h2>
+  </div>
+
+  <div class="stat-card">
+    <span>Monthly Usage</span>
+
+    <h2>Rp 3.200.000</h2>
+  </div>
+</div>
+
+<div class="inventory-toolbar">
+  <input type="search" id="searchInventory" placeholder="Search inventory..." />
+
+  <select id="categoryFilter">
+    <option value="">All Categories</option>
+
+    <option value="Paint">Paint</option>
+
+    <option value="Consumable">Consumable</option>
+
+    <option value="Part">Part</option>
+
+    <option value="Tool">Tool</option>
+  </select>
+</div>
+
+<div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Category</th>
+        <th>Stock</th>
+        <th>Unit</th>
+        <th>Cost</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+
+    <tbody id="inventoryTable">
+      <tr>
+        <td>Clear Coat</td>
+
+        <td>Paint</td>
+
+        <td>2</td>
+
+        <td>Liter</td>
+
+        <td>Rp 450.000</td>
+
+        <td>
+          <span class="status-low"> LOW </span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- MODAL -->
+
+<div class="modal-overlay" id="inventoryModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Inventory</h2>
+
+      <button id="closeInventoryModal">×</button>
+    </div>
+
+    <form id="inventoryForm">
+      <input type="text" id="itemName" placeholder="Item Name" required />
+
+      <select id="itemCategory">
+        <option>Paint</option>
+
+        <option>Consumable</option>
+
+        <option>Part</option>
+
+        <option>Tool</option>
+      </select>
+
+      <input type="number" id="itemStock" placeholder="Stock" />
+
+      <input type="text" id="itemUnit" placeholder="Unit" />
+
+      <input type="number" id="itemCost" placeholder="Cost" />
+
+      <button class="btn-primary" type="submit">Save</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/inventories.js') }}"></script>
+{% endblock %}

@@ -1,19 +1,68 @@
 AOS.init({
-  duration: 1000,
-  once: true
+    duration: 1000,
+    once: true
 });
 
+/* ======================
+   NAVBAR SCROLL EFFECT
+====================== */
 const navbar = document.querySelector("nav");
 
 window.addEventListener("scroll", () => {
+    if (!navbar) return;
 
-  if(window.scrollY > 30){
+    navbar.style.background =
+        window.scrollY > 30
+            ? "rgba(4,8,22,.92)"
+            : "rgba(4,8,22,.6)";
+});
 
-    navbar.style.background = "rgba(4,8,22,.92)";
+/* ======================
+   MODAL
+====================== */
+const modal = document.getElementById("inquiryModal");
+const openBtn = document.getElementById("openInquiry");
+const closeBtn = document.getElementById("closeInquiry");
 
-  } else {
+/* ======================
+   SCROLL LOCK SYSTEM (SINGLE SOURCE OF TRUTH)
+====================== */
+function lockScroll() {
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+}
 
-    navbar.style.background = "rgba(4,8,22,.6)";
-  }
+function unlockScroll() {
+    document.body.style.overflow = "";
+    document.documentElement.style.overflow = "";
+}
 
+/* ======================
+   MODAL CONTROL
+====================== */
+function openModal() {
+    if (!modal) return;
+
+    modal.classList.add("active");
+    lockScroll();
+}
+
+function closeModal() {
+    if (!modal) return;
+
+    modal.classList.remove("active");
+    unlockScroll();
+}
+
+/* ======================
+   EVENTS
+====================== */
+openBtn?.addEventListener("click", openModal);
+
+closeBtn?.addEventListener("click", closeModal);
+
+modal?.addEventListener("click", (e) => {
+    if (e.target.classList.contains("modal-backdrop")) {
+        closeModal();
+    }
 });

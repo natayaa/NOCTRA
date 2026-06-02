@@ -1,0 +1,33 @@
+.invoice-card {
+  background: var(--card);
+
+  border: 1px solid var(--border);
+
+  border-radius: 24px;
+
+  overflow: hidden;
+}
+
+.status {
+  padding: 8px 14px;
+
+  border-radius: 20px;
+}
+
+.pending {
+  background: rgba(255, 166, 0, 0.2);
+
+  color: orange;
+}
+
+.paid {
+  background: rgba(0, 255, 128, 0.2);
+
+  color: #00ff80;
+}
+
+.overdue {
+  background: rgba(255, 0, 0, 0.2);
+
+  color: #ff5050;
+}

@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>NOCTRA AUTOWORKS</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Remix Icon -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/remixicon@4.3.0/fonts/remixicon.css"
+    />
+
+    <!-- AOS -->
+    <link rel="stylesheet" href="https://unpkg.com/aos@2.3.4/dist/aos.css" />
+
+    <!-- CSS -->
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', path='css/index.css')}}"
+    />
+  </head>
+
+  <body>
+    <!-- NAVBAR -->
+    <nav>
+      <div class="container nav-wrapper">
+        <div class="logo">
+          <div class="logo-box">
+            <i class="ri-tools-line"></i>
+          </div>
+
+          <div>
+            <h2>NOCTRA</h2>
+            <span>AUTOWORKS</span>
+          </div>
+        </div>
+
+        <div class="nav-links">
+          <a href="#services">Services</a>
+          <a href="#gallery">Gallery</a>
+          <a href="#contact">Contact</a>
+
+          <!-- CTA BUTTON -->
+
+          <a id="openInquiry" class="cta-btn">Start Your Project</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="container hero-content" data-aos="fade-up">
+        <div class="tag">
+          <i class="ri-flashlight-line"></i>
+          Premium Motorcycle Workshop
+        </div>
+
+        <h1>
+          NOCTRA <br />
+          <span>AUTOWORKS</span>
+        </h1>
+
+        <p>
+          Premium restoration, repaint and customization workshop for
+          underground modern motorcycle culture.
+        </p>
+
+        <div class="hero-buttons">
+          <a href="#services" class="btn btn-primary"> Explore Services </a>
+
+          <a href="#" class="btn btn-outline"> WhatsApp </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="container">
+        <div class="stat">
+          <h2>150+</h2>
+
+          <span>Projects Completed</span>
+        </div>
+
+        <div class="stat">
+          <h2>6+</h2>
+
+          <span>Years Experience</span>
+        </div>
+
+        <div class="stat">
+          <h2>95%</h2>
+
+          <span>Customer Return Rate</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SERVICES -->
+    <section id="services">
+      <div class="container">
+        <div class="section-title" data-aos="fade-up">
+          <h2>Our Services</h2>
+          <p>Premium motorcycle modifications and restoration works.</p>
+        </div>
+
+        <div class="services-grid">
+          <div class="card" data-aos="fade-up">
+            <i class="ri-brush-line"></i>
+
+            <h3>Body Paint Works</h3>
+
+            <p>
+              Repaint services for Mio Sporty, Ninja, Vixion and other
+              motorcycles.
+            </p>
+          </div>
+
+          <div class="card" data-aos="fade-up" data-aos-delay="100">
+            <i class="ri-hammer-line"></i>
+
+            <h3>Restoration Projects</h3>
+
+            <p>
+              Full restoration from old condition into premium clean builds.
+            </p>
+          </div>
+
+          <div class="card" data-aos="fade-up" data-aos-delay="200">
+            <i class="ri-focus-3-line"></i>
+
+            <h3>Velg Repaint</h3>
+
+            <p>Wheel repaint and finishing for aggressive premium visuals.</p>
+          </div>
+
+          <div class="card" data-aos="fade-up" data-aos-delay="300">
+            <i class="ri-settings-3-line"></i>
+
+            <h3>CVT & Tune Up</h3>
+
+            <p>
+              CVT tuning, carb cleaning, throttle adjustment and maintenance.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="process">
+      <div class="container">
+        <div class="section-title">
+          <h2>THE PROCESS</h2>
+        </div>
+
+        <div class="process-grid">
+          <div>
+            <span>01</span>
+            <h3>Inspection</h3>
+          </div>
+
+          <div>
+            <span>02</span>
+            <h3>Restoration</h3>
+          </div>
+
+          <div>
+            <span>03</span>
+            <h3>Paint & Finish</h3>
+          </div>
+
+          <div>
+            <span>04</span>
+            <h3>Delivery</h3>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GALLERY -->
+    <section id="gallery">
+      <div class="container">
+        <div class="section-title" data-aos="fade-up">
+          <h2>Restored Projects</h2>
+          <p>Selected restoration showcase builds.</p>
+        </div>
+
+        <div class="gallery">
+          <div class="gallery-item" data-aos="zoom-in">
+            <img
+              src="https://images.unsplash.com/photo-1558981806-ec527fa84c39?q=80&w=1200&auto=format&fit=crop"
+              alt=""
+            />
+
+            <div class="overlay">
+              <h4>Mio Sporty Restoration</h4>
+            </div>
+          </div>
+
+          <div class="gallery-item" data-aos="zoom-in" data-aos-delay="100">
+            <img
+              src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1200&auto=format&fit=crop"
+              alt=""
+            />
+
+            <div class="overlay">
+              <h4>Ninja Repaint Project</h4>
+            </div>
+          </div>
+
+          <div class="gallery-item" data-aos="zoom-in" data-aos-delay="200">
+            <img
+              src="https://images.unsplash.com/photo-1517846693594-1567da72af75?q=80&w=1200&auto=format&fit=crop"
+              alt=""
+            />
+
+            <div class="overlay">
+              <h4>Premium Detailing</h4>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta" id="contact">
+      <div class="container" data-aos="fade-up">
+        <h2>Build Your Dream Motorbike.</h2>
+
+        <p>Underground premium restoration and repaint services.</p>
+
+        <a href="#" class="btn btn-primary"> Contact Via WhatsApp </a>
+      </div>
+    </section>
+
+    <!-- MODAL -->
+
+    <div id="inquiryModal" class="modal">
+      <div class="modal-backdrop"></div>
+
+      <div class="modal-content">
+        <button id="closeInquiry" class="modal-close">×</button>
+
+        <!-- FORM INQUIRY -->
+        {% include "inquiry.html" %}
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+      <div class="container">© 2026 NOCTRA AUTOWORKS</div>
+    </footer>
+
+    <a
+      class="whatsapp-float"
+      href="https://wa.me/6281234567890"
+      target="_blank"
+    >
+      <span class="wa-text"> BOOK NOW </span>
+
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+      >
+        <path
+          d="M20.52 3.48A11.91 11.91 0 0 0 12.04 0C5.52 0 .2 5.3.2 11.82c0 2.08.54 4.1 1.57 5.89L0 24l6.48-1.7a11.8 11.8 0 0 0 5.56 1.42h.01c6.52 0 11.83-5.3 11.83-11.82 0-3.16-1.23-6.12-3.36-8.42zm-8.48 18.2a9.9 9.9 0 0 1-5.04-1.38l-.36-.21-3.85 1.01 1.03-3.75-.23-.39A9.84 9.84 0 0 1 2.2 11.82c0-5.42 4.41-9.83 9.84-9.83 2.63 0 5.09 1.02 6.95 2.88a9.76 9.76 0 0 1 2.89 6.95c0 5.42-4.42 9.86-9.84 9.86zm5.39-7.37c-.29-.15-1.72-.85-1.98-.95-.27-.1-.46-.15-.66.15-.19.29-.76.95-.93 1.15-.17.2-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.45-.86-.77-1.44-1.72-1.61-2.01-.17-.29-.02-.45.13-.6.14-.14.29-.34.44-.51.15-.17.19-.29.29-.49.1-.2.05-.37-.02-.51-.08-.15-.66-1.58-.9-2.17-.24-.57-.49-.49-.66-.49h-.56c-.2 0-.51.08-.78.37-.27.29-1.02 1-1.02 2.44s1.05 2.84 1.19 3.04c.15.2 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.09 1.72-.7 1.96-1.38.24-.68.24-1.26.17-1.38-.07-.12-.27-.19-.56-.34z"
+        />
+      </svg>
+    </a>
+
+    <!-- JS -->
+    <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
+
+    <script src="{{ url_for('static', path='js/index.js') }}"></script>
+  </body>
+</html>

@@ -1,0 +1,84 @@
+{% extends "base.html" %} {% block title %} Calendar | NOCTRA {% endblock
+%} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/calendar.css') }}"
+/>
+{% endblock %} {% block page_title %} Calendar {% endblock %} {% block
+page_subtitle %} Scheduling & Timeline {% endblock %} {% block content %}
+
+<div class="calendar-toolbar">
+  <button class="btn-primary" id="addEventBtn">Add Schedule</button>
+</div>
+
+<div class="calendar-layout">
+  <div class="calendar-card">
+    <div class="calendar-header">
+      <h2>June 2026</h2>
+    </div>
+
+    <div class="calendar-grid">
+      <div class="day">Mon</div>
+      <div class="day">Tue</div>
+      <div class="day">Wed</div>
+      <div class="day">Thu</div>
+      <div class="day">Fri</div>
+      <div class="day">Sat</div>
+      <div class="day">Sun</div>
+
+      {% for i in range(1,31) %}
+      <div class="date-cell">{{ i }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="schedule-card">
+    <h3>Upcoming Activities</h3>
+
+    <div id="scheduleList">
+      <div class="schedule-item">
+        <strong> Mio Restoration </strong>
+
+        <span> 2026-06-10 </span>
+      </div>
+
+      <div class="schedule-item">
+        <strong> Ninja Repaint </strong>
+
+        <span> 2026-06-12 </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="calendarModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Schedule</h2>
+
+      <button id="closeCalendarModal">×</button>
+    </div>
+
+    <form id="calendarForm">
+      <input type="text" id="eventTitle" placeholder="Project Name" required />
+
+      <input type="date" id="eventDate" required />
+
+      <select id="eventType">
+        <option>Project</option>
+
+        <option>Delivery</option>
+
+        <option>Follow Up</option>
+
+        <option>Meeting</option>
+      </select>
+
+      <button type="submit" class="btn-primary">Save</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/calendar.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,169 @@
+{% extends "base.html" %} {% block title %} Projects | NOCTRA {% endblock %} {%
+block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/projects.css') }}"
+/>
+{% endblock %} {% block page_title %} Projects {% endblock %} {% block
+page_subtitle %} Workshop project management {% endblock %} {% block content %}
+
+<div class="projects-toolbar">
+  <button class="btn-primary" id="newProjectBtn">New Project</button>
+</div>
+
+<div class="kanban-board">
+  <div class="kanban-column">
+    <div class="column-header">
+      <h3>New</h3>
+
+      <span>2</span>
+    </div>
+
+    <div class="column-body" data-column="new">
+      <div class="project-card" draggable="true">
+        <div class="project-top">
+          <h4>Mio Sporty Restoration</h4>
+
+          <span class="status-badge"> Active </span>
+        </div>
+
+        <p>Ivan</p>
+
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 65%"></div>
+        </div>
+
+        <div class="project-footer">
+          <span> 65% </span>
+
+          <span> Rp 7.500.000 </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kanban-column">
+    <div class="column-header">
+      <h3>Quoted</h3>
+
+      <span>1</span>
+    </div>
+
+    <div class="column-body" data-column="quoted"></div>
+  </div>
+
+  <div class="kanban-column">
+    <div class="column-header">
+      <h3>Approved</h3>
+
+      <span>0</span>
+    </div>
+
+    <div class="column-body" data-column="approved"></div>
+  </div>
+
+  <div class="kanban-column">
+    <div class="column-header">
+      <h3>Painting</h3>
+
+      <span>3</span>
+    </div>
+
+    <div class="column-body" data-column="painting"></div>
+  </div>
+
+  <div class="kanban-column">
+    <div class="column-header">
+      <h3>Completed</h3>
+
+      <span>8</span>
+    </div>
+
+    <div class="column-body" data-column="completed"></div>
+  </div>
+</div>
+
+<!-- MODAL -->
+
+<div class="modal-overlay" id="projectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Create Project</h2>
+
+      <button id="closeModal">×</button>
+    </div>
+
+    <form id="projectForm">
+      <input
+        type="text"
+        id="customerName"
+        placeholder="Customer Name"
+        required
+      />
+
+      <input type="text" id="motorbike" placeholder="Motorbike" required />
+
+      <input type="number" id="price" placeholder="Project Price" required />
+
+      <button class="btn-primary" type="submit">Create</button>
+    </form>
+  </div>
+</div>
+
+<!-- Project Drawer -->
+
+<div class="drawer" id="projectDrawer">
+  <div class="drawer-header">
+    <h2 id="drawerTitle">Project Details</h2>
+
+    <button id="closeDrawer">×</button>
+  </div>
+
+  <div class="drawer-content">
+    <div class="detail-section">
+      <label> Customer </label>
+
+      <p id="drawerCustomer">-</p>
+    </div>
+
+    <div class="detail-section">
+      <label> Vehicle </label>
+
+      <p id="drawerMotorbike">-</p>
+    </div>
+
+    <div class="detail-section">
+      <label> Progress </label>
+
+      <input type="range" min="0" max="100" value="0" id="progressSlider" />
+    </div>
+
+    <div class="detail-section">
+      <label> Assigned Painter </label>
+
+      <select>
+        <option>Unassigned</option>
+
+        <option>Andi</option>
+
+        <option>Rizki</option>
+      </select>
+    </div>
+
+    <div class="detail-section">
+      <label> Notes </label>
+
+      <textarea rows="5"></textarea>
+    </div>
+
+    <div class="detail-section">
+      <label> Estimated Profit </label>
+
+      <h3>Rp 3.200.000</h3>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/projects.js') }}"></script>
+{% endblock %}
