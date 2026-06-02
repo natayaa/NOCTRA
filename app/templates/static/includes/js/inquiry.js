@@ -1,5 +1,7 @@
 const form = document.querySelector(".inquiry-form");
 
+const pages = form.querySelectorAll(".wizard-page");
+
 /* ======================
    SCROLL LOCK MANAGER
 ====================== */

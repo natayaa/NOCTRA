@@ -1,68 +1,58 @@
-AOS.init({
-    duration: 1000,
-    once: true
-});
-
-/* ======================
-   NAVBAR SCROLL EFFECT
-====================== */
-const navbar = document.querySelector("nav");
-
-window.addEventListener("scroll", () => {
-    if (!navbar) return;
-
-    navbar.style.background =
-        window.scrollY > 30
-            ? "rgba(4,8,22,.92)"
-            : "rgba(4,8,22,.6)";
-});
-
-/* ======================
-   MODAL
-====================== */
 const modal = document.getElementById("inquiryModal");
 const openBtn = document.getElementById("openInquiry");
 const closeBtn = document.getElementById("closeInquiry");
 
-/* ======================
-   SCROLL LOCK SYSTEM (SINGLE SOURCE OF TRUTH)
-====================== */
 function lockScroll() {
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
+  document.body.style.overflow = "hidden";
+  document.documentElement.style.overflow = "hidden";
 }
 
 function unlockScroll() {
-    document.body.style.overflow = "";
-    document.documentElement.style.overflow = "";
+  document.body.style.overflow = "";
+  document.documentElement.style.overflow = "";
 }
 
-/* ======================
-   MODAL CONTROL
-====================== */
-function openModal() {
-    if (!modal) return;
+function isOpen() {
+  return modal?.classList.contains("active");
+}
 
-    modal.classList.add("active");
-    lockScroll();
+function openModal() {
+  if (!modal || isOpen()) return;
+
+  modal.classList.add("active");
+  lockScroll();
 }
 
 function closeModal() {
-    if (!modal) return;
+  if (!modal || !isOpen()) return;
 
-    modal.classList.remove("active");
-    unlockScroll();
+  modal.classList.remove("active");
+  unlockScroll();
 }
 
-/* ======================
-   EVENTS
-====================== */
+/* OPEN / CLOSE */
 openBtn?.addEventListener("click", openModal);
-
 closeBtn?.addEventListener("click", closeModal);
 
+/* BACKDROP CLOSE (robust) */
 modal?.addEventListener("click", (e) => {
-    if (e.target.classList.contains("modal-backdrop")) {
-        closeModal();
-    }
+  const isBackdrop =
+    e.target === modal ||
+    e.target.classList.contains("modal-backdrop") ||
+    e.target.closest(".modal-backdrop");
+
+  if (isBackdrop) closeModal();
+});
+
+/* ESC CLOSE (only when active) */
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!isOpen()) return;
+
+  closeModal();
+});
+
+/* SAFETY: restore scroll if DOM state mismatch */
+window.addEventListener("load", () => {
+  if (!isOpen()) unlockScroll();
 });
