@@ -2,138 +2,123 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>{% block title %} NOCTRA {% endblock %}</title>
+    <title>{% block title %}NOCTRA{% endblock %}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-
     <link
       href="https://cdn.jsdelivr.net/npm/remixicon@4.6.0/fonts/remixicon.css"
       rel="stylesheet"
     />
-
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', path='css/base.css') }}"
-    />
-
-    {% block extra_css %} {% endblock %}
+    <link rel="stylesheet" href="{{ url_for('static', path='css/base.css') }}" />
+    {% block extra_css %}{% endblock %}
   </head>
 
   <body>
     <div class="app">
-      <!-- SIDEBAR -->
 
-      <aside class="sidebar">
+      <!-- SIDEBAR OVERLAY (mobile) -->
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar" id="sidebar">
         <div class="brand">
           <div class="brand-logo">N</div>
-
           <div>
             <h2>NOCTRA</h2>
-
-            <span> Workshop OS </span>
+            <span>Workshop OS</span>
           </div>
         </div>
 
         <nav class="sidebar-nav">
-          <a href="/management/dashboard">
+          <a href="/management/">
             <i class="ri-dashboard-line"></i>
             Dashboard
           </a>
-
           <a href="/management/projects">
             <i class="ri-tools-line"></i>
             Projects
           </a>
-
           <a href="/management/inquiries">
             <i class="ri-question-answer-line"></i>
             Inquiries
           </a>
-
           <a href="/management/budgeting">
             <i class="ri-wallet-3-line"></i>
             Budgeting
           </a>
-
           <a href="/management/analytics">
             <i class="ri-line-chart-line"></i>
             Analytics
           </a>
-
           <a href="/management/inventories">
             <i class="ri-box-3-line"></i>
             Inventory
           </a>
+          <a href="/management/customers">
+            <i class="ri-group-line"></i>
+            Customers
+          </a>
+          <a href="/management/quotations">
+            <i class="ri-file-list-3-line"></i>
+            Quotation
+          </a>
+          <a href="/management/invoices">
+            <i class="ri-bill-line"></i>
+            Invoices
+          </a>
+          <a href="/management/calendars">
+            <i class="ri-calendar-line"></i>
+            Calendar
+          </a>
+          <a href="/management/documents">
+            <i class="ri-folder-line"></i>
+            Documents
+          </a>
+          <a href="/management/reports">
+            <i class="ri-bar-chart-box-line"></i>
+            Reports
+          </a>
+
+          <div class="sidebar-divider"></div>
 
           <a href="/management/settings">
             <i class="ri-settings-3-line"></i>
             Settings
           </a>
-
-          <a href="/management/customers">
-            <i class="ri-customers-3-line"></i>
-            Customers
-          </a>
-
-          <a href="/management/reports">
-            <i class="ri-reports-3-line"></i>
-            Reports
-          </a>
-
-          <a href="/management/calendars">
-            <i class="ri-calendars-3-line"></i>
-            Calendar
-          </a>
-
-          <a href="/management/documents">
-            <i class="ri-documents-3-line"></i>
-            Documents
-          </a>
-
-          <a href="/management/quotations">
-            <i class="ri-quotations-3-line"></i>
-            Quotation
-          </a>
-
-          <a href="/management/invoices">
-            <i class="ri-invoices-3-line"></i>
-            Invoices
-          </a>
         </nav>
       </aside>
 
       <!-- MAIN -->
-
       <main class="main">
+
         <!-- TOPBAR -->
-
         <header class="topbar">
-          <div>
-            <h1>{% block page_title %} Dashboard {% endblock %}</h1>
+          <div class="topbar-left">
+            <!-- Mobile menu toggle -->
+            <button class="menu-btn" id="menuBtn" aria-label="Toggle menu">
+              <i class="ri-menu-line"></i>
+            </button>
 
-            <p>
-              {% block page_subtitle %} Workshop management system {% endblock
-              %}
-            </p>
+            <div>
+              <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+              <p>{% block page_subtitle %}Workshop management system{% endblock %}</p>
+            </div>
           </div>
 
           <div class="topbar-actions">
             <div class="search-box">
               <i class="ri-search-line"></i>
-
               <input type="text" placeholder="Search..." />
             </div>
 
-            <button class="notification-btn">
+            <button class="notification-btn" aria-label="Notifications">
               <i class="ri-notification-3-line"></i>
+              <span class="notif-dot"></span>
             </button>
 
             <div class="profile">
@@ -143,16 +128,18 @@
         </header>
 
         <!-- PAGE CONTENT -->
-
         <section class="page-content">
-          {% block content %} {% endblock %}
+          {% block content %}{% endblock %}
         </section>
+
       </main>
     </div>
 
+    <!-- TOAST CONTAINER -->
+    <div id="toastContainer" class="toast-container"></div>
+
     <script src="{{ url_for('static', path='js/base.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    {% block extra_js %} {% endblock %}
+    {% block extra_js %}{% endblock %}
   </body>
 </html>

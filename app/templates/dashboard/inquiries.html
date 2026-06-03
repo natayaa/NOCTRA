@@ -1,90 +1,356 @@
-{% extends "base.html" %} {% block title %} Inquiries | NOCTRA {% endblock
-%} {% block extra_css %}
+{% extends "base.html" %}
+
+{% block title %}Inquiries | NOCTRA{% endblock %}
+
+{% block extra_css %}
 <link
   rel="stylesheet"
   href="{{ url_for('static', path='css/inquiries.css') }}"
 />
-{% endblock %} {% block page_title %} Customer Inquiries {% endblock %} {% block
-page_subtitle %} Manage incoming customer requests {% endblock %} {% block
-content %}
+{% endblock %}
+
+{% block page_title %}Customer Inquiries{% endblock %}
+{% block page_subtitle %}Manage incoming customer requests and convert them into projects{% endblock %}
+
+{% block content %}
+
+<!-- OVERVIEW -->
+
+<div class="inquiry-overview">
+
+  <div class="overview-card">
+    <span>Total Inquiries</span>
+    <h2>48</h2>
+  </div>
+
+  <div class="overview-card">
+    <span>New Requests</span>
+    <h2>12</h2>
+  </div>
+
+  <div class="overview-card">
+    <span>Quoted</span>
+    <h2>18</h2>
+  </div>
+
+  <div class="overview-card">
+    <span>Converted</span>
+    <h2>9</h2>
+  </div>
+
+</div>
+
+<!-- MAIN -->
 
 <div class="inquiries-layout">
-  <div class="inquiry-list-panel">
-    <div class="panel-header">
-      <h3>Inquiries</h3>
 
-      <input type="search" id="searchInquiry" placeholder="Search..." />
+  <!-- SIDEBAR -->
+
+  <aside class="inquiry-list-panel">
+
+    <div class="panel-header">
+
+      <div>
+        <h3>Inquiries</h3>
+        <span>Incoming customer requests</span>
+      </div>
+
+    </div>
+
+    <div class="panel-filters">
+
+      <input
+        type="search"
+        id="searchInquiry"
+        placeholder="Search customer..."
+      />
+
+      <select id="statusFilter">
+        <option>All Status</option>
+        <option>New</option>
+        <option>Quoted</option>
+        <option>Approved</option>
+        <option>Rejected</option>
+      </select>
+
     </div>
 
     <div class="inquiry-list" id="inquiryList">
+
+      <!-- ITEM -->
+
       <div
         class="inquiry-card active"
+
         data-customer="Ivan"
         data-motorbike="Yamaha Mio Sporty"
         data-service="Full Restoration"
         data-budget="7500000"
         data-phone="08123456789"
+        data-status="New"
       >
-        <h4>Ivan</h4>
+
+        <div class="inquiry-card-top">
+          <h4>Ivan</h4>
+
+          <span class="badge new">
+            NEW
+          </span>
+        </div>
 
         <p>Yamaha Mio Sporty</p>
 
-        <span class="badge new"> NEW </span>
-      </div>
-    </div>
-  </div>
+        <small>
+          Full Restoration
+        </small>
 
-  <div class="inquiry-detail-panel">
+      </div>
+
+      <div
+        class="inquiry-card"
+
+        data-customer="Dimas"
+        data-motorbike="Yamaha Vixion"
+        data-service="Custom Paint"
+        data-budget="4500000"
+        data-phone="081298765432"
+        data-status="Quoted"
+      >
+
+        <div class="inquiry-card-top">
+          <h4>Dimas</h4>
+
+          <span class="badge quoted">
+            QUOTED
+          </span>
+        </div>
+
+        <p>Yamaha Vixion</p>
+
+        <small>
+          Custom Paint
+        </small>
+
+      </div>
+
+    </div>
+
+  </aside>
+
+  <!-- DETAIL -->
+
+  <section class="inquiry-detail-panel">
+
     <div class="detail-header">
-      <h2 id="customerName">Ivan</h2>
 
-      <button class="btn-primary" id="createProjectBtn">Create Project</button>
-    </div>
+      <div>
+        <h2 id="customerName">
+          Ivan
+        </h2>
 
-    <div class="detail-grid">
-      <div class="detail-item">
-        <label> Vehicle </label>
-
-        <p id="motorbikeName">Yamaha Mio Sporty</p>
+        <span id="inquiryStatus">
+          New Inquiry
+        </span>
       </div>
 
-      <div class="detail-item">
-        <label> Requested Service </label>
+      <div class="detail-actions-top">
 
-        <p id="serviceName">Full Restoration</p>
+        <button
+          class="btn-primary"
+          id="createProjectBtn"
+        >
+          Create Project
+        </button>
+
       </div>
 
-      <div class="detail-item">
-        <label> Estimated Budget </label>
+    </div>
 
-        <p id="budget">Rp 7.500.000</p>
+    <!-- CUSTOMER -->
+
+    <div class="detail-card">
+
+      <div class="card-header">
+        <h3>Customer Information</h3>
       </div>
 
-      <div class="detail-item">
-        <label> Phone </label>
+      <div class="detail-grid">
 
-        <p id="phone">08123456789</p>
+        <div class="detail-item">
+          <label>Customer Name</label>
+          <p id="customerNameDetail">
+            Ivan
+          </p>
+        </div>
+
+        <div class="detail-item">
+          <label>Phone Number</label>
+          <p id="phone">
+            08123456789
+          </p>
+        </div>
+
       </div>
+
     </div>
 
-    <div class="action-section">
-      <button class="btn-success" id="approveBtn">Approve</button>
+    <!-- PROJECT -->
 
-      <button class="btn-primary" id="quoteBtn">Send Quote</button>
+    <div class="detail-card">
 
-      <button class="btn-danger" id="rejectBtn">Reject</button>
+      <div class="card-header">
+        <h3>Project Request</h3>
+      </div>
 
-      <button id="whatsappBtn">WhatsApp</button>
+      <div class="detail-grid">
+
+        <div class="detail-item">
+          <label>Vehicle</label>
+
+          <p id="motorbikeName">
+            Yamaha Mio Sporty
+          </p>
+        </div>
+
+        <div class="detail-item">
+          <label>Requested Service</label>
+
+          <p id="serviceName">
+            Full Restoration
+          </p>
+        </div>
+
+        <div class="detail-item">
+          <label>Estimated Budget</label>
+
+          <p id="budget">
+            Rp 7.500.000
+          </p>
+        </div>
+
+        <div class="detail-item">
+          <label>Expected Timeline</label>
+
+          <p>
+            30 - 45 Days
+          </p>
+        </div>
+
+      </div>
+
     </div>
 
-    <div class="notes-section">
-      <h3>Notes</h3>
+    <!-- REQUEST DETAILS -->
 
-      <textarea rows="8" placeholder="Customer notes..."></textarea>
+    <div class="detail-card">
+
+      <div class="card-header">
+        <h3>Customer Requirements</h3>
+      </div>
+
+      <div class="request-box">
+
+        Customer wants a complete restoration with
+        repaint, engine overhaul, wheel restoration,
+        and wiring inspection.
+
+      </div>
+
     </div>
-  </div>
+
+    <!-- ACTIONS -->
+
+    <div class="detail-card">
+
+      <div class="card-header">
+        <h3>Actions</h3>
+      </div>
+
+      <div class="action-section">
+
+        <button
+          class="btn-success"
+          id="approveBtn"
+        >
+          Approve
+        </button>
+
+        <button
+          class="btn-primary"
+          id="quoteBtn"
+        >
+          Send Quote
+        </button>
+
+        <button
+          class="btn-danger"
+          id="rejectBtn"
+        >
+          Reject
+        </button>
+
+        <button
+          class="btn-secondary"
+          id="whatsappBtn"
+        >
+          WhatsApp Customer
+        </button>
+
+      </div>
+
+    </div>
+
+    <!-- INTERNAL NOTES -->
+
+    <div class="detail-card">
+
+      <div class="card-header">
+        <h3>Internal Notes</h3>
+      </div>
+
+      <textarea
+        id="customerNotes"
+        rows="8"
+        placeholder="Write internal notes, customer preferences, follow-up information, quotation details, etc..."
+      ></textarea>
+
+    </div>
+
+    <!-- TIMELINE -->
+
+    <div class="detail-card">
+
+      <div class="card-header">
+        <h3>Activity Timeline</h3>
+      </div>
+
+      <div class="timeline">
+
+        <div class="timeline-item">
+          <span>08:15</span>
+          <p>Inquiry submitted</p>
+        </div>
+
+        <div class="timeline-item">
+          <span>08:30</span>
+          <p>Customer contacted via WhatsApp</p>
+        </div>
+
+        <div class="timeline-item">
+          <span>09:00</span>
+          <p>Waiting for quotation approval</p>
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+
 </div>
 
-{% endblock %} {% block extra_js %}
+{% endblock %}
+
+{% block extra_js %}
 <script src="{{ url_for('static', path='js/inquiries.js') }}"></script>
 {% endblock %}

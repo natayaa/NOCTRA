@@ -1,168 +1,480 @@
-{% extends "base.html" %} {% block title %} Projects | NOCTRA {% endblock %} {%
+{% extends "base.html" %} {% block title %}Projects | NOCTRA{% endblock %} {%
 block extra_css %}
 <link
   rel="stylesheet"
   href="{{ url_for('static', path='css/projects.css') }}"
 />
-{% endblock %} {% block page_title %} Projects {% endblock %} {% block
-page_subtitle %} Workshop project management {% endblock %} {% block content %}
+{% endblock %} {% block page_title %}Projects{% endblock %} {% block
+page_subtitle %} Manage restorations, paint jobs, fabrication, and production
+workflow {% endblock %} {% block content %}
 
-<div class="projects-toolbar">
-  <button class="btn-primary" id="newProjectBtn">New Project</button>
-</div>
+<!-- DASHBOARD -->
 
-<div class="kanban-board">
-  <div class="kanban-column">
-    <div class="column-header">
-      <h3>New</h3>
-
-      <span>2</span>
+<section class="project-dashboard">
+  <div class="overview-card">
+    <div class="overview-icon">
+      <i class="ph ph-briefcase"></i>
     </div>
 
-    <div class="column-body" data-column="new">
-      <div class="project-card" draggable="true">
-        <div class="project-top">
-          <h4>Mio Sporty Restoration</h4>
+    <div>
+      <span>Active Projects</span>
+      <h2>14</h2>
+      <small>+3 this week</small>
+    </div>
+  </div>
 
-          <span class="status-badge"> Active </span>
+  <div class="overview-card">
+    <div class="overview-icon">
+      <i class="ph ph-gear-six"></i>
+    </div>
+
+    <div>
+      <span>In Production</span>
+      <h2>7</h2>
+      <small>Currently running</small>
+    </div>
+  </div>
+
+  <div class="overview-card">
+    <div class="overview-icon">
+      <i class="ph ph-check-circle"></i>
+    </div>
+
+    <div>
+      <span>Completed</span>
+      <h2>8</h2>
+      <small>This month</small>
+    </div>
+  </div>
+
+  <div class="overview-card">
+    <div class="overview-icon">
+      <i class="ph ph-wallet"></i>
+    </div>
+
+    <div>
+      <span>Revenue</span>
+      <h2>Rp 48.2M</h2>
+      <small>Estimated gross</small>
+    </div>
+  </div>
+</section>
+
+<!-- TOOLBAR -->
+
+<section class="projects-toolbar glass">
+  <div class="toolbar-left">
+    <div class="search-box">
+      <i class="ph ph-magnifying-glass"></i>
+      <input
+        type="search"
+        id="projectSearch"
+        placeholder="Search customer, vehicle, project..."
+      />
+    </div>
+
+    <select id="projectFilter">
+      <option>All Projects</option>
+      <option>Restoration</option>
+      <option>Custom Paint</option>
+      <option>Engine Build</option>
+      <option>Fabrication</option>
+    </select>
+
+    <select>
+      <option>All Status</option>
+      <option>On Track</option>
+      <option>Delayed</option>
+      <option>Urgent</option>
+    </select>
+  </div>
+
+  <div class="toolbar-right">
+    <button class="btn-secondary">
+      <i class="ph ph-file-arrow-down"></i>
+      Export
+    </button>
+
+    <button class="btn-primary" id="newProjectBtn">
+      <i class="ph ph-plus"></i>
+      New Project
+    </button>
+  </div>
+</section>
+
+<!-- BOARD -->
+
+<section class="kanban-wrapper">
+  <div class="kanban-board">
+    <!-- NEW -->
+
+    <div class="kanban-column">
+      <div class="column-header">
+        <div>
+          <h3>New Inquiry</h3>
+          <span>Waiting review</span>
         </div>
 
-        <p>Ivan</p>
+        <strong>2</strong>
+      </div>
 
-        <div class="progress-bar">
-          <div class="progress-fill" style="width: 65%"></div>
-        </div>
+      <div class="column-body" data-column="new">
+        <article class="project-card priority-high" draggable="true">
+          <div class="card-priority">
+            <span>High Priority</span>
+          </div>
 
-        <div class="project-footer">
-          <span> 65% </span>
+          <div class="project-top">
+            <div>
+              <h5>Mio Sporty Restoration</h5>
+              <small>Ivan Saputra</small>
+            </div>
 
-          <span> Rp 7.500.000 </span>
-        </div>
+            <span class="status-badge active"> Active </span>
+          </div>
+
+          <!--div class="project-tags">
+            <span>Restoration</span>
+            <span>2 Stroke Paint</span>
+          </div-->
+
+          <div class="project-meta">
+            <div>
+              <label>Vehicle</label>
+              <h5>Yamaha Mio Sporty</h5>
+            </div>
+
+            <div>
+              <label>Value</label>
+              <p>Rp 7.500.000</p>
+            </div>
+          </div>
+
+          <div class="progress-section">
+            <div class="progress-header">
+              <span>Progress</span>
+              <span>15%</span>
+            </div>
+
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: 15%"></div>
+            </div>
+          </div>
+
+          <div class="project-footer">
+            <div class="footer-users">
+              <div class="avatar">I</div>
+              <div class="avatar">A</div>
+            </div>
+
+            <span>15 Jul</span>
+          </div>
+        </article>
       </div>
     </div>
-  </div>
 
-  <div class="kanban-column">
-    <div class="column-header">
-      <h3>Quoted</h3>
+    <!-- QUOTED -->
 
-      <span>1</span>
+    <div class="kanban-column">
+      <div class="column-header">
+        <div>
+          <h3>Quotation</h3>
+          <span>Awaiting approval</span>
+        </div>
+
+        <strong>1</strong>
+      </div>
+
+      <div class="column-body" data-column="quoted"></div>
     </div>
 
-    <div class="column-body" data-column="quoted"></div>
-  </div>
+    <!-- APPROVED -->
 
-  <div class="kanban-column">
-    <div class="column-header">
-      <h3>Approved</h3>
+    <div class="kanban-column">
+      <div class="column-header">
+        <div>
+          <h3>Approved</h3>
+          <span>Ready production</span>
+        </div>
 
-      <span>0</span>
+        <strong>3</strong>
+      </div>
+
+      <div class="column-body" data-column="approved"></div>
     </div>
 
-    <div class="column-body" data-column="approved"></div>
-  </div>
+    <!-- PREP -->
 
-  <div class="kanban-column">
-    <div class="column-header">
-      <h3>Painting</h3>
+    <div class="kanban-column">
+      <div class="column-header">
+        <div>
+          <h3>Preparation</h3>
+          <span>Parts & teardown</span>
+        </div>
 
-      <span>3</span>
+        <strong>2</strong>
+      </div>
+
+      <div class="column-body" data-column="preparation"></div>
     </div>
 
-    <div class="column-body" data-column="painting"></div>
-  </div>
+    <!-- PAINT -->
 
-  <div class="kanban-column">
-    <div class="column-header">
-      <h3>Completed</h3>
+    <div class="kanban-column">
+      <div class="column-header">
+        <div>
+          <h3>Painting</h3>
+          <span>Surface & coating</span>
+        </div>
 
-      <span>8</span>
+        <strong>3</strong>
+      </div>
+
+      <div class="column-body" data-column="painting"></div>
     </div>
 
-    <div class="column-body" data-column="completed"></div>
+    <!-- ASSEMBLY -->
+
+    <div class="kanban-column">
+      <div class="column-header">
+        <div>
+          <h3>Assembly</h3>
+          <span>Final rebuild</span>
+        </div>
+
+        <strong>1</strong>
+      </div>
+
+      <div class="column-body" data-column="assembly"></div>
+    </div>
+
+    <!-- DONE -->
+
+    <div class="kanban-column">
+      <div class="column-header">
+        <div>
+          <h3>Completed</h3>
+          <span>Delivered</span>
+        </div>
+
+        <strong>8</strong>
+      </div>
+
+      <div class="column-body" data-column="completed"></div>
+    </div>
   </div>
-</div>
+</section>
 
 <!-- MODAL -->
 
 <div class="modal-overlay" id="projectModal">
-  <div class="modal">
+  <div class="modal modal-lg">
     <div class="modal-header">
-      <h2>Create Project</h2>
+      <div>
+        <h2>Create New Project</h2>
+        <p>Register workshop project and production schedule</p>
+      </div>
 
       <button id="closeModal">×</button>
     </div>
 
     <form id="projectForm">
-      <input
-        type="text"
-        id="customerName"
-        placeholder="Customer Name"
-        required
-      />
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Customer Name</label>
+          <input type="text" id="customerName" required />
+        </div>
 
-      <input type="text" id="motorbike" placeholder="Motorbike" required />
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="text" />
+        </div>
 
-      <input type="number" id="price" placeholder="Project Price" required />
+        <div class="form-group">
+          <label>Vehicle</label>
+          <input type="text" id="motorbike" required />
+        </div>
 
-      <button class="btn-primary" type="submit">Create</button>
+        <div class="form-group">
+          <label>License Plate</label>
+          <input type="text" />
+        </div>
+
+        <div class="form-group">
+          <label>Project Type</label>
+
+          <select>
+            <option>Full Restoration</option>
+            <option>Custom Paint</option>
+            <option>Engine Build</option>
+            <option>Fabrication</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Project Value</label>
+          <input type="number" id="price" required />
+        </div>
+
+        <div class="form-group">
+          <label>Start Date</label>
+          <input type="date" />
+        </div>
+
+        <div class="form-group">
+          <label>Target Delivery</label>
+          <input type="date" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Description</label>
+        <textarea rows="5"></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary">Cancel</button>
+
+        <button type="submit" class="btn-primary">Create Project</button>
+      </div>
     </form>
   </div>
 </div>
 
-<!-- Project Drawer -->
+<!-- DRAWER -->
 
-<div class="drawer" id="projectDrawer">
+<aside class="drawer" id="projectDrawer">
   <div class="drawer-header">
-    <h2 id="drawerTitle">Project Details</h2>
+    <div>
+      <h2 id="drawerTitle">Mio Sporty Restoration</h2>
+      <span>Project Details</span>
+    </div>
 
     <button id="closeDrawer">×</button>
   </div>
 
   <div class="drawer-content">
-    <div class="detail-section">
-      <label> Customer </label>
+    <section class="detail-card">
+      <div class="section-header">
+        <h3>Overview</h3>
+      </div>
 
-      <p id="drawerCustomer">-</p>
-    </div>
+      <div class="detail-grid">
+        <div class="detail-section">
+          <label>Customer</label>
+          <p id="drawerCustomer">Ivan</p>
+        </div>
 
-    <div class="detail-section">
-      <label> Vehicle </label>
+        <div class="detail-section">
+          <label>Vehicle</label>
+          <p id="drawerMotorbike">Yamaha Mio Sporty</p>
+        </div>
 
-      <p id="drawerMotorbike">-</p>
-    </div>
+        <div class="detail-section">
+          <label>Status</label>
+          <p>Preparation</p>
+        </div>
 
-    <div class="detail-section">
-      <label> Progress </label>
+        <div class="detail-section">
+          <label>Delivery</label>
+          <p>15 Jul 2026</p>
+        </div>
+      </div>
+    </section>
 
-      <input type="range" min="0" max="100" value="0" id="progressSlider" />
-    </div>
+    <section class="detail-card">
+      <h3>Production Progress</h3>
 
-    <div class="detail-section">
-      <label> Assigned Painter </label>
+      <div class="detail-section">
+        <label>Overall Progress</label>
+        <input type="range" min="0" max="100" value="65" id="progressSlider" />
+      </div>
 
-      <select>
-        <option>Unassigned</option>
+      <div class="milestone-list">
+        <div class="milestone done">
+          <i class="ph ph-check-circle"></i>
+          Inquiry Approved
+        </div>
 
-        <option>Andi</option>
+        <div class="milestone done">
+          <i class="ph ph-check-circle"></i>
+          Parts Ordered
+        </div>
 
-        <option>Rizki</option>
-      </select>
-    </div>
+        <div class="milestone active">
+          <i class="ph ph-gear-six"></i>
+          Disassembly Process
+        </div>
 
-    <div class="detail-section">
-      <label> Notes </label>
+        <div class="milestone">
+          <i class="ph ph-circle"></i>
+          Paint Preparation
+        </div>
+      </div>
+    </section>
 
-      <textarea rows="5"></textarea>
-    </div>
+    <section class="detail-card">
+      <h3>Team Assignment</h3>
 
-    <div class="detail-section">
-      <label> Estimated Profit </label>
+      <div class="form-group">
+        <label>Project Lead</label>
 
-      <h3>Rp 3.200.000</h3>
-    </div>
+        <select>
+          <option>Unassigned</option>
+          <option>Andi</option>
+          <option>Rizki</option>
+          <option>Fikri</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Painter</label>
+
+        <select>
+          <option>Unassigned</option>
+          <option>Andi</option>
+          <option>Rizki</option>
+          <option>Fikri</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="detail-card">
+      <h3>Financial Summary</h3>
+
+      <div class="detail-grid">
+        <div class="detail-section">
+          <label>Revenue</label>
+          <h4>Rp 7.500.000</h4>
+        </div>
+
+        <div class="detail-section">
+          <label>Cost</label>
+          <h4>Rp 4.300.000</h4>
+        </div>
+
+        <div class="detail-section">
+          <label>Profit</label>
+          <h4>Rp 3.200.000</h4>
+        </div>
+
+        <div class="detail-section">
+          <label>Margin</label>
+          <h4>42%</h4>
+        </div>
+      </div>
+    </section>
+
+    <section class="detail-card">
+      <h3>Workshop Notes</h3>
+
+      <textarea
+        rows="7"
+        placeholder="Add project notes, progress update, customer requests..."
+      ></textarea>
+    </section>
   </div>
-</div>
+</aside>
 
 {% endblock %} {% block extra_js %}
 <script src="{{ url_for('static', path='js/projects.js') }}"></script>

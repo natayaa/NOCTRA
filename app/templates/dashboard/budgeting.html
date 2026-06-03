@@ -1,90 +1,134 @@
-{% extends "base.html" %} {% block title %} Budgeting | NOCTRA {% endblock
-%} {% block extra_css %}
+{% extends "base.html" %}
+
+{% block title %}Budgeting | NOCTRA{% endblock %}
+
+{% block extra_css %}
 <link
   rel="stylesheet"
   href="{{ url_for('static', path='css/budgeting.css') }}"
 />
-{% endblock %} {% block page_title %} Budgeting {% endblock %} {% block
-page_subtitle %} Financial Management {% endblock %} {% block content %}
+{% endblock %}
 
-<div class="budget-actions">
-  <button class="btn-primary" id="addExpenseBtn">Add Expense</button>
+{% block page_title %}Budgeting{% endblock %}
+{% block page_subtitle %}Financial Management & Project Performance{% endblock %}
+
+{% block content %}
+
+<!-- HEADER -->
+
+<div class="budget-header">
+  <div>
+    <h2>Financial Overview</h2>
+    <p>Track revenue, expenses, profit, cashflow and project performance.</p>
+  </div>
+
+  <div class="budget-toolbar">
+    <select id="periodFilter">
+      <option>This Month</option>
+      <option>Last Month</option>
+      <option>This Quarter</option>
+      <option>This Year</option>
+    </select>
+
+    <button class="btn-primary" id="addExpenseBtn">
+      + Add Expense
+    </button>
+  </div>
 </div>
+
+<!-- PROJECT SUMMARY -->
+
+<div class="summary-grid">
+  <div class="summary-card">
+    <span>Active Projects</span>
+    <h2>12</h2>
+  </div>
+
+  <div class="summary-card">
+    <span>Pending Payments</span>
+    <h2>Rp 9.400.000</h2>
+  </div>
+
+  <div class="summary-card">
+    <span>Material Cost Ratio</span>
+    <h2>34%</h2>
+  </div>
+
+  <div class="summary-card">
+    <span>Average Project Profit</span>
+    <h2>Rp 3.100.000</h2>
+  </div>
+</div>
+
+<!-- KPI -->
 
 <div class="stats-grid">
-  <div class="stat-card">
+
+  <div class="stat-card revenue">
     <span>Revenue</span>
-
     <h2>Rp 48.200.000</h2>
+    <small>↑ 18% vs last month</small>
   </div>
 
-  <div class="stat-card">
+  <div class="stat-card expense">
     <span>Expenses</span>
-
     <h2>Rp 16.800.000</h2>
+    <small>↓ 4% vs last month</small>
   </div>
 
-  <div class="stat-card">
+  <div class="stat-card profit">
     <span>Net Profit</span>
-
     <h2>Rp 31.400.000</h2>
+    <small>65.1% Margin</small>
   </div>
 
-  <div class="stat-card">
-    <span>Cashflow</span>
-
+  <div class="stat-card cashflow">
+    <span>Cash Available</span>
     <h2>Rp 12.000.000</h2>
+    <small>Operational Fund</small>
   </div>
+
 </div>
 
+<!-- CHARTS -->
+
 <div class="budget-grid">
+
   <div class="chart-card">
-    <h3>Monthly Expenses</h3>
+    <div class="card-title">
+      <h3>Monthly Expenses</h3>
+    </div>
 
     <canvas id="expenseChart"></canvas>
   </div>
 
   <div class="chart-card">
-    <h3>Expense Breakdown</h3>
+    <div class="card-title">
+      <h3>Expense Breakdown</h3>
+    </div>
 
     <canvas id="expensePieChart"></canvas>
   </div>
-</div>
 
-<div class="table-card">
-  <div class="table-header">
-    <h3>Expense History</h3>
+  <div class="chart-card full-width">
+    <div class="card-title">
+      <h3>Revenue vs Expenses</h3>
+    </div>
+
+    <canvas id="cashflowChart"></canvas>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Category</th>
-        <th>Description</th>
-        <th>Amount</th>
-      </tr>
-    </thead>
-
-    <tbody id="expenseTable">
-      <tr>
-        <td>2026-06-01</td>
-
-        <td>Material</td>
-
-        <td>2K Clear Coat</td>
-
-        <td>Rp 450.000</td>
-      </tr>
-    </tbody>
-  </table>
 </div>
 
-<!-- PROJECT PROFIT -->
+<!-- RECENT PROJECTS -->
 
 <div class="table-card">
+
   <div class="table-header">
-    <h3>Project Profitability</h3>
+    <div>
+      <h3>Project Profitability</h3>
+      <span>Top performing projects</span>
+    </div>
   </div>
 
   <table>
@@ -95,64 +139,212 @@ page_subtitle %} Financial Management {% endblock %} {% block content %}
         <th>Cost</th>
         <th>Profit</th>
         <th>Margin</th>
+        <th>Status</th>
       </tr>
     </thead>
 
     <tbody>
+
       <tr>
         <td>Mio Restoration</td>
-
         <td>Rp 7.500.000</td>
-
         <td>Rp 2.300.000</td>
-
         <td>Rp 5.200.000</td>
-
         <td>69%</td>
+
+        <td>
+          <span class="status-badge success">
+            Highly Profitable
+          </span>
+        </td>
       </tr>
+
+      <tr>
+        <td>Vixion Custom Paint</td>
+        <td>Rp 9.200.000</td>
+        <td>Rp 4.000.000</td>
+        <td>Rp 5.200.000</td>
+        <td>56%</td>
+
+        <td>
+          <span class="status-badge warning">
+            Good
+          </span>
+        </td>
+      </tr>
+
     </tbody>
   </table>
+
+</div>
+
+<!-- EXPENSE HISTORY -->
+
+<div class="table-card">
+
+  <div class="table-header">
+
+    <div>
+      <h3>Expense History</h3>
+      <span>All recorded transactions</span>
+    </div>
+
+    <div class="table-actions">
+
+      <input
+        type="text"
+        id="expenseSearch"
+        placeholder="Search expense..."
+      />
+
+      <select id="expenseFilter">
+        <option>All Categories</option>
+        <option>Material</option>
+        <option>Labor</option>
+        <option>Operational</option>
+        <option>Equipment</option>
+      </select>
+
+    </div>
+
+  </div>
+
+  <table>
+
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Project</th>
+        <th>Category</th>
+        <th>Description</th>
+        <th>Amount</th>
+      </tr>
+    </thead>
+
+    <tbody id="expenseTable">
+
+      <tr>
+        <td>2026-06-01</td>
+        <td>Mio Restoration</td>
+        <td>Material</td>
+        <td>2K Clear Coat</td>
+        <td>Rp 450.000</td>
+      </tr>
+
+      <tr>
+        <td>2026-06-03</td>
+        <td>Vixion Paint</td>
+        <td>Operational</td>
+        <td>Workshop Electricity</td>
+        <td>Rp 250.000</td>
+      </tr>
+
+    </tbody>
+
+  </table>
+
 </div>
 
 <!-- MODAL -->
 
 <div class="modal-overlay" id="expenseModal">
+
   <div class="modal">
+
     <div class="modal-header">
       <h2>Add Expense</h2>
 
-      <button id="closeExpenseModal">×</button>
+      <button
+        type="button"
+        id="closeExpenseModal"
+      >
+        ×
+      </button>
     </div>
 
     <form id="expenseForm">
-      <input type="date" id="expenseDate" required />
 
-      <select id="expenseCategory">
-        <option>Material</option>
+      <div class="form-group">
+        <label>Date</label>
+        <input
+          type="date"
+          id="expenseDate"
+          required
+        />
+      </div>
 
-        <option>Labor</option>
+      <div class="form-group">
+        <label>Project</label>
 
-        <option>Operational</option>
+        <select
+          id="expenseProject"
+          required
+        >
+          <option value="">
+            Select Project
+          </option>
 
-        <option>Equipment</option>
-      </select>
+          <option>Mio Restoration</option>
+          <option>Vixion Paint</option>
+          <option>Ninja 250 Build</option>
+        </select>
+      </div>
 
-      <input
-        type="text"
-        id="expenseDescription"
-        placeholder="Description"
-        required
-      />
+      <div class="form-group">
+        <label>Category</label>
 
-      <input type="number" id="expenseAmount" placeholder="Amount" required />
+        <select
+          id="expenseCategory"
+          required
+        >
+          <option value="">
+            Select Category
+          </option>
 
-      <button type="submit" class="btn-primary">Save Expense</button>
+          <option>Material</option>
+          <option>Labor</option>
+          <option>Operational</option>
+          <option>Equipment</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Description</label>
+
+        <textarea
+          id="expenseDescription"
+          rows="4"
+          placeholder="Expense details..."
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Amount</label>
+
+        <input
+          type="number"
+          id="expenseAmount"
+          placeholder="Enter amount"
+          required
+        />
+      </div>
+
+      <button
+        type="submit"
+        class="btn-primary full-width"
+      >
+        Save Expense
+      </button>
+
     </form>
+
   </div>
+
 </div>
 
-{% endblock %} {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
 
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', path='js/budgeting.js') }}"></script>
 {% endblock %}

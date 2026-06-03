@@ -8,7 +8,7 @@ template = Jinja2Templates("templates/dashboard")
 @dashboard.get("/", response_class=HTMLResponse)
 async def get_base(request: Request):
     return template.TemplateResponse(
-        name="base.html",
+        name="dashboard.html",
         request=request,
         context={},
         status_code=status.HTTP_200_OK
@@ -22,15 +22,7 @@ async def get_analytics(request: Request):
         context={},
         status_code=status.HTTP_200_OK
     )
-    
-@dashboard.get("/dashboard", response_class=HTMLResponse)
-async def get_dashboard(request: Request):
-    return template.TemplateResponse(
-        name="dashboard.html",
-        request=request,
-        context={},
-        status_code=status.HTTP_200_OK
-    )
+
     
 @dashboard.get("/projects", response_class=HTMLResponse)
 async def get_projects(request: Request):

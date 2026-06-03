@@ -5,11 +5,13 @@ const closeBtn = document.getElementById("closeInquiry");
 function lockScroll() {
   document.body.style.overflow = "hidden";
   document.documentElement.style.overflow = "hidden";
+  document.body.classList.add("modal-open");
 }
 
 function unlockScroll() {
   document.body.style.overflow = "";
   document.documentElement.style.overflow = "";
+  document.body.classList.remove("modal-open");
 }
 
 function isOpen() {
@@ -34,12 +36,11 @@ function closeModal() {
 openBtn?.addEventListener("click", openModal);
 closeBtn?.addEventListener("click", closeModal);
 
-/* BACKDROP CLOSE (robust) */
+/* BACKDROP CLOSE */
 modal?.addEventListener("click", (e) => {
   const isBackdrop =
     e.target === modal ||
-    e.target.classList.contains("modal-backdrop") ||
-    e.target.closest(".modal-backdrop");
+    e.target.classList.contains("modal-backdrop");
 
   if (isBackdrop) closeModal();
 });

@@ -1,20 +1,206 @@
-.budget-actions {
-  display: flex;
+/* =========================
+   HEADER
+========================= */
 
-  justify-content: flex-end;
+.budget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+
+  margin-bottom: 32px;
+}
+
+.budget-header h2 {
+  margin: 0 0 8px;
+}
+
+.budget-header p {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.budget-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.budget-toolbar select {
+  min-width: 180px;
+}
+
+/* =========================
+   SUMMARY
+========================= */
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 20px;
 
   margin-bottom: 24px;
 }
 
+.summary-card {
+  background: var(--card);
+
+  border: 1px solid var(--border);
+
+  border-radius: 24px;
+
+  padding: 24px;
+
+  transition: 0.25s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-3px);
+
+  border-color: var(--accent);
+}
+
+.summary-card span {
+  display: block;
+
+  font-size: 0.85rem;
+
+  color: var(--text-muted);
+
+  margin-bottom: 10px;
+}
+
+.summary-card h2 {
+  margin: 0;
+
+  font-size: 1.7rem;
+}
+
+/* =========================
+   KPI
+========================= */
+
+.stats-grid {
+  display: grid;
+
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 20px;
+
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--card);
+
+  border: 1px solid var(--border);
+
+  border-radius: 24px;
+
+  padding: 24px;
+
+  transition: 0.25s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+}
+
+.stat-card span {
+  display: block;
+
+  font-size: 0.85rem;
+
+  color: var(--text-muted);
+
+  margin-bottom: 10px;
+}
+
+.stat-card h2 {
+  margin: 0;
+
+  font-size: 1.9rem;
+
+  line-height: 1.2;
+}
+
+.stat-card small {
+  display: block;
+
+  margin-top: 12px;
+
+  color: var(--text-muted);
+}
+
+.stat-card.revenue {
+  border-left: 4px solid #16a34a;
+}
+
+.stat-card.expense {
+  border-left: 4px solid #dc2626;
+}
+
+.stat-card.profit {
+  border-left: 4px solid #2563eb;
+}
+
+.stat-card.cashflow {
+  border-left: 4px solid #f59e0b;
+}
+
+/* =========================
+   CHARTS
+========================= */
+
 .budget-grid {
   display: grid;
 
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, 1fr);
 
   gap: 24px;
 
   margin-bottom: 24px;
 }
+
+.chart-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 24px;
+
+  height: 420px; /* bukan min-height */
+}
+
+.chart-card.full-width {
+  height: 450px;
+}
+
+.chart-card canvas {
+  width: 100% !important;
+  height: calc(100% - 40px) !important;
+}
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  margin-bottom: 20px;
+}
+
+.card-title h3 {
+  margin: 0;
+}
+
+#expenseChart,
+#expensePieChart,
+#cashflowChart {
+  margin-top: 10px;
+}
+
+/* =========================
+   TABLE
+========================= */
 
 .table-card {
   background: var(--card);
@@ -31,33 +217,125 @@
 .table-header {
   padding: 24px;
 
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  gap: 20px;
+
   border-bottom: 1px solid var(--border);
+}
+
+.table-header h3 {
+  margin: 0;
+}
+
+.table-header span {
+  font-size: 0.9rem;
+
+  color: var(--text-muted);
+}
+
+.table-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.table-actions input {
+  min-width: 240px;
 }
 
 .table-card table {
   width: 100%;
+
+  border-collapse: collapse;
 }
 
-.chart-card {
-  min-height: 420px;
+.table-card thead {
+  background: rgba(255, 255, 255, 0.02);
 }
 
-#expenseChart,
-#expensePieChart {
-  margin-top: 20px;
+.table-card th {
+  text-align: left;
+
+  padding: 16px 24px;
+
+  font-weight: 600;
+
+  border-bottom: 1px solid var(--border);
 }
+
+.table-card td {
+  padding: 16px 24px;
+
+  border-bottom: 1px solid var(--border);
+}
+
+.table-card tbody tr {
+  transition: 0.2s ease;
+}
+
+.table-card tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.table-card tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* =========================
+   BADGES
+========================= */
+
+.status-badge {
+  display: inline-flex;
+
+  align-items: center;
+
+  padding: 6px 12px;
+
+  border-radius: 999px;
+
+  font-size: 0.8rem;
+
+  font-weight: 600;
+}
+
+.status-badge.success {
+  color: #22c55e;
+
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.status-badge.warning {
+  color: #f59e0b;
+
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.status-badge.danger {
+  color: #ef4444;
+
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* =========================
+   MODAL
+========================= */
 
 .modal-overlay {
   position: fixed;
 
   inset: 0;
 
-  background: rgba(0, 0, 0, 0.75);
-
   display: none;
 
   justify-content: center;
   align-items: center;
+
+  background: rgba(0, 0, 0, 0.75);
+
+  backdrop-filter: blur(8px);
 
   z-index: 999;
 }
@@ -67,13 +345,16 @@
 }
 
 .modal {
-  width: 500px;
+  width: 100%;
+  max-width: 560px;
 
   background: var(--card);
 
+  border: 1px solid var(--border);
+
   border-radius: 24px;
 
-  padding: 24px;
+  padding: 28px;
 }
 
 .modal-header {
@@ -81,31 +362,159 @@
 
   justify-content: space-between;
 
+  align-items: center;
+
   margin-bottom: 24px;
 }
 
+.modal-header h2 {
+  margin: 0;
+}
+
 .modal-header button {
+  width: 40px;
+  height: 40px;
+
   border: none;
 
-  background: none;
+  background: transparent;
 
-  color: white;
+  color: var(--text);
+
+  cursor: pointer;
 
   font-size: 1.5rem;
 
-  cursor: pointer;
+  border-radius: 12px;
 }
+
+.modal-header button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* =========================
+   FORM
+========================= */
 
 #expenseForm {
   display: flex;
-
   flex-direction: column;
 
-  gap: 16px;
+  gap: 18px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 0.9rem;
+
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+
+  border-radius: 14px;
+
+  padding: 14px;
+
+  color: var(--text);
+
+  outline: none;
+
+  transition: 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: var(--accent);
+}
+
+.form-group textarea {
+  resize: vertical;
+
+  min-height: 120px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 1200px) {
+  .stats-grid,
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 1000px) {
   .budget-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chart-card.full-width {
+    grid-column: auto;
+  }
+
+  .budget-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .budget-toolbar {
+    width: 100%;
+  }
+
+  .budget-toolbar select,
+  .budget-toolbar button {
+    flex: 1;
+  }
+
+  .table-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .table-actions {
+    flex-direction: column;
+  }
+
+  .table-actions input {
+    min-width: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid,
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal {
+    margin: 20px;
+  }
+
+  .table-card {
+    overflow-x: auto;
+  }
+
+  .table-card table {
+    min-width: 900px;
   }
 }

@@ -373,6 +373,47 @@ section {
   line-height: 1.7;
 }
 
+/* PROCESS */
+
+.process {
+  background: rgba(255, 107, 0, 0.03);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.process-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 30px;
+  text-align: center;
+}
+
+.process-grid div {
+  padding: 30px 20px;
+}
+
+.process-grid span {
+  display: block;
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--primary);
+  opacity: 0.3;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.process-grid h3 {
+  font-size: 1rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .process-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* GALLERY */
 
 .gallery {
@@ -432,6 +473,23 @@ section {
 .cta p {
   color: var(--muted);
   margin-bottom: 40px;
+}
+
+.cta-btn {
+  background: #ff6b00;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 600;
+  transition: 0.3s;
+}
+
+.cta-btn:hover {
+  background: #ff7f26;
 }
 
 /* Modal Inquiry */

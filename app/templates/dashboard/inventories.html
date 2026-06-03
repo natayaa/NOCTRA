@@ -1,125 +1,192 @@
-{% extends "base.html" %} {% block title %} Inventory | NOCTRA {% endblock
-%} {% block extra_css %}
+{% extends "base.html" %} 
+{% block title %} Inventory | NOCTRA {% endblock %} 
+{% block extra_css %}
 <link
   rel="stylesheet"
   href="{{ url_for('static', path='css/inventories.css') }}"
 />
-{% endblock %} {% block page_title %} Inventory {% endblock %} {% block
-page_subtitle %} Material & Stock Management {% endblock %} {% block content %}
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+/>
+{% endblock %} 
+{% block page_title %} Inventory {% endblock %} 
+{% block page_subtitle %} Material & Stock Management {% endblock %} 
+{% block content %}
 
-<div class="inventory-header">
-  <button class="btn-primary" id="addItemBtn">Add Item</button>
-</div>
-
+<!-- Stats Grid -->
 <div class="stats-grid">
   <div class="stat-card">
-    <span>Total Value</span>
-
-    <h2>Rp 12.500.000</h2>
+    <div class="stat-icon">
+      <i class="fas fa-rupiah-sign"></i>
+    </div>
+    <div class="stat-info">
+      <span>Total Value</span>
+      <h2 id="totalValue">Rp 12.500.000</h2>
+      <small class="stat-trend positive">↑ +8%</small>
+    </div>
   </div>
 
   <div class="stat-card">
-    <span>Total Items</span>
-
-    <h2>146</h2>
+    <div class="stat-icon">
+      <i class="fas fa-boxes"></i>
+    </div>
+    <div class="stat-info">
+      <span>Total Items</span>
+      <h2 id="totalItems">146</h2>
+      <small class="stat-trend">Unique SKUs</small>
+    </div>
   </div>
 
   <div class="stat-card">
-    <span>Low Stock</span>
-
-    <h2>8</h2>
+    <div class="stat-icon">
+      <i class="fas fa-exclamation-triangle"></i>
+    </div>
+    <div class="stat-info">
+      <span>Low Stock</span>
+      <h2 id="lowStockCount">8</h2>
+      <small class="stat-trend danger">Need reorder</small>
+    </div>
   </div>
 
   <div class="stat-card">
-    <span>Monthly Usage</span>
-
-    <h2>Rp 3.200.000</h2>
+    <div class="stat-icon">
+      <i class="fas fa-chart-line"></i>
+    </div>
+    <div class="stat-info">
+      <span>Monthly Usage</span>
+      <h2>Rp 3.200.000</h2>
+      <small class="stat-trend positive">↑ +12%</small>
+    </div>
   </div>
 </div>
 
-<div class="inventory-toolbar">
-  <input type="search" id="searchInventory" placeholder="Search inventory..." />
+<!-- Two Column Layout -->
+<div class="inventory-layout">
+  
+  <!-- LEFT PANEL - Inventory List -->
+  <div class="inventory-list-panel">
+    <div class="panel-header">
+      <h3><i class="fas fa-box"></i> Inventory Items</h3>
+      <button class="btn-add-item" id="addItemBtn">
+        <i class="fas fa-plus"></i> Add Item
+      </button>
+    </div>
 
-  <select id="categoryFilter">
-    <option value="">All Categories</option>
+    <div class="search-bar">
+      <i class="fas fa-search"></i>
+      <input type="text" id="searchInventory" placeholder="Search item..." />
+    </div>
 
-    <option value="Paint">Paint</option>
+    <div class="filter-row">
+      <select id="categoryFilter" class="filter-select">
+        <option value="">All Categories</option>
+        <option value="Paint">🎨 Paint</option>
+        <option value="Consumable">🧴 Consumable</option>
+        <option value="Part">🔧 Part</option>
+        <option value="Tool">🛠 Tool</option>
+      </select>
+      <select id="stockFilter" class="filter-select">
+        <option value="">All Stock</option>
+        <option value="low">⚠ Low Stock</option>
+        <option value="critical">🔴 Critical</option>
+        <option value="normal">✅ Normal</option>
+      </select>
+    </div>
 
-    <option value="Consumable">Consumable</option>
+    <div class="inventory-items-list" id="inventoryItemsList">
+      <!-- Items will be populated by JavaScript -->
+    </div>
+  </div>
 
-    <option value="Part">Part</option>
+  <!-- RIGHT PANEL - Item Details -->
+  <div class="item-detail-panel" id="itemDetailPanel">
+    <div class="detail-header">
+      <h3><i class="fas fa-info-circle"></i> Item Information</h3>
+      <div class="detail-actions">
+        <button class="action-icon edit-item" id="editItemBtn" style="display: none;">
+          <i class="fas fa-edit"></i>
+        </button>
+        <button class="action-icon delete-item" id="deleteItemBtn" style="display: none;">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    </div>
 
-    <option value="Tool">Tool</option>
-  </select>
+    <div class="detail-content" id="itemDetailContent">
+      <div class="empty-state">
+        <i class="fas fa-box-open"></i>
+        <p>Select an item to view details</p>
+      </div>
+    </div>
+
+    <div class="detail-actions-bottom" id="detailActionsBottom" style="display: none;">
+      <button class="btn-reorder" id="reorderBtn">
+        <i class="fas fa-shopping-cart"></i> Reorder Now
+      </button>
+      <button class="btn-history" id="historyBtn">
+        <i class="fas fa-history"></i> Usage History
+      </button>
+    </div>
+  </div>
 </div>
 
-<div class="table-card">
-  <table>
-    <thead>
-      <tr>
-        <th>Item</th>
-        <th>Category</th>
-        <th>Stock</th>
-        <th>Unit</th>
-        <th>Cost</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-
-    <tbody id="inventoryTable">
-      <tr>
-        <td>Clear Coat</td>
-
-        <td>Paint</td>
-
-        <td>2</td>
-
-        <td>Liter</td>
-
-        <td>Rp 450.000</td>
-
-        <td>
-          <span class="status-low"> LOW </span>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-
-<!-- MODAL -->
-
+<!-- MODAL ADD/EDIT ITEM -->
 <div class="modal-overlay" id="inventoryModal">
   <div class="modal">
     <div class="modal-header">
-      <h2>Add Inventory</h2>
-
+      <h2 id="modalTitle">Add Inventory Item</h2>
       <button id="closeInventoryModal">×</button>
     </div>
-
     <form id="inventoryForm">
-      <input type="text" id="itemName" placeholder="Item Name" required />
-
-      <select id="itemCategory">
-        <option>Paint</option>
-
-        <option>Consumable</option>
-
-        <option>Part</option>
-
-        <option>Tool</option>
-      </select>
-
-      <input type="number" id="itemStock" placeholder="Stock" />
-
-      <input type="text" id="itemUnit" placeholder="Unit" />
-
-      <input type="number" id="itemCost" placeholder="Cost" />
-
-      <button class="btn-primary" type="submit">Save</button>
+      <input type="hidden" id="editId" value="" />
+      <div class="form-group">
+        <label>Item Name</label>
+        <input type="text" id="itemName" placeholder="Enter item name" required />
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="itemCategory" required>
+          <option value="">Select Category</option>
+          <option value="Paint">🎨 Paint</option>
+          <option value="Consumable">🧴 Consumable</option>
+          <option value="Part">🔧 Part</option>
+          <option value="Tool">🛠 Tool</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Stock</label>
+          <input type="number" id="itemStock" placeholder="Quantity" required />
+        </div>
+        <div class="form-group">
+          <label>Unit</label>
+          <input type="text" id="itemUnit" placeholder="Liter/Pack/Pcs" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Cost (Rp)</label>
+          <input type="number" id="itemCost" placeholder="Cost per unit" required />
+        </div>
+        <div class="form-group">
+          <label>Reorder Level</label>
+          <input type="number" id="reorderLevel" placeholder="Alert when below" value="5" />
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+        <button type="submit" class="btn-primary">Save Item</button>
+      </div>
     </form>
   </div>
 </div>
 
-{% endblock %} {% block extra_js %}
+<!-- Toast Notification -->
+<div id="toastContainer"></div>
+
+{% endblock %} 
+
+{% block extra_js %}
 <script src="{{ url_for('static', path='js/inventories.js') }}"></script>
 {% endblock %}

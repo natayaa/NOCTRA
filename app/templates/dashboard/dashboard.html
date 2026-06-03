@@ -1,3 +1,6 @@
+<!---------------------------------------------
+ FILE: dashboard.html (main template)
+---------------------------------------------->
 {% extends "base.html" %}
 
 {% block title %}
@@ -8,100 +11,154 @@ Dashboard | NOCTRA
 Dashboard
 {% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}">
+{% endblock %}
+
 {% block content %}
 
+<!-- Stats Cards Row -->
 <div class="stats-grid">
-
     <div class="stat-card">
-        <span>Revenue</span>
-        <h2>Rp 48.2M</h2>
-        <small>+18.2%</small>
+        <div class="stat-icon">
+            <i class="fas fa-chart-line"></i>
+        </div>
+        <div class="stat-info">
+            <span class="stat-label">Revenue</span>
+            <h2 class="stat-value">Rp 48.2M</h2>
+            <small class="stat-trend positive">
+                <i class="fas fa-arrow-up"></i> +18.2%
+            </small>
+        </div>
     </div>
 
     <div class="stat-card">
-        <span>Profit</span>
-        <h2>Rp 16.8M</h2>
-        <small>+7.3%</small>
+        <div class="stat-icon">
+            <i class="fas fa-coins"></i>
+        </div>
+        <div class="stat-info">
+            <span class="stat-label">Profit</span>
+            <h2 class="stat-value">Rp 16.8M</h2>
+            <small class="stat-trend positive">
+                <i class="fas fa-arrow-up"></i> +7.3%
+            </small>
+        </div>
     </div>
 
     <div class="stat-card">
-        <span>Projects</span>
-        <h2>12</h2>
-        <small>4 Active</small>
+        <div class="stat-icon">
+            <i class="fas fa-tasks"></i>
+        </div>
+        <div class="stat-info">
+            <span class="stat-label">Projects</span>
+            <h2 class="stat-value">12</h2>
+            <small class="stat-sub">4 Active</small>
+        </div>
     </div>
 
     <div class="stat-card">
-        <span>Inquiries</span>
-        <h2>6</h2>
-        <small>2 New</small>
+        <div class="stat-icon">
+            <i class="fas fa-envelope"></i>
+        </div>
+        <div class="stat-info">
+            <span class="stat-label">Inquiries</span>
+            <h2 class="stat-value">6</h2>
+            <small class="stat-sub">2 New</small>
+        </div>
     </div>
-
 </div>
 
+<!-- Chart Section -->
 <div class="chart-card">
-
     <div class="card-header">
-
         <h3>
-            Revenue & Profit
+            <i class="fas fa-chart-simple"></i> Revenue & Profit
         </h3>
-
+        <div class="chart-controls">
+            <button class="chart-period active" data-period="week">Week</button>
+            <button class="chart-period" data-period="month">Month</button>
+            <button class="chart-period" data-period="year">Year</button>
+        </div>
     </div>
-
-    <canvas id="profitChart"></canvas>
-
+    <div class="chart-container">
+        <canvas id="profitChart"></canvas>
+    </div>
 </div>
 
+<!-- Bottom Grid: Projects + Alerts -->
 <div class="bottom-grid">
-
+    <!-- Recent Projects Card -->
     <div class="card">
-
-        <h3>
-            Recent Projects
-        </h3>
-
+        <div class="card-header">
+            <h3>
+                <i class="fas fa-paintbrush"></i> Recent Projects
+            </h3>
+            <a href="#" class="view-all-link">View All <i class="fas fa-arrow-right"></i></a>
+        </div>
         <div class="project-list">
-
             <div class="project-item">
-                Mio Sporty Restoration
+                <div class="project-info">
+                    <span class="project-name">Mio Sporty Restoration</span>
+                    <span class="project-status completed">Completed</span>
+                </div>
+                <span class="project-date">2 days ago</span>
             </div>
-
             <div class="project-item">
-                Ninja 250 Full Repaint
+                <div class="project-info">
+                    <span class="project-name">Ninja 250 Full Repaint</span>
+                    <span class="project-status in-progress">In Progress</span>
+                </div>
+                <span class="project-date">5 days ago</span>
             </div>
-
             <div class="project-item">
-                Aerox Custom Color
+                <div class="project-info">
+                    <span class="project-name">Aerox Custom Color</span>
+                    <span class="project-status pending">Pending</span>
+                </div>
+                <span class="project-date">1 week ago</span>
             </div>
-
         </div>
-
     </div>
 
+    <!-- Inventory Alerts Card -->
     <div class="card">
-
-        <h3>
-            Inventory Alerts
-        </h3>
-
-        <div class="alert-list">
-
-            <div class="alert-item warning">
-                Clear Coat Low Stock
-            </div>
-
-            <div class="alert-item warning">
-                Primer Running Out
-            </div>
-
-            <div class="alert-item danger">
-                Sandpaper #1500 Critical
-            </div>
-
+        <div class="card-header">
+            <h3>
+                <i class="fas fa-exclamation-triangle"></i> Inventory Alerts
+            </h3>
+            <span class="alert-badge">3 Alerts</span>
         </div>
-
+        <div class="alert-list">
+            <div class="alert-item warning">
+                <i class="fas fa-fill-drip"></i>
+                <div class="alert-content">
+                    <strong>Clear Coat</strong>
+                    <span>Low Stock — 3 units left</span>
+                </div>
+                <button class="alert-action">Reorder</button>
+            </div>
+            <div class="alert-item warning">
+                <i class="fas fa-paint-roller"></i>
+                <div class="alert-content">
+                    <strong>Primer</strong>
+                    <span>Running Out — 5 units left</span>
+                </div>
+                <button class="alert-action">Reorder</button>
+            </div>
+            <div class="alert-item danger">
+                <i class="fas fa-sandpaper"></i>
+                <div class="alert-content">
+                    <strong>Sandpaper #1500</strong>
+                    <span>Critical — 1 pack left</span>
+                </div>
+                <button class="alert-action urgent">Order Now</button>
+            </div>
+        </div>
     </div>
-
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='js/dashboard.js') }}"></script>
 {% endblock %}

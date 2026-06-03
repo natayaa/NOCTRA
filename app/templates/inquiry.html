@@ -1,8 +1,8 @@
 
-<link
+<!--link
   rel="stylesheet"
   href="{{ url_for('static', path='css/inquiry.css') }}"
-/>
+/-->
 
 <div class="inquiry-wrapper">
   <form class="inquiry-form">
@@ -168,21 +168,19 @@
     </div>
 
     <div class="wizard-actions">
-      <button type="button" id="prevBtn" class="btn btn-secondary">
+      <button type="button" id="prevBtn" class="inquiry-btn inquiry-btn-secondary">
         Back
       </button>
 
       <div class="wizard-actions-right">
-        <button type="button" id="nextBtn" class="btn btn-primary">
+        <button type="button" id="nextBtn" class="inquiry-btn inquiry-btn-primary">
           Continue
         </button>
 
-        <button type="submit" id="submitBtn" class="btn btn-primary">
+        <button type="submit" id="submitBtn" class="inquiry-btn inquiry-btn-primary">
           Submit Project
         </button>
       </div>
     </div>
   </form>
 </div>
-
-<script src="{{ url_for('static', path='/js/inquiry.js') }}"></script>
