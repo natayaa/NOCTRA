@@ -1,6 +1,5 @@
-{% extends "base.html" %} 
-{% block title %} Inventory | NOCTRA {% endblock %} 
-{% block extra_css %}
+{% extends "base.html" %} {% block title %}Inventory | NOCTRA{% endblock %} {%
+block extra_css %}
 <link
   rel="stylesheet"
   href="{{ url_for('static', path='css/inventories.css') }}"
@@ -9,184 +8,389 @@
   rel="stylesheet"
   href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
 />
-{% endblock %} 
-{% block page_title %} Inventory {% endblock %} 
-{% block page_subtitle %} Material & Stock Management {% endblock %} 
+{% endblock %} {% block page_title %}Inventory Management{% endblock %} {% block
+page_subtitle %}Materials, Parts, Tools & Workshop Stock Control{% endblock %}
 {% block content %}
 
-<!-- Stats Grid -->
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-icon">
+<!-- =========================
+     INVENTORY OVERVIEW
+========================= -->
+<section class="inventory-overview">
+  <div class="overview-card value">
+    <div class="overview-icon">
       <i class="fas fa-rupiah-sign"></i>
     </div>
-    <div class="stat-info">
-      <span>Total Value</span>
+    <div class="overview-content">
+      <span>Total Inventory Value</span>
       <h2 id="totalValue">Rp 12.500.000</h2>
-      <small class="stat-trend positive">↑ +8%</small>
+      <small>Updated today</small>
     </div>
   </div>
 
-  <div class="stat-card">
-    <div class="stat-icon">
-      <i class="fas fa-boxes"></i>
+  <div class="overview-card stock">
+    <div class="overview-icon">
+      <i class="fas fa-boxes-stacked"></i>
     </div>
-    <div class="stat-info">
-      <span>Total Items</span>
+    <div class="overview-content">
+      <span>Total SKUs</span>
       <h2 id="totalItems">146</h2>
-      <small class="stat-trend">Unique SKUs</small>
+      <small>Active inventory items</small>
     </div>
   </div>
 
-  <div class="stat-card">
-    <div class="stat-icon">
-      <i class="fas fa-exclamation-triangle"></i>
+  <div class="overview-card warning">
+    <div class="overview-icon">
+      <i class="fas fa-triangle-exclamation"></i>
     </div>
-    <div class="stat-info">
-      <span>Low Stock</span>
+    <div class="overview-content">
+      <span>Low Stock Items</span>
       <h2 id="lowStockCount">8</h2>
-      <small class="stat-trend danger">Need reorder</small>
+      <small>Require replenishment</small>
     </div>
   </div>
 
-  <div class="stat-card">
-    <div class="stat-icon">
+  <div class="overview-card usage">
+    <div class="overview-icon">
       <i class="fas fa-chart-line"></i>
     </div>
-    <div class="stat-info">
+    <div class="overview-content">
       <span>Monthly Usage</span>
       <h2>Rp 3.200.000</h2>
-      <small class="stat-trend positive">↑ +12%</small>
+      <small>Workshop consumption</small>
     </div>
   </div>
-</div>
+</section>
 
-<!-- Two Column Layout -->
+<!-- =========================
+     ALERT SECTION
+========================= -->
+<section class="inventory-alerts">
+  <div class="section-header">
+    <div>
+      <h3>
+        <i class="fas fa-bell"></i>
+        Stock Alerts
+      </h3>
+      <p>Items that require attention</p>
+    </div>
+  </div>
+
+  <div class="alert-list">
+    <div class="alert-item critical">
+      <div>
+        <strong>Epoxy Primer</strong>
+        <span>Paint Material</span>
+      </div>
+      <span class="alert-badge">Critical</span>
+    </div>
+
+    <div class="alert-item warning">
+      <div>
+        <strong>Clear Coat Premium</strong>
+        <span>Paint Material</span>
+      </div>
+      <span class="alert-badge">Low Stock</span>
+    </div>
+  </div>
+</section>
+
+<!-- =========================
+     MAIN LAYOUT
+========================= -->
 <div class="inventory-layout">
-  
-  <!-- LEFT PANEL - Inventory List -->
-  <div class="inventory-list-panel">
-    <div class="panel-header">
-      <h3><i class="fas fa-box"></i> Inventory Items</h3>
-      <button class="btn-add-item" id="addItemBtn">
-        <i class="fas fa-plus"></i> Add Item
-      </button>
-    </div>
-
-    <div class="search-bar">
-      <i class="fas fa-search"></i>
-      <input type="text" id="searchInventory" placeholder="Search item..." />
-    </div>
-
-    <div class="filter-row">
-      <select id="categoryFilter" class="filter-select">
-        <option value="">All Categories</option>
-        <option value="Paint">🎨 Paint</option>
-        <option value="Consumable">🧴 Consumable</option>
-        <option value="Part">🔧 Part</option>
-        <option value="Tool">🛠 Tool</option>
-      </select>
-      <select id="stockFilter" class="filter-select">
-        <option value="">All Stock</option>
-        <option value="low">⚠ Low Stock</option>
-        <option value="critical">🔴 Critical</option>
-        <option value="normal">✅ Normal</option>
-      </select>
-    </div>
-
-    <div class="inventory-items-list" id="inventoryItemsList">
-      <!-- Items will be populated by JavaScript -->
-    </div>
-  </div>
-
-  <!-- RIGHT PANEL - Item Details -->
-  <div class="item-detail-panel" id="itemDetailPanel">
-    <div class="detail-header">
-      <h3><i class="fas fa-info-circle"></i> Item Information</h3>
-      <div class="detail-actions">
-        <button class="action-icon edit-item" id="editItemBtn" style="display: none;">
-          <i class="fas fa-edit"></i>
-        </button>
-        <button class="action-icon delete-item" id="deleteItemBtn" style="display: none;">
-          <i class="fas fa-trash"></i>
-        </button>
+  <!-- =========================
+         LEFT SIDEBAR
+    ========================= -->
+  <aside class="inventory-sidebar">
+    <div class="sidebar-card">
+      <div class="search-bar">
+        <i class="fas fa-search"></i>
+        <input
+          type="text"
+          id="searchInventory"
+          placeholder="Search inventory..."
+        />
       </div>
     </div>
 
-    <div class="detail-content" id="itemDetailContent">
-      <div class="empty-state">
-        <i class="fas fa-box-open"></i>
-        <p>Select an item to view details</p>
-      </div>
-    </div>
+    <div class="sidebar-card">
+      <h4>Filters</h4>
 
-    <div class="detail-actions-bottom" id="detailActionsBottom" style="display: none;">
-      <button class="btn-reorder" id="reorderBtn">
-        <i class="fas fa-shopping-cart"></i> Reorder Now
-      </button>
-      <button class="btn-history" id="historyBtn">
-        <i class="fas fa-history"></i> Usage History
-      </button>
-    </div>
-  </div>
-</div>
+      <div class="filter-group">
+        <select id="categoryFilter" class="filter-select">
+          <option value="">All Categories</option>
+          <option value="Paint">Paint</option>
+          <option value="Consumable">Consumable</option>
+          <option value="Part">Part</option>
+          <option value="Tool">Tool</option>
+        </select>
 
-<!-- MODAL ADD/EDIT ITEM -->
-<div class="modal-overlay" id="inventoryModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 id="modalTitle">Add Inventory Item</h2>
-      <button id="closeInventoryModal">×</button>
-    </div>
-    <form id="inventoryForm">
-      <input type="hidden" id="editId" value="" />
-      <div class="form-group">
-        <label>Item Name</label>
-        <input type="text" id="itemName" placeholder="Enter item name" required />
-      </div>
-      <div class="form-group">
-        <label>Category</label>
-        <select id="itemCategory" required>
-          <option value="">Select Category</option>
-          <option value="Paint">🎨 Paint</option>
-          <option value="Consumable">🧴 Consumable</option>
-          <option value="Part">🔧 Part</option>
-          <option value="Tool">🛠 Tool</option>
+        <select id="stockFilter" class="filter-select">
+          <option value="">All Stock Status</option>
+          <option value="critical">Critical</option>
+          <option value="low">Low Stock</option>
+          <option value="normal">Normal</option>
         </select>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Stock</label>
-          <input type="number" id="itemStock" placeholder="Quantity" required />
+    </div>
+
+    <div class="sidebar-card">
+      <h4>Categories</h4>
+
+      <div class="category-list">
+        <button class="category-chip active">
+          All
+          <span>146</span>
+        </button>
+
+        <button class="category-chip">
+          Paint
+          <span>48</span>
+        </button>
+
+        <button class="category-chip">
+          Consumables
+          <span>37</span>
+        </button>
+
+        <button class="category-chip">
+          Parts
+          <span>29</span>
+        </button>
+
+        <button class="category-chip">
+          Tools
+          <span>32</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <h4>Recent Movements</h4>
+
+      <div class="movement-list">
+        <div class="movement-item stock-in">
+          <i class="fas fa-arrow-down"></i>
+          <div>
+            <strong>+10 Liter</strong>
+            <small>Epoxy Primer</small>
+          </div>
         </div>
+
+        <div class="movement-item stock-out">
+          <i class="fas fa-arrow-up"></i>
+          <div>
+            <strong>-2 Liter</strong>
+            <small>Clear Coat</small>
+          </div>
+        </div>
+
+        <div class="movement-item stock-in">
+          <i class="fas fa-arrow-down"></i>
+          <div>
+            <strong>+15 PCS</strong>
+            <small>Sandpaper P800</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- =========================
+         RIGHT CONTENT
+    ========================= -->
+  <main class="inventory-content">
+    <div class="content-header">
+      <div>
+        <h3>Inventory Assets</h3>
+        <p>Manage workshop materials and stock levels</p>
+      </div>
+
+      <button class="btn-add-item" id="addItemBtn">
+        <i class="fas fa-plus"></i>
+        Add Item
+      </button>
+    </div>
+
+    <!-- INVENTORY TABLE -->
+
+    <div class="inventory-table-wrapper">
+      <table class="inventory-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Category</th>
+            <th>Stock</th>
+            <th>Unit</th>
+            <th>Status</th>
+            <th>Value</th>
+            <th></th>
+          </tr>
+        </thead>
+
+        <tbody id="inventoryItemsList">
+          <!-- JS Populate -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ITEM DETAIL -->
+
+    <section class="item-detail-panel" id="itemDetailPanel">
+      <div class="detail-header">
+        <h3>
+          <i class="fas fa-circle-info"></i>
+          Item Details
+        </h3>
+
+        <div class="detail-actions">
+          <button
+            class="action-icon edit-item"
+            id="editItemBtn"
+            style="display: none"
+          >
+            <i class="fas fa-pen"></i>
+          </button>
+
+          <button
+            class="action-icon delete-item"
+            id="deleteItemBtn"
+            style="display: none"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="detail-content" id="itemDetailContent">
+        <div class="empty-state">
+          <i class="fas fa-box-open"></i>
+          <h4>No Item Selected</h4>
+          <p>Select an inventory item to view detailed information.</p>
+        </div>
+      </div>
+
+      <div
+        class="detail-actions-bottom"
+        id="detailActionsBottom"
+        style="display: none"
+      >
+        <button class="btn-reorder" id="reorderBtn">
+          <i class="fas fa-cart-shopping"></i>
+          Reorder
+        </button>
+
+        <button class="btn-history" id="historyBtn">
+          <i class="fas fa-clock-rotate-left"></i>
+          History
+        </button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- =========================
+     INVENTORY MODAL
+========================= -->
+
+<div class="modal-overlay" id="inventoryModal">
+  <div class="modal inventory-modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="modalTitle">Add Inventory Item</h2>
+        <p>Create or update inventory information</p>
+      </div>
+
+      <button id="closeInventoryModal">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <form id="inventoryForm">
+      <input type="hidden" id="editId" />
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Item Name</label>
+          <input
+            type="text"
+            id="itemName"
+            placeholder="Example: Epoxy Primer"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label>Category</label>
+          <select id="itemCategory" required>
+            <option value="">Select Category</option>
+            <option value="Paint">Paint</option>
+            <option value="Consumable">Consumable</option>
+            <option value="Part">Part</option>
+            <option value="Tool">Tool</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Current Stock</label>
+          <input
+            type="number"
+            id="itemStock"
+            placeholder="Stock Quantity"
+            required
+          />
+        </div>
+
         <div class="form-group">
           <label>Unit</label>
-          <input type="text" id="itemUnit" placeholder="Liter/Pack/Pcs" required />
+          <input
+            type="text"
+            id="itemUnit"
+            placeholder="Liter, PCS, Box"
+            required
+          />
         </div>
-      </div>
-      <div class="form-row">
+
         <div class="form-group">
-          <label>Cost (Rp)</label>
-          <input type="number" id="itemCost" placeholder="Cost per unit" required />
+          <label>Unit Cost (Rp)</label>
+          <input
+            type="number"
+            id="itemCost"
+            placeholder="Cost per unit"
+            required
+          />
         </div>
+
         <div class="form-group">
           <label>Reorder Level</label>
-          <input type="number" id="reorderLevel" placeholder="Alert when below" value="5" />
+          <input
+            type="number"
+            id="reorderLevel"
+            placeholder="Minimum Stock"
+            value="5"
+          />
+        </div>
+
+        <div class="form-group full-width">
+          <label>Supplier</label>
+          <input type="text" id="itemSupplier" placeholder="Supplier Name" />
         </div>
       </div>
+
       <div class="form-actions">
-        <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+        <button type="button" class="btn-secondary" id="cancelModalBtn">
+          Cancel
+        </button>
+
         <button type="submit" class="btn-primary">Save Item</button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Toast Notification -->
+<!-- Toast -->
 <div id="toastContainer"></div>
 
-{% endblock %} 
-
-{% block extra_js %}
+{% endblock %} {% block extra_js %}
 <script src="{{ url_for('static', path='js/inventories.js') }}"></script>
 {% endblock %}

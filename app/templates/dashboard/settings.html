@@ -1,5 +1,5 @@
-{% extends "base.html" %} {% block title %} Settings | NOCTRA {% endblock
-%} {% block extra_css %}
+{% extends "base.html" %} {% block title %} Settings | NOCTRA {% endblock %} {%
+block extra_css %}
 <link
   rel="stylesheet"
   href="{{ url_for('static', path='css/settings.css') }}"
@@ -7,147 +7,246 @@
 {% endblock %} {% block page_title %} Settings {% endblock %} {% block
 page_subtitle %} Business Configuration {% endblock %} {% block content %}
 
-<div class="settings-grid">
-  <!-- WORKSHOP -->
-
-  <div class="settings-card">
-    <h3>Workshop Profile</h3>
-
-    <div class="form-group">
-      <label> Workshop Name </label>
-
-      <input type="text" value="NOCTRA" />
-    </div>
-
-    <div class="form-group">
-      <label> Address </label>
-
-      <textarea rows="4"></textarea>
-    </div>
-
-    <div class="form-group">
-      <label> Phone </label>
-
-      <input type="text" />
-    </div>
+<div class="settings-toolbar">
+  <div class="settings-toolbar-info">
+    <h2>Configuration Center</h2>
+    <p>
+      Manage workshop operations, pricing rules, users, security and application
+      preferences.
+    </p>
   </div>
 
-  <!-- PRICING -->
+  <div class="settings-toolbar-actions">
+    <button type="button" class="btn-secondary" id="resetSettings">
+      Reset
+    </button>
 
-  <div class="settings-card">
-    <h3>Pricing Engine</h3>
-
-    <div class="form-group">
-      <label> Paint Job Base Price </label>
-
-      <input type="number" value="2500000" />
-    </div>
-
-    <div class="form-group">
-      <label> Restoration Base Price </label>
-
-      <input type="number" value="5000000" />
-    </div>
-
-    <div class="form-group">
-      <label> Detailing Base Price </label>
-
-      <input type="number" value="500000" />
-    </div>
-  </div>
-
-  <!-- LABOR -->
-
-  <div class="settings-card">
-    <h3>Labor Cost</h3>
-
-    <div class="form-group">
-      <label> Painter / Day </label>
-
-      <input type="number" value="200000" />
-    </div>
-
-    <div class="form-group">
-      <label> Body Repair / Day </label>
-
-      <input type="number" value="250000" />
-    </div>
-
-    <div class="form-group">
-      <label> Assembly / Day </label>
-
-      <input type="number" value="150000" />
-    </div>
-  </div>
-
-  <!-- PROFIT -->
-
-  <div class="settings-card">
-    <h3>Profit Rules</h3>
-
-    <div class="form-group">
-      <label> Default Margin % </label>
-
-      <input type="number" value="40" />
-    </div>
-
-    <div class="form-group">
-      <label> Tax % </label>
-
-      <input type="number" value="11" />
-    </div>
-
-    <div class="form-group">
-      <label> Emergency Buffer % </label>
-
-      <input type="number" value="10" />
-    </div>
-  </div>
-
-  <!-- INVENTORY -->
-
-  <div class="settings-card">
-    <h3>Inventory Rules</h3>
-
-    <div class="form-group">
-      <label> Low Stock Threshold </label>
-
-      <input type="number" value="3" />
-    </div>
-
-    <div class="form-group">
-      <label> Critical Stock Threshold </label>
-
-      <input type="number" value="1" />
-    </div>
-  </div>
-
-  <!-- USERS -->
-
-  <div class="settings-card">
-    <h3>User Management</h3>
-
-    <button class="btn-primary">Add User</button>
-
-    <div class="user-list">
-      <div class="user-item">
-        <span> Admin </span>
-
-        <span> Owner </span>
-      </div>
-
-      <div class="user-item">
-        <span> Painter01 </span>
-
-        <span> Staff </span>
-      </div>
-    </div>
+    <button type="button" class="btn-primary" id="saveSettings">
+      Save Changes
+    </button>
   </div>
 </div>
 
-<div class="save-section">
-  <button class="btn-primary" id="saveSettings">Save Settings</button>
-</div>
+<form id="settingsForm">
+  <div class="settings-grid">
+    <!-- WORKSHOP -->
+
+    <section class="settings-card">
+      <div class="card-header">
+        <h3>Workshop</h3>
+        <span>Business information and contact details</span>
+      </div>
+
+      <div class="form-group">
+        <label for="workshop_name"> Workshop Name </label>
+
+        <input
+          id="workshop_name"
+          name="workshop_name"
+          type="text"
+          value="NOCTRA"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="workshop_address"> Address </label>
+
+        <textarea
+          id="workshop_address"
+          name="workshop_address"
+          rows="4"
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="workshop_phone"> Phone </label>
+
+        <input id="workshop_phone" name="workshop_phone" type="text" />
+      </div>
+
+      <div class="form-group">
+        <label for="workshop_email"> Email </label>
+
+        <input id="workshop_email" name="workshop_email" type="email" />
+      </div>
+    </section>
+
+    <!-- PRICING -->
+
+    <section class="settings-card">
+      <div class="card-header">
+        <h3>Pricing</h3>
+        <span>Base service pricing engine</span>
+      </div>
+
+      <div class="form-group">
+        <label for="paint_base_price"> Paint Job Base Price </label>
+
+        <input
+          id="paint_base_price"
+          name="paint_base_price"
+          type="number"
+          value="2500000"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="restoration_base_price"> Restoration Base Price </label>
+
+        <input
+          id="restoration_base_price"
+          name="restoration_base_price"
+          type="number"
+          value="5000000"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="detailing_base_price"> Detailing Base Price </label>
+
+        <input
+          id="detailing_base_price"
+          name="detailing_base_price"
+          type="number"
+          value="500000"
+        />
+      </div>
+    </section>
+
+    <!-- LABOR -->
+
+    <section class="settings-card">
+      <div class="card-header">
+        <h3>Labor</h3>
+        <span>Labor and manpower costs</span>
+      </div>
+
+      <div class="form-group">
+        <label for="labor_painter"> Painter / Day </label>
+
+        <input
+          id="labor_painter"
+          name="labor_painter"
+          type="number"
+          value="200000"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="labor_body"> Body Repair / Day </label>
+
+        <input id="labor_body" name="labor_body" type="number" value="250000" />
+      </div>
+
+      <div class="form-group">
+        <label for="labor_assembly"> Assembly / Day </label>
+
+        <input
+          id="labor_assembly"
+          name="labor_assembly"
+          type="number"
+          value="150000"
+        />
+      </div>
+    </section>
+
+    <!-- USERS -->
+
+    <section class="settings-card">
+      <div class="card-header">
+        <h3>Users</h3>
+        <span>Manage workshop personnel</span>
+      </div>
+
+      <button type="button" class="btn-primary add-user-btn">Add User</button>
+
+      <div class="user-list">
+        <div class="user-item">
+          <div>
+            <strong>Admin</strong>
+            <small>Owner</small>
+          </div>
+
+          <button type="button" class="btn-icon">⋮</button>
+        </div>
+
+        <div class="user-item">
+          <div>
+            <strong>Painter01</strong>
+            <small>Staff</small>
+          </div>
+
+          <button type="button" class="btn-icon">⋮</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECURITY -->
+
+    <section class="settings-card">
+      <div class="card-header">
+        <h3>Security</h3>
+        <span>Authentication and protection settings</span>
+      </div>
+
+      <div class="switch-row">
+        <label> Require MFA For Admin Users </label>
+
+        <input type="checkbox" name="require_mfa" />
+      </div>
+
+      <div class="switch-row">
+        <label> Allow Session Remember Me </label>
+
+        <input type="checkbox" name="remember_me" checked />
+      </div>
+
+      <div class="form-group">
+        <label> Session Timeout (Minutes) </label>
+
+        <input type="number" name="session_timeout" value="60" />
+      </div>
+    </section>
+
+    <!-- SYSTEM -->
+
+    <section class="settings-card">
+      <div class="card-header">
+        <h3>System Preferences</h3>
+        <span>Application behavior and defaults</span>
+      </div>
+
+      <div class="form-group">
+        <label> Currency </label>
+
+        <select name="currency">
+          <option value="IDR">Indonesian Rupiah</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label> Tax % </label>
+
+        <input type="number" name="tax_percent" value="11" />
+      </div>
+
+      <div class="form-group">
+        <label> Default Margin % </label>
+
+        <input type="number" name="default_margin" value="40" />
+      </div>
+
+      <div class="switch-row">
+        <label> Enable Email Notifications </label>
+
+        <input type="checkbox" name="email_notifications" checked />
+      </div>
+    </section>
+  </div>
+</form>
+
+<div class="save-status" id="saveStatus">Ready</div>
 
 {% endblock %} {% block extra_js %}
 <script src="{{ url_for('static', path='js/settings.js') }}"></script>
