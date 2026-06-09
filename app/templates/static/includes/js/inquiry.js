@@ -524,3 +524,90 @@ if (!form) {
 
   updateWizard();
 }
+
+
+const motorcycleData = {
+    Honda: [
+        "Astrea Grand",
+        "Supra",
+        "Supra X",
+        "Revo",
+        "Blade",
+        "Beat",
+        "Scoopy",
+        "Genio",
+        "Vario 125",
+        "Vario 160",
+        "PCX 160",
+        "ADV 160",
+        "CB150R",
+        "Verza",
+        "Mega Pro",
+        "Tiger",
+        "CBR150R",
+        "CBR250RR",
+        "CRF150L"
+    ],
+    Yamaha: [
+        "Mio",
+        "Mio Sporty",
+        "Mio Soul",
+        "Fino",
+        "Xeon",
+        "Lexi",
+        "Aerox",
+        "NMAX",
+        "XMAX",
+        "Jupiter Z",
+        "Jupiter MX",
+        "Vega",
+        "Vixion",
+        "Byson",
+        "R15",
+        "R25",
+        "MT-15",
+        "XSR 155"
+    ],
+    Suzuki: [
+        "Crystal",
+        "Shogun",
+        "Smash",
+        "Satria",
+        "Satria F150",
+        "Nex",
+        "Address",
+        "Burgman Street",
+        "GSX-R150",
+        "GSX-S150"
+    ],
+    Kawasaki: [
+        "Kaze",
+        "Athlete",
+        "Ninja 150RR",
+        "Ninja 250R",
+        "Ninja ZX-25R",
+        "KLX 150",
+        "D-Tracker",
+        "W175",
+        "Versys X250"
+    ]
+};
+
+const brandSelect = document.getElementById("bike_brand");
+const modelSelect = document.getElementById("bike_model");
+
+brandSelect.addEventListener("change", () => {
+    const brand = brandSelect.value;
+
+    modelSelect.innerHTML =
+        '<option value="">Pilih Model</option>';
+
+    if (!motorcycleData[brand]) return;
+
+    motorcycleData[brand].forEach(model => {
+        const option = document.createElement("option");
+        option.value = model;
+        option.textContent = model;
+        modelSelect.appendChild(option);
+    });
+});

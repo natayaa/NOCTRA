@@ -59,6 +59,16 @@
           required
         />
       </div>
+
+      <div class="input-group">
+        <label>Email</label>
+        <input
+          id="email"
+          type="text"
+          placeholder="something@gmail.com"
+          required
+        />
+      </div>
     </div>
 
     <!-- STEP 2 -->
@@ -79,32 +89,29 @@
           <select id="bike_brand">
             <option value="">Select Brand</option>
 
-            <option>YAMAHA</option>
-            <option>HONDA</option>
-            <option>KAWASAKI</option>
-            <option>SUZUKI</option>
-            <option>VESPA</option>
-            <option>OTHER</option>
+            <option value="Honda">Honda</option>
+            <option value="Yamaha">Yamaha</option>
+            <option value="Suzuki">Suzuki</option>
+            <option value="Kawasaki">Kawasaki</option>
+            <option value="Vespa">Vespa</option>
+            <option value="Benelli">Benelli</option>
+            <option value="KTM">KTM</option>
+            <option value="BMW">BMW</option>
+            <option value="Royal Enfield">Royal Enfield</option>
+            <option value="TVS">TVS</option>
+            <option value="Viar">Viar</option>
           </select>
         </div>
 
         <div class="input-group">
           <label>Model</label>
-
-          <input
-            id="bike_model"
-            type="text"
-            placeholder="Vixion, Ninja 250R, Mio Sporty..."
-          />
+          <select id="bike_model">
+            <option value="">Model</option>
+          </select>
         </div>
       </div>
 
       <div class="grid">
-        <div class="input-group">
-          <label>Production Year</label>
-
-          <input id="bike_year" type="number" placeholder="2012" />
-        </div>
 
         <div class="input-group">
           <label>License Plate (Optional)</label>

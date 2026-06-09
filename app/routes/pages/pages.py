@@ -9,7 +9,8 @@ templates = Jinja2Templates("templates/")
 @pages.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     konteks = {
-        "request": request, "title": "",
+        "request": request, "page_title": "NOKTRA AUTOWORKS",
+        "page_content": "Premium motorcycle restoration, repaint and custom build workshop"
     }
     return templates.TemplateResponse(
         request=request,
