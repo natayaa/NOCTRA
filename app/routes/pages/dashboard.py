@@ -2,7 +2,7 @@ from fastapi import APIRouter, status, Request, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, Response
 
-dashboard = APIRouter(tags=["Dashboard"], prefix="/management")
+dashboard = APIRouter(tags=["Dashboard"], prefix="/management", include_in_schema=False)
 template = Jinja2Templates("templates/dashboard")
 
 @dashboard.get("/", response_class=HTMLResponse)
