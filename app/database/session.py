@@ -20,18 +20,9 @@ class Database:
         self._engine: AsyncEngine | None = None
         self._sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
-    def init(
-        self,
-        db_url: str,
-        *,
-        echo: bool = False,
-        pool_size: int = 20,
-        max_overflow: int = 10,
-    ) -> None:
+    def init(self, db_url: str, *, echo: bool = False, pool_size: int = 20, max_overflow: int = 10,) -> None:
 
-        self._engine = create_async_engine(
-            db_url,
-            echo=echo,
+        self._engine = create_async_engine(db_url, echo=echo,
             pool_size=pool_size,
             max_overflow=max_overflow,
             pool_timeout=30,
@@ -60,9 +51,7 @@ class Database:
         self._sessionmaker = None
 
     @asynccontextmanager
-    async def connection(
-        self,
-    ) -> AsyncGenerator[AsyncConnection, None]:
+    async def connection(self,) -> AsyncGenerator[AsyncConnection, None]:
 
         if self._engine is None:
             raise RuntimeError("Database not initialized")
@@ -71,9 +60,7 @@ class Database:
             yield conn
 
     @asynccontextmanager
-    async def session(
-        self,
-    ) -> AsyncGenerator[AsyncSession, None]:
+    async def session(self,) -> AsyncGenerator[AsyncSession, None]:
 
         if self._sessionmaker is None:
             raise RuntimeError("Database not initialized")

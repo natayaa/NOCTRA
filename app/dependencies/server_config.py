@@ -100,7 +100,6 @@ class Settings(BaseSettings):
         """
         Disable redoc in production.
         """
-
         if not self.API_ENABLE_DOCS:
             return None
 
