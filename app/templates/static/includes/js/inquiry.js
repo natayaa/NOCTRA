@@ -1,8 +1,8 @@
-const $ = (selector, parent = document) =>
-  parent.querySelector(selector);
+const $ = (selector, parent = document) => parent.querySelector(selector);
 
-const $$ = (selector, parent = document) =>
-  [...parent.querySelectorAll(selector)];
+const $$ = (selector, parent = document) => [
+  ...parent.querySelectorAll(selector),
+];
 
 const form = $(".inquiry-form");
 
@@ -67,16 +67,13 @@ if (!form) {
 
     field.style.borderColor = "#ff4d4f";
 
-    const existing =
-      field.parentElement?.querySelector(".error-message");
+    const existing = field.parentElement?.querySelector(".error-message");
 
     if (existing) {
       existing.remove();
     }
 
-    field.parentElement?.appendChild(
-      createError(message)
-    );
+    field.parentElement?.appendChild(createError(message));
   }
 
   function isValidPhone(phone) {
@@ -93,9 +90,9 @@ if (!form) {
   }
 
   function getSelectedServices() {
-    return $$(
-      ".service-card input[type='checkbox']:checked"
-    ).map((checkbox) => checkbox.value);
+    return $$(".service-card input[type='checkbox']:checked").map(
+      (checkbox) => checkbox.value,
+    );
   }
 
   function updateProgressLine() {
@@ -103,17 +100,14 @@ if (!form) {
 
     const total = steps.length - 1;
 
-    const percentage =
-      total <= 0
-        ? 0
-        : (currentStep / total) * 100;
+    const percentage = total <= 0 ? 0 : (currentStep / total) * 100;
 
     progressLine.style.background =
       "linear-gradient(90deg, var(--primary) " +
       percentage +
       "%, rgba(255,255,255,.08) " +
       percentage +
-    "%)";
+      "%)";
   }
 
   /* ==========================================
@@ -122,33 +116,20 @@ if (!form) {
 
   function updateWizard() {
     pages.forEach((page, index) => {
-      page.classList.toggle(
-        "active",
-        index === currentStep
-      );
+      page.classList.toggle("active", index === currentStep);
     });
 
     steps.forEach((step, index) => {
-      step.classList.toggle(
-        "active",
-        index <= currentStep
-      );
+      step.classList.toggle("active", index <= currentStep);
     });
 
-    prevBtn.style.display =
-      currentStep === 0
-        ? "none"
-        : "inline-flex";
+    prevBtn.style.display = currentStep === 0 ? "none" : "inline-flex";
 
     nextBtn.style.display =
-      currentStep === pages.length - 1
-        ? "none"
-        : "inline-flex";
+      currentStep === pages.length - 1 ? "none" : "inline-flex";
 
     submitBtn.style.display =
-      currentStep === pages.length - 1
-        ? "inline-flex"
-        : "none";
+      currentStep === pages.length - 1 ? "inline-flex" : "none";
 
     updateProgressLine();
   }
@@ -160,25 +141,17 @@ if (!form) {
   function validateStepOne() {
     let valid = true;
 
-    const fullname =
-      fullName?.value.trim() || "";
+    const fullname = fullName?.value.trim() || "";
 
-    const phone =
-      phoneNumber?.value.trim() || "";
+    const phone = phoneNumber?.value.trim() || "";
 
     if (fullname.length < 3) {
-      showError(
-        fullName,
-        "Full name must be at least 3 characters."
-      );
+      showError(fullName, "Full name must be at least 3 characters.");
       valid = false;
     }
 
     if (!isValidPhone(phone)) {
-      showError(
-        phoneNumber,
-        "Please enter a valid WhatsApp number."
-      );
+      showError(phoneNumber, "Please enter a valid WhatsApp number.");
       valid = false;
     }
 
@@ -189,38 +162,23 @@ if (!form) {
     let valid = true;
 
     if (!bikeBrand?.value) {
-      showError(
-        bikeBrand,
-        "Please select a motorcycle brand."
-      );
+      showError(bikeBrand, "Please select a motorcycle brand.");
 
       valid = false;
     }
 
-    if (
-      !bikeModel?.value.trim() ||
-      bikeModel.value.trim().length < 2
-    ) {
-      showError(
-        bikeModel,
-        "Motorcycle model is required."
-      );
+    if (!bikeModel?.value.trim() || bikeModel.value.trim().length < 2) {
+      showError(bikeModel, "Motorcycle model is required.");
 
       valid = false;
     }
 
     if (
       bikeYear?.value &&
-      (
-        Number(bikeYear.value) < 1950 ||
-        Number(bikeYear.value) >
-          new Date().getFullYear() + 1
-      )
+      (Number(bikeYear.value) < 1950 ||
+        Number(bikeYear.value) > new Date().getFullYear() + 1)
     ) {
-      showError(
-        bikeYear,
-        "Please enter a valid production year."
-      );
+      showError(bikeYear, "Please enter a valid production year.");
 
       valid = false;
     }
@@ -231,13 +189,10 @@ if (!form) {
   function validateStepThree() {
     let valid = true;
 
-    const services =
-      getSelectedServices();
+    const services = getSelectedServices();
 
     if (!services.length) {
-      alert(
-        "Please select at least one service."
-      );
+      alert("Please select at least one service.");
 
       valid = false;
     }
@@ -248,32 +203,22 @@ if (!form) {
     ) {
       showError(
         projectDetails,
-        "Project description must be at least 20 characters."
+        "Project description must be at least 20 characters.",
       );
 
       valid = false;
     }
 
-    const ref =
-      referenceLink?.value.trim() || "";
+    const ref = referenceLink?.value.trim() || "";
 
     if (ref && !isValidUrl(ref)) {
-      showError(
-        referenceLink,
-        "Please enter a valid URL."
-      );
+      showError(referenceLink, "Please enter a valid URL.");
 
       valid = false;
     }
 
-    if (
-      projectPhotos?.files &&
-      projectPhotos.files.length > 10
-    ) {
-      showError(
-        projectPhotos,
-        "Maximum 10 photos allowed."
-      );
+    if (projectPhotos?.files && projectPhotos.files.length > 10) {
+      showError(projectPhotos, "Maximum 10 photos allowed.");
 
       valid = false;
     }
@@ -303,49 +248,36 @@ if (!form) {
      STEP NAVIGATION
   ========================================== */
 
-  nextBtn?.addEventListener(
-    "click",
-    () => {
-      if (!validateStep(currentStep)) {
-        return;
-      }
-
-      currentStep++;
-
-      updateWizard();
+  nextBtn?.addEventListener("click", () => {
+    if (!validateStep(currentStep)) {
+      return;
     }
-  );
 
-  prevBtn?.addEventListener(
-    "click",
-    () => {
-      currentStep--;
+    currentStep++;
 
-      updateWizard();
-    }
-  );
+    updateWizard();
+  });
+
+  prevBtn?.addEventListener("click", () => {
+    currentStep--;
+
+    updateWizard();
+  });
 
   /* ==========================================
      SERVICE CARDS
   ========================================== */
 
   $$(".service-card").forEach((card) => {
-    const checkbox =
-      $("input[type='checkbox']", card);
+    const checkbox = $("input[type='checkbox']", card);
 
     if (!checkbox) return;
 
     function syncState() {
-      card.classList.toggle(
-        "selected",
-        checkbox.checked
-      );
+      card.classList.toggle("selected", checkbox.checked);
     }
 
-    checkbox.addEventListener(
-      "change",
-      syncState
-    );
+    checkbox.addEventListener("change", syncState);
 
     syncState();
   });
@@ -354,169 +286,124 @@ if (!form) {
      PHOTO PREVIEW COUNT
   ========================================== */
 
-  projectPhotos?.addEventListener(
-    "change",
-    () => {
-      const uploadZone =
-        projectPhotos.closest(".upload-zone");
+  projectPhotos?.addEventListener("change", () => {
+    const uploadZone = projectPhotos.closest(".upload-zone");
 
-      if (!uploadZone) return;
+    if (!uploadZone) return;
 
-      const paragraph =
-        $("p", uploadZone);
+    const paragraph = $("p", uploadZone);
 
-      if (!paragraph) return;
+    if (!paragraph) return;
 
-      const count =
-        projectPhotos.files.length;
+    const count = projectPhotos.files.length;
 
-      if (!count) {
-        paragraph.textContent =
-          "Drag & drop photos here or click to browse.";
+    if (!count) {
+      paragraph.textContent = "Drag & drop photos here or click to browse.";
 
-        return;
-      }
-
-      paragraph.textContent =
-        `${count} photo${count > 1 ? "s" : ""} selected`;
+      return;
     }
-  );
+
+    paragraph.textContent = `${count} photo${count > 1 ? "s" : ""} selected`;
+  });
 
   /* ==========================================
      AUTO FORMAT
   ========================================== */
 
-  phoneNumber?.addEventListener(
-    "input",
-    (e) => {
-      e.target.value =
-        e.target.value.replace(
-          /[^0-9+]/g,
-          ""
-        );
-    }
-  );
+  phoneNumber?.addEventListener("input", (e) => {
+    e.target.value = e.target.value.replace(/[^0-9+]/g, "");
+  });
 
-  plateNumber?.addEventListener(
-    "input",
-    (e) => {
-      e.target.value =
-        e.target.value.toUpperCase();
-    }
-  );
+  plateNumber?.addEventListener("input", (e) => {
+    e.target.value = e.target.value.toUpperCase();
+  });
 
   /* ==========================================
      SUBMIT
   ========================================== */
 
-  form.addEventListener(
-    "submit",
-    async (event) => {
-      event.preventDefault();
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
 
-      if (!validateStepThree()) {
-        return;
-      }
-
-      submitBtn.disabled = true;
-
-      submitBtn.textContent =
-        "Submitting...";
-
-      try {
-        const data = {
-          fullname:
-            fullName?.value.trim(),
-
-          phone_number:
-            phoneNumber?.value.trim(),
-
-          bike_brand:
-            bikeBrand?.value,
-
-          bike_model:
-            bikeModel?.value.trim(),
-
-          bike_year:
-            bikeYear?.value || "",
-
-          plate_number:
-            plateNumber?.value.trim() || "",
-
-          body_condition:
-            bodyCondition?.value || "",
-
-          services:
-            getSelectedServices(),
-
-          estimated_budget:
-            estimatedBudget?.value || "",
-
-          target_result:
-            targetResult?.value || "",
-
-          project_details:
-            projectDetails?.value.trim(),
-
-          reference_link:
-            referenceLink?.value.trim() || "",
-
-          photo_count:
-            projectPhotos?.files.length || 0,
-        };
-
-        console.log(
-          "NOCTRA Inquiry",
-          data
-        );
-
-        alert(
-          "Project inquiry submitted successfully."
-        );
-
-        form.reset();
-
-        $$(".service-card").forEach(
-          (card) => {
-            card.classList.remove(
-              "selected"
-            );
-          }
-        );
-
-        currentStep = 0;
-
-        clearErrors();
-
-        updateWizard();
-
-        const uploadZone =
-          projectPhotos?.closest(
-            ".upload-zone"
-          );
-
-        if (uploadZone) {
-          const p = $("p", uploadZone);
-
-          if (p) {
-            p.textContent =
-              "Drag & drop photos here or click to browse.";
-          }
-        }
-      } catch (error) {
-        console.error(error);
-
-        alert(
-          "Something went wrong. Please try again."
-        );
-      } finally {
-        submitBtn.disabled = false;
-
-        submitBtn.textContent =
-          "Start My Project";
-      }
+    if (!validateStepThree()) {
+      return;
     }
-  );
+
+    submitBtn.disabled = true;
+
+    submitBtn.textContent = "Submitting...";
+
+    try {
+      const data = {
+        customer_name: fullName?.value.trim(),
+
+        customer_phone_number: phoneNumber?.value.trim(),
+
+        customer_email: referenceLink?.value?.trim() || "user@example.com", // kalau tidak ada input, biarkan kosong atau tambahkan field
+
+        vehicle_brand: bikeBrand?.value,
+
+        vehicle_model: bikeModel?.value?.trim(),
+
+        vehicle_license_plate: plateNumber?.value?.trim(),
+
+        vehicle_condition: bodyCondition?.value || "",
+
+        project_type: getSelectedServices()?.join(", "), // multi service jadi string
+
+        project_description: projectDetails?.value?.trim(),
+
+        project_target: targetResult?.value || "",
+
+        reference_link: referenceLink?.value?.trim() || ""
+      };
+      // create inquiry
+      const res = await createCustomerInquiry(data);
+      const inquiryId = res?.data?.id;
+
+      if (!inquiryId) {
+        throw new Error("Invalid inquiry response (missing id)");
+      }
+
+      // upload photos ()
+      const files = projectPhotos?.files;
+      if (files && files.length > 0) {
+        await uploadInquiryPhotos(inquiryId, files);
+      }
+
+      // console.log("NOCTRA Inquiry", data);
+
+      alert("Project inquiry submitted successfully.");
+
+      form.reset();
+
+      $$(".service-card").forEach((card) => {
+        card.classList.remove("selected");
+      });
+
+      currentStep = 0;
+      clearErrors();
+      updateWizard();
+
+      const uploadZone = projectPhotos?.closest(".upload-zone");
+
+      if (uploadZone) {
+        const p = $("p", uploadZone);
+
+        if (p) {
+          p.textContent = "Drag & drop photos here or click to browse.";
+        }
+      }
+    } catch (error) {
+      console.error(error);
+
+      alert("Something went wrong. Please try again.");
+    } finally {
+      submitBtn.disabled = false;
+
+      submitBtn.textContent = "Start My Project";
+    }
+  });
 
   /* ==========================================
      INIT
@@ -525,89 +412,143 @@ if (!form) {
   updateWizard();
 }
 
-
 const motorcycleData = {
-    Honda: [
-        "Astrea Grand",
-        "Supra",
-        "Supra X",
-        "Revo",
-        "Blade",
-        "Beat",
-        "Scoopy",
-        "Genio",
-        "Vario 125",
-        "Vario 160",
-        "PCX 160",
-        "ADV 160",
-        "CB150R",
-        "Verza",
-        "Mega Pro",
-        "Tiger",
-        "CBR150R",
-        "CBR250RR",
-        "CRF150L"
-    ],
-    Yamaha: [
-        "Mio",
-        "Mio Sporty",
-        "Mio Soul",
-        "Fino",
-        "Xeon",
-        "Lexi",
-        "Aerox",
-        "NMAX",
-        "XMAX",
-        "Jupiter Z",
-        "Jupiter MX",
-        "Vega",
-        "Vixion",
-        "Byson",
-        "R15",
-        "R25",
-        "MT-15",
-        "XSR 155"
-    ],
-    Suzuki: [
-        "Crystal",
-        "Shogun",
-        "Smash",
-        "Satria",
-        "Satria F150",
-        "Nex",
-        "Address",
-        "Burgman Street",
-        "GSX-R150",
-        "GSX-S150"
-    ],
-    Kawasaki: [
-        "Kaze",
-        "Athlete",
-        "Ninja 150RR",
-        "Ninja 250R",
-        "Ninja ZX-25R",
-        "KLX 150",
-        "D-Tracker",
-        "W175",
-        "Versys X250"
-    ]
+  Honda: [
+    "Astrea Grand",
+    "Supra",
+    "Supra X",
+    "Revo",
+    "Blade",
+    "Beat",
+    "Scoopy",
+    "Genio",
+    "Vario 125",
+    "Vario 160",
+    "PCX 160",
+    "ADV 160",
+    "CB150R",
+    "Verza",
+    "Mega Pro",
+    "Tiger",
+    "CBR150R",
+    "CBR250RR",
+    "CRF150L",
+  ],
+  Yamaha: [
+    "Mio",
+    "Mio Sporty",
+    "Mio Soul",
+    "Fino",
+    "Xeon",
+    "Lexi",
+    "Aerox",
+    "NMAX",
+    "XMAX",
+    "Jupiter Z",
+    "Jupiter MX",
+    "Vega",
+    "Vixion",
+    "Byson",
+    "R15",
+    "R25",
+    "MT-15",
+    "XSR 155",
+  ],
+  Suzuki: [
+    "Crystal",
+    "Shogun",
+    "Smash",
+    "Satria",
+    "Satria F150",
+    "Nex",
+    "Address",
+    "Burgman Street",
+    "GSX-R150",
+    "GSX-S150",
+  ],
+  Kawasaki: [
+    "Kaze",
+    "Athlete",
+    "Ninja 150RR",
+    "Ninja 250R",
+    "Ninja ZX-25R",
+    "KLX 150",
+    "D-Tracker",
+    "W175",
+    "Versys X250",
+  ],
 };
 
 const brandSelect = document.getElementById("bike_brand");
 const modelSelect = document.getElementById("bike_model");
 
 brandSelect.addEventListener("change", () => {
-    const brand = brandSelect.value;
+  const brand = brandSelect.value;
 
-    modelSelect.innerHTML =
-        '<option value="">Pilih Model</option>';
+  modelSelect.innerHTML = '<option value="">Pilih Model</option>';
 
-    if (!motorcycleData[brand]) return;
+  if (!motorcycleData[brand]) return;
 
-    motorcycleData[brand].forEach(model => {
-        const option = document.createElement("option");
-        option.value = model;
-        option.textContent = model;
-        modelSelect.appendChild(option);
-    });
+  motorcycleData[brand].forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model;
+    option.textContent = model;
+    modelSelect.appendChild(option);
+  });
 });
+
+const API_BASE = "http://localhost/api/customer/inquiry/";
+
+// 1. CREATE CUSTOMER INQUIRY (JSON BODY)
+async function createCustomerInquiry(payload) {
+  try {
+    const res = await fetch(`${API_BASE}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data?.message || "Failed to create inquiry");
+    }
+
+    return data;
+  } catch (err) {
+    console.error("createCustomerInquiry error:", err);
+    throw err;
+  }
+}
+
+
+async function uploadInquiryPhotos(inquiryId, files) {
+  try {
+    const formData = new FormData();
+
+    Array.from(files).forEach((file) => {
+      formData.append("photos", file);
+    });
+
+    const res = await fetch(
+      `${API_BASE}${inquiryId}/photos`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data?.message || "Failed to upload photos");
+    }
+
+    return data;
+  } catch (err) {
+    console.error("uploadInquiryPhotos error:", err);
+    throw err;
+  }
+}

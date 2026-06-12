@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Annotated
 
-from sqlalchemy.orm import DeclarativeBase
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     AsyncConnection,
@@ -10,9 +10,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
-
-class Base(DeclarativeBase):
-    pass
+from database.base import Base
 
 
 class Database:
@@ -20,9 +18,18 @@ class Database:
         self._engine: AsyncEngine | None = None
         self._sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
-    def init(self, db_url: str, *, echo: bool = False, pool_size: int = 20, max_overflow: int = 10,) -> None:
+    def init(
+        self,
+        db_url: str,
+        *,
+        echo: bool = False,
+        pool_size: int = 5,
+        max_overflow: int = 5,
+    ) -> None:
 
-        self._engine = create_async_engine(db_url, echo=echo,
+        self._engine = create_async_engine(
+            db_url,
+            echo=echo,
             pool_size=pool_size,
             max_overflow=max_overflow,
             pool_timeout=30,
@@ -31,7 +38,7 @@ class Database:
             connect_args={
                 "command_timeout": 30,
                 "server_settings": {
-                    "application_name": "NOCTRA"
+                    "application_name": "NOCTRA",
                 },
             },
         )
@@ -51,17 +58,7 @@ class Database:
         self._sessionmaker = None
 
     @asynccontextmanager
-    async def connection(self,) -> AsyncGenerator[AsyncConnection, None]:
-
-        if self._engine is None:
-            raise RuntimeError("Database not initialized")
-
-        async with self._engine.begin() as conn:
-            yield conn
-
-    @asynccontextmanager
-    async def session(self,) -> AsyncGenerator[AsyncSession, None]:
-
+    async def session(self) -> AsyncGenerator[AsyncSession, None]:
         if self._sessionmaker is None:
             raise RuntimeError("Database not initialized")
 
@@ -69,26 +66,31 @@ class Database:
             try:
                 yield session
                 await session.commit()
-
             except Exception:
                 await session.rollback()
                 raise
-            
-    # testing create table
-    async def create_tables(self):
+
+    async def create_tables(self) -> None:
+        if self._engine is None:
+            raise RuntimeError("Database not initialized")
+
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    
-    # drop all tables
-    async def drop_tables(self):
+
+    async def drop_tables(self) -> None:
+        if self._engine is None:
+            raise RuntimeError("Database not initialized")
+
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
-            
-            
-# Global Session Manager 
+
+
 session_manager = Database()
 
-# Dependencies
+
 async def get_dbs() -> AsyncGenerator[AsyncSession, None]:
     async with session_manager.session() as session:
         yield session
+
+
+SessionDep = Annotated[AsyncSession, Depends(get_dbs)]

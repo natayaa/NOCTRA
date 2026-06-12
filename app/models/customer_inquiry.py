@@ -1,20 +1,225 @@
-from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, Text, ForeignKey, Integer
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.base import Base, UUIDMixin, TimestampMixin
+from database.base import (
+    Base,
+    UUIDMixin,
+    TimestampMixin,
+    UUID
+)
 
-class CustomerInquiry(Base, UUIDMixin, TimestampMixin):
+
+class CustomerInquiry(
+    Base,
+    UUIDMixin,
+    TimestampMixin
+):
     __tablename__ = "tb_customer_inquiry"
+
+    # =====================
+    # CUSTOMER INFO
+    # =====================
+
+    customer_name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        index=True
+    )
+
+    customer_phone_number: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False
+    )
+
+    customer_email: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+    # =====================
+    # VEHICLE INFO
+    # =====================
+
+    vehicle_brand: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True
+    )
+
+    vehicle_model: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False
+    )
+
+    vehicle_license_plate: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True
+    )
+
+    vehicle_condition: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False
+    )
+
+    # =====================
+    # REQUEST INFO
+    # =====================
+
+    project_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False
+    )
+
+    project_description: Mapped[str] = mapped_column(
+        Text,
+        nullable=False
+    )
+
+    project_target: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+    reference_link: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    estimated_budget: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True
+    )
+
+    # =====================
+    # INQUIRY WORKFLOW
+    # =====================
+
+    status: Mapped[str] = mapped_column(
+        String(50),
+        default="new",
+        nullable=False,
+        index=True
+    )
     
-    customer_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    customer_phone_number: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    customer_email: Mapped[str] = mapped_column(String(50), nullable=False, index=False)
-    vehicle_brand: Mapped[str] = mapped_column(String(50), nullable=False)
-    vehicle_model: Mapped[str] = mapped_column(String(50), nullable=False)
-    vehicle_license_plate: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    vehicle_condition: Mapped[str] = mapped_column(String(200), nullable=False)
-    project_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    project_description: Mapped[str] = mapped_column(Text, nullable=False)
-    project_target: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    reference_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True, index=False)
+
+    # new
+    # contacted
+    # quoted
+    # approved
+    # rejected
+    # converted
+
+    # =====================
+    # RELATIONS
+    # =====================
+
+    photos = relationship(
+        "CustomerInquiryPhoto",
+        back_populates="inquiry",
+        cascade="all, delete-orphan"
+    )
+
+    workshop_notes = relationship(
+        "WorkshopNote",
+        back_populates="inquiry",
+        cascade="all, delete-orphan"
+    )
+
+    activities = relationship(
+        "InquiryActivity",
+        back_populates="inquiry",
+        cascade="all, delete-orphan",
+        order_by="InquiryActivity.created_at.desc()"
+    )
+
+    project = relationship(
+        "Project",
+        back_populates="inquiry",
+        uselist=False
+    )
     
+    
+class CustomerInquiryPhoto(
+    Base,
+    UUIDMixin,
+    TimestampMixin
+):
+    __tablename__ = "tb_customer_inquiry_photos"
+
+    inquiry_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "tb_customer_inquiry.id",
+            ondelete="CASCADE"
+        ),
+        nullable=False,
+        index=True
+    )
+
+    file_path: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False
+    )
+
+    inquiry = relationship(
+        "CustomerInquiry",
+        back_populates="photos"
+    )
+    
+class InquiryActivity(
+    Base,
+    UUIDMixin,
+    TimestampMixin
+):
+    __tablename__ = "tb_inquiry_activities"
+
+    inquiry_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "tb_customer_inquiry.id",
+            ondelete="CASCADE"
+        ),
+        nullable=False,
+        index=True
+    )
+
+    activity: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False
+    )
+
+    inquiry = relationship(
+        "CustomerInquiry",
+        back_populates="activities"
+    )
+    
+class WorkshopNote(
+    Base,
+    UUIDMixin,
+    TimestampMixin
+):
+    __tablename__ = "tb_workshop_notes"
+
+    inquiry_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "tb_customer_inquiry.id",
+            ondelete="CASCADE"
+        ),
+        nullable=False,
+        index=True
+    )
+
+    note_type: Mapped[str] = mapped_column(
+        String(50),
+        default="internal",
+        nullable=False
+    )
+
+    note: Mapped[str] = mapped_column(
+        Text,
+        nullable=False
+    )
+
+    inquiry = relationship(
+        "CustomerInquiry",
+        back_populates="workshop_notes"
+    )
