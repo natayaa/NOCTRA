@@ -12,13 +12,13 @@ class ProjectCreate(BaseModel):
     customer_name: str
     vehicle_brand: str
     vehicle_model: str
-    estimated_cost: Decimal = 0
-    estimated_revenue: Decimal = 0
+    estimated_cost: Decimal = Decimal(0)
+    estimated_revenue: Decimal = Decimal(0)
 
 class ProjectResponse(BaseModel):
     id: UUID
-    nquiry_id: Optional[UUID] = None
-    inquiry: Optional[CustomerInquirySummary] = None   # nested summary
+    inquiry_id: Optional[UUID] = None   # typo fixed
+    inquiry: Optional[CustomerInquirySummary] = None
     name: str
     customer_name: str
     vehicle_brand: str
@@ -27,19 +27,18 @@ class ProjectResponse(BaseModel):
     progress: int
     estimated_cost: Decimal
     actual_cost: Decimal
-    estimated_revenue: Decimal          # ← add this
-    actual_revenue: Decimal = 0         # ← add this (optional, defaults to 0)
+    estimated_revenue: Decimal
+    actual_revenue: Decimal = Decimal(0)
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 class ProjectUpdateStatus(BaseModel):
     status: str
-    
+
 class ProjectKanbanResponse(ProjectResponse):
     inquiry: Optional[CustomerInquirySummary] = None
-    
+
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     customer_name: Optional[str] = None
@@ -56,16 +55,13 @@ class ProjectUpdate(BaseModel):
     start_date: Optional[date] = None
     target_delivery: Optional[date] = None
     notes: Optional[str] = None
-    
-    
+
 class ProjectLaborCreate(BaseModel):
-    """Payload untuk menambahkan labor ke project"""
     labor_type: str = Field(..., description="Jenis pekerjaan, misal: Painter, Mechanic, Assembler")
     hours: float = Field(..., gt=0, description="Jumlah jam kerja")
-    rate_per_hour: float | None = Field(None, description="Opsional, jika tidak diisi akan diambil dari price list")
+    rate_per_hour: Optional[float] = Field(None, description="Opsional, jika tidak diisi akan diambil dari price list")
 
 class ProjectLaborResponse(BaseModel):
-    """Response untuk data labor yang sudah tersimpan"""
     id: UUID
     project_id: UUID
     labor_type: str
@@ -74,10 +70,8 @@ class ProjectLaborResponse(BaseModel):
     total_cost: Decimal
     created_at: datetime
 
-    model_config = {
-        "from_attributes": True  # agar bisa mengonversi dari objek SQLAlchemy (ORM)
-    }
-    
+    model_config = {"from_attributes": True}
+
 class ProjectLaborSummary(BaseModel):
     id: UUID
     labor_type: str
@@ -89,23 +83,23 @@ class ProjectLaborSummary(BaseModel):
 
 class ProjectMaterialSummary(BaseModel):
     id: UUID
-    item_name: str | None = None
+    item_name: Optional[str] = None
     quantity: int
-    unit: str | None = None
-    total_cost: Decimal | None = None
+    unit: Optional[str] = None
+    total_cost: Optional[Decimal] = None
 
 class ProjectFinancialSummary(BaseModel):
     estimated_cost: Decimal
     actual_cost: Decimal
     estimated_revenue: Decimal
     actual_revenue: Decimal
-    material_cost: Decimal = Decimal(0)
-    labor_cost: Decimal = Decimal(0)
-    profit: Decimal = Decimal(0)
-    margin: Decimal = Decimal(0)
+    material_cost: Decimal
+    labor_cost: Decimal
+    expenses: Decimal
+    profit: Decimal
+    margin: Decimal
 
 class ProjectDetailResponse(BaseModel):
-    """Response lengkap untuk detail project (termasuk labor & material)"""
     project: ProjectResponse
     financial_summary: ProjectFinancialSummary
     labor_items: list[ProjectLaborSummary] = []

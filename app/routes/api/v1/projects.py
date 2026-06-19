@@ -46,12 +46,18 @@ async def revenue(db: SessionDep):
 
 @project_router.get("/{project_id}", response_model=BaseResponse[ProjectResponse])
 async def get_project(project_id: UUID, db: SessionDep):
-    repo = ProjectRepository()
-    project = await repo.get(db, str(project_id))  # ← Uses the updated get() with selectinload
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return BaseResponse(data=ProjectResponse.model_validate(project))
-
+    service = ProjectService()
+    project = await service.repo.get(db, str(project_id))
+    if not project: 
+        raise HTTPException(status_code=404, detail="project not found")
+    
+    financials = await service.get_project_financials(db, str(project_id))
+    response_data = {
+        **ProjectResponse.model_validate(project).model_dump(),
+        "financial_summary": financials
+    }
+    
+    return BaseResponse(data=response_data)
 
 @project_router.patch("/{project_id}", response_model=BaseResponse)
 async def update_project(project_id: UUID, request: ProjectUpdate, db: SessionDep):

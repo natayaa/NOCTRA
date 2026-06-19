@@ -1,206 +1,187 @@
 {% extends "base.html" %} 
-{% block title %} Analytics | NOCTRA {% endblock %} 
+{% block title %}Analytics | NOCTRA{% endblock %} 
 {% block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('static', path='css/analytics.css') }}"
-/>
+<link rel="stylesheet" href="{{ url_for('static', path='css/analytics.css') }}" />
 {% endblock %} 
-{% block page_title %} Analytics {% endblock %} 
-{% block page_subtitle %} Business Intelligence & Performance {% endblock %} 
+{% block page_title %}Analytics{% endblock %} 
+{% block page_subtitle %}Business Intelligence & Performance{% endblock %} 
 {% block content %}
 
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-icon">
-      <i class="fas fa-chart-line"></i>
+<!-- TOOLBAR FILTER GLOBAL -->
+<div class="analytics-toolbar glass">
+  <div class="toolbar-left">
+    <div class="period-selector">
+      <label for="periodFilter">Period</label>
+      <select id="periodFilter">
+        <option value="today">Today</option>
+        <option value="week" selected>This Week</option>
+        <option value="month">This Month</option>
+        <option value="quarter">Last 3 Months</option>
+        <option value="year">This Year</option>
+      </select>
     </div>
-    <div class="stat-info">
-      <span>Total Revenue</span>
-      <h2>Rp 48.2M</h2>
-      <small class="stat-trend positive">+18.2%</small>
+    <button class="btn-refresh" id="refreshAnalytics">
+      <i class="fas fa-sync"></i> Refresh
+    </button>
+  </div>
+  <div class="toolbar-right">
+    <span class="last-updated" id="lastUpdated">Last updated: just now</span>
+  </div>
+</div>
+
+<!-- INSIGHT CARDS -->
+<div class="insight-grid" id="insightGrid">
+  <div class="insight-card positive">
+    <div class="insight-icon"><i class="fas fa-arrow-up"></i></div>
+    <div class="insight-content">
+      <p>Revenue <strong>+18.2%</strong> vs last period</p>
     </div>
   </div>
-
-  <div class="stat-card">
-    <div class="stat-icon">
-      <i class="fas fa-wallet"></i>
-    </div>
-    <div class="stat-info">
-      <span>Net Profit</span>
-      <h2>Rp 31.4M</h2>
-      <small class="stat-trend positive">+12.5%</small>
+  <div class="insight-card warning">
+    <div class="insight-icon"><i class="fas fa-exclamation-triangle"></i></div>
+    <div class="insight-content">
+      <p>8 items <strong>low stock</strong> – reorder soon</p>
     </div>
   </div>
-
-  <div class="stat-card">
-    <div class="stat-icon">
-      <i class="fas fa-percent"></i>
-    </div>
-    <div class="stat-info">
-      <span>Conversion Rate</span>
-      <h2>78%</h2>
-      <small class="stat-trend positive">+5.3%</small>
-    </div>
-  </div>
-
-  <div class="stat-card">
-    <div class="stat-icon">
-      <i class="fas fa-check-circle"></i>
-    </div>
-    <div class="stat-info">
-      <span>Projects Completed</span>
-      <h2>124</h2>
-      <small class="stat-trend positive">+23 this year</small>
+  <div class="insight-card neutral">
+    <div class="insight-icon"><i class="fas fa-chart-pie"></i></div>
+    <div class="insight-content">
+      <p>Top service: <strong>Full Restoration</strong> (38%)</p>
     </div>
   </div>
 </div>
 
+<!-- STATS GRID -->
+<div class="stats-grid" id="statsGrid">
+  <div class="stat-card" data-stat="revenue">
+    <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+    <div class="stat-info">
+      <span>Total Revenue</span>
+      <h2 id="totalRevenue">Rp 0</h2>
+      <small class="stat-trend" id="revenueTrend">+0%</small>
+    </div>
+  </div>
+  <div class="stat-card" data-stat="profit">
+    <div class="stat-icon"><i class="fas fa-wallet"></i></div>
+    <div class="stat-info">
+      <span>Net Profit</span>
+      <h2 id="netProfit">Rp 0</h2>
+      <small class="stat-trend" id="profitTrend">+0%</small>
+    </div>
+  </div>
+  <div class="stat-card" data-stat="conversion">
+    <div class="stat-icon"><i class="fas fa-percent"></i></div>
+    <div class="stat-info">
+      <span>Conversion Rate</span>
+      <h2 id="conversionRate">0%</h2>
+      <small class="stat-trend" id="conversionTrend">+0%</small>
+    </div>
+  </div>
+  <div class="stat-card" data-stat="completed">
+    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+    <div class="stat-info">
+      <span>Projects Completed</span>
+      <h2 id="completedProjects">0</h2>
+      <small class="stat-trend" id="completedTrend">+0</small>
+    </div>
+  </div>
+</div>
+
+<!-- LOADING SKELETON (tersembunyi) -->
+<div class="loading-skeleton" id="loadingSkeleton">
+  <div class="skeleton-card"></div>
+  <div class="skeleton-card"></div>
+  <div class="skeleton-card"></div>
+  <div class="skeleton-card"></div>
+</div>
+
+<!-- CHARTS GRID -->
 <div class="analytics-grid">
+  <!-- Revenue vs Profit -->
   <div class="chart-card">
     <div class="card-header">
       <h3><i class="fas fa-chart-line"></i> Revenue vs Profit</h3>
-      <div class="chart-controls">
-        <button class="chart-period active" data-period="week" data-chart="revenueProfit">Week</button>
-        <button class="chart-period" data-period="month" data-chart="revenueProfit">Month</button>
-        <button class="chart-period" data-period="year" data-chart="revenueProfit">Year</button>
+      <div class="chart-controls" data-chart="revenueProfit">
+        <button class="chart-period active" data-period="week">Week</button>
+        <button class="chart-period" data-period="month">Month</button>
+        <button class="chart-period" data-period="year">Year</button>
       </div>
     </div>
-    <!-- FIX: WRAPPER DENGAN HEIGHT FIXED -->
-    <div style="height: 280px; width: 100%; position: relative;">
-      <canvas id="revenueProfitChart" style="height: 100%; width: 100%; display: block;"></canvas>
+    <div class="chart-container">
+      <canvas id="revenueProfitChart"></canvas>
     </div>
   </div>
 
+  <!-- Inquiry Conversion -->
   <div class="chart-card">
     <div class="card-header">
       <h3><i class="fas fa-funnel-dollar"></i> Inquiry Conversion</h3>
-      <div class="chart-controls">
-        <button class="chart-period active" data-period="week" data-chart="conversion">Week</button>
-        <button class="chart-period" data-period="month" data-chart="conversion">Month</button>
-        <button class="chart-period" data-period="year" data-chart="conversion">Year</button>
+      <div class="chart-controls" data-chart="conversion">
+        <button class="chart-period active" data-period="week">Week</button>
+        <button class="chart-period" data-period="month">Month</button>
+        <button class="chart-period" data-period="year">Year</button>
       </div>
     </div>
-    <!-- FIX: WRAPPER DENGAN HEIGHT FIXED -->
-    <div style="height: 280px; width: 100%; position: relative;">
-      <canvas id="conversionChart" style="height: 100%; width: 100%; display: block;"></canvas>
+    <div class="chart-container">
+      <canvas id="conversionChart"></canvas>
     </div>
   </div>
 </div>
 
 <div class="analytics-grid">
+  <!-- Service Breakdown -->
   <div class="chart-card">
     <div class="card-header">
       <h3><i class="fas fa-chart-pie"></i> Service Breakdown</h3>
     </div>
-    <!-- FIX: WRAPPER UNTUK PIE CHART -->
-    <div style="height: 240px; width: 100%; position: relative;">
-      <canvas id="serviceChart" style="height: 100%; width: 100%; display: block;"></canvas>
+    <div class="chart-container pie-chart-container">
+      <canvas id="serviceChart"></canvas>
     </div>
   </div>
 
+  <!-- Material Consumption -->
   <div class="chart-card">
     <div class="card-header">
       <h3><i class="fas fa-boxes"></i> Material Consumption</h3>
     </div>
-    <!-- FIX: WRAPPER UNTUK PIE CHART -->
-    <div style="height: 240px; width: 100%; position: relative;">
-      <canvas id="materialChart" style="height: 100%; width: 100%; display: block;"></canvas>
+    <div class="chart-container pie-chart-container">
+      <canvas id="materialChart"></canvas>
     </div>
   </div>
 </div>
 
 <div class="analytics-grid">
+  <!-- Top Services Table -->
   <div class="table-card">
     <div class="table-header">
       <h3><i class="fas fa-trophy"></i> Top Services</h3>
       <span class="table-badge">Performance</span>
     </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Service</th>
-          <th>Projects</th>
-          <th>Revenue</th>
-          <th>Trend</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Full Restoration</td>
-          <td>24</td>
-          <td>Rp 180M</td>
-          <td><span class="trend-up">↑ +15%</span></td>
-        </tr>
-        <tr>
-          <td>Repaint</td>
-          <td>41</td>
-          <td>Rp 120M</td>
-          <td><span class="trend-up">↑ +8%</span></td>
-        </tr>
-        <tr>
-          <td>Custom Design</td>
-          <td>18</td>
-          <td>Rp 95M</td>
-          <td><span class="trend-up">↑ +22%</span></td>
-        </tr>
-        <tr>
-          <td>Ceramic Coating</td>
-          <td>32</td>
-          <td>Rp 67M</td>
-          <td><span class="trend-up">↑ +12%</span></td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table id="topServicesTable">
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Projects</th>
+            <th>Revenue</th>
+            <th>Trend</th>
+          </tr>
+        </thead>
+        <tbody id="topServicesBody">
+          <!-- akan diisi JS -->
+        </tbody>
+      </table>
+    </div>
   </div>
 
+  <!-- Operational KPIs -->
   <div class="table-card">
     <div class="table-header">
       <h3><i class="fas fa-chart-line"></i> Operational KPIs</h3>
       <span class="table-badge">Metrics</span>
     </div>
-
-    <div class="kpi-list">
-      <div class="kpi-item">
-        <div class="kpi-info">
-          <span>Avg Project Duration</span>
-          <strong>14 Days</strong>
-        </div>
-        <div class="kpi-progress">
-          <div class="progress-bar" style="width: 70%"></div>
-        </div>
-      </div>
-
-      <div class="kpi-item">
-        <div class="kpi-info">
-          <span>Project Success Rate</span>
-          <strong>97%</strong>
-        </div>
-        <div class="kpi-progress">
-          <div class="progress-bar success" style="width: 97%"></div>
-        </div>
-      </div>
-
-      <div class="kpi-item">
-        <div class="kpi-info">
-          <span>Avg Margin</span>
-          <strong>68%</strong>
-        </div>
-        <div class="kpi-progress">
-          <div class="progress-bar" style="width: 68%"></div>
-        </div>
-      </div>
-
-      <div class="kpi-item">
-        <div class="kpi-info">
-          <span>Inventory Turnover</span>
-          <strong>5.8x</strong>
-        </div>
-        <div class="kpi-progress">
-          <div class="progress-bar" style="width: 58%"></div>
-        </div>
-      </div>
+    <div class="kpi-list" id="kpiList">
+      <!-- akan diisi JS -->
     </div>
   </div>
 </div>

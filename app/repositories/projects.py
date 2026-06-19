@@ -36,7 +36,10 @@ class ProjectRepository:
     async def list(self, db: AsyncSession) -> list[Project]:
         result = await db.execute(
             select(Project)
-            .options(selectinload(Project.inquiry))  # ← Eager load
+            .options(
+                selectinload(Project.inquiry)
+                    .selectinload(CustomerInquiry.project)  # ← TAMBAHKAN INI
+            )
             .order_by(Project.created_at.desc())
         )
         return result.scalars().all()

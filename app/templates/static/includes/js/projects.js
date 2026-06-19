@@ -475,12 +475,6 @@
       "drawerBrand",
       "drawerModel",
       "drawerPlate",
-      "drawerEstCost",
-      "drawerActualCost",
-      "drawerEstRevenue",
-      "drawerActualRevenue",
-      "drawerProfit",
-      "drawerMargin",
       "drawerStartDate",
       "drawerDelivery",
       "drawerDuration",
@@ -512,42 +506,33 @@
 
   // ---- populateDrawer (dengan tab) ----
   function populateDrawer(p) {
+    // Jika p tidak valid, keluar
+    if (!p || typeof p !== 'object') {
+      console.error('Invalid project data in populateDrawer');
+      return;
+    }
+
     const setText = (id, value) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = value;
+      if (el) el.textContent = value ?? '-';
     };
     const setHTML = (id, html) => {
       const el = document.getElementById(id);
-      if (el) el.innerHTML = html;
+      if (el) el.innerHTML = html ?? '-';
     };
 
     // Overview
-    setText('drawerCustomer', p.customer_name || '-');
-    setText('drawerPhone', p.phone_number || '-');
-    setText('drawerBrand', p.vehicle_brand || '-');
-    setText('drawerModel', p.vehicle_model || '-');
-    setText('drawerPlate', p.license_plate || '-');
+    setText('drawerCustomer', p.customer_name);
+    setText('drawerPhone', p.phone_number);
+    setText('drawerBrand', p.vehicle_brand);
+    setText('drawerModel', p.vehicle_model);
+    setText('drawerPlate', p.license_plate);
     setHTML('drawerStatus', `<span class="status-badge ${p.status || ''}">${statusLabel(p.status)}</span>`);
 
     const progress = p.progress || 0;
     const fillEl = document.getElementById('drawerProgressFill');
     if (fillEl) fillEl.style.width = progress + '%';
     setText('drawerProgressText', progress + '%');
-
-    // Financial
-    const estCost = p.estimated_cost || 0;
-    const actualCost = p.actual_cost || 0;
-    const estRevenue = p.estimated_revenue || 0;
-    const actualRevenue = p.actual_revenue || 0;
-    const profit = actualRevenue - actualCost;
-    const margin = actualRevenue > 0 ? ((profit / actualRevenue) * 100).toFixed(0) : 0;
-
-    setText('drawerEstCost', formatCurrency(estCost));
-    setText('drawerActualCost', formatCurrency(actualCost));
-    setText('drawerEstRevenue', formatCurrency(estRevenue));
-    setText('drawerActualRevenue', formatCurrency(actualRevenue));
-    setText('drawerProfit', formatCurrency(profit));
-    setText('drawerMargin', margin + '%');
 
     // Timeline
     const startDate = p.start_date ? new Date(p.start_date) : null;
@@ -581,29 +566,20 @@
     }
     setText('drawerDuration', durationText);
     setText('drawerTimelineStatus', timelineStatusText);
-    // Update milestones berdasarkan progress
     updateTimelineMilestones(progress);
 
-
-    // Notes (untuk timeline note, bisa diisi dari p.notes atau field terpisah)
     const timelineNote = document.getElementById('timelineNote');
     if (timelineNote) {
-      // Bisa diisi dari p.notes atau dari field khusus 'timeline_notes' jika ada
       timelineNote.textContent = p.notes || '-';
     }
 
-    // Load Material & Labor
-    loadMaterialsForProject(p.id);
-    loadMaterialUsageList(p.id);
-    loadLaborList(p.id);
-
-    const viewProjectBtn = document.getElementById('drawerViewProjectBtn');
-    if (inq.project && inq.project.id) {
-      // Arahkan ke halaman Projects dengan parameter open
-      viewProjectBtn.href = `/management/projects?open=${inq.project.id}`;
-      viewProjectBtn.style.display = 'inline-flex';
+    // Pastikan p.id ada sebelum memanggil fungsi
+    if (p.id) {
+      loadMaterialsForProject(p.id);
+      loadMaterialUsageList(p.id);
+      loadLaborList(p.id);
     } else {
-      viewProjectBtn.style.display = 'none';
+      console.warn('Project ID not found, skipping material/labor load');
     }
   }
 
@@ -629,7 +605,7 @@
 
   async function loadMaterialUsageList(projectId) {
     const container = document.getElementById('drawerMaterialsList');
-    if (!container) return;
+    if (!container || !projectId) return;
     try {
       const response = await fetch(`/api/inventory/usage/project/${projectId}`);
       if (!response.ok) throw new Error('Not found');

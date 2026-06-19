@@ -277,6 +277,35 @@
       photoSection.style.display = 'none';
     }
 
+    // Financial Summary (dari project jika ada)
+    const financialSection = document.getElementById('drawerFinancialSection');
+    const estCost = document.getElementById('drawerEstCost');
+    const actualCost = document.getElementById('drawerActualCost');
+    const estRevenue = document.getElementById('drawerEstRevenue');
+    const actualRevenue = document.getElementById('drawerActualRevenue');
+    const profitEl = document.getElementById('drawerProfit');
+    const marginEl = document.getElementById('drawerMargin');
+
+    if (inq.project && inq.project.id) {
+      financialSection.style.display = 'block';
+      const p = inq.project;
+      const estCostVal = p.estimated_cost || 0;
+      const actualCostVal = p.actual_cost || 0;
+      const estRevenueVal = p.estimated_revenue || 0;
+      const actualRevenueVal = p.actual_revenue || 0;
+      const profit = actualRevenueVal - actualCostVal;
+      const margin = actualRevenueVal > 0 ? ((profit / actualRevenueVal) * 100).toFixed(0) : 0;
+
+      estCost.textContent = formatCurrency(estCostVal);
+      actualCost.textContent = formatCurrency(actualCostVal);
+      estRevenue.textContent = formatCurrency(estRevenueVal);
+      actualRevenue.textContent = formatCurrency(actualRevenueVal);
+      profitEl.textContent = formatCurrency(profit);
+      marginEl.textContent = margin + '%';
+    } else {
+      financialSection.style.display = 'none';
+    }
+
     // Timeline
     const timeline = document.getElementById('drawerTimeline');
     if (inq.activities && inq.activities.length > 0) {

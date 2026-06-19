@@ -22,7 +22,7 @@ from repositories.inventory_material_usage import MaterialUsageRepository
 
 # Services
 from services.inventory_items import InventoryService
-from services.inventory_dashboard import DashboardService
+from services.inventory_dashboard import InventoryDashboardService
 
 
 inventory_router = APIRouter(
@@ -112,7 +112,7 @@ async def recent_movements(db: SessionDep):
 
 @inventory_router.get("/alerts")
 async def stock_alerts(db: SessionDep):
-    service = DashboardService(db)
+    service = InventoryDashboardService(db)
     alerts = await service.get_stock_alerts()
     return BaseResponse(data=alerts)
 
@@ -154,15 +154,15 @@ async def get_material_usage_by_project(project_id: UUID, db: SessionDep):
 
 @inventory_router.get("/dashboard/kpis", response_class=JSONResponse)
 async def kpis(db: SessionDep):
-    service = DashboardService(db)
+    service = InventoryDashboardService(db)
     data = await service.get_kpis()
     return BaseResponse(data=data)
 
 
 @inventory_router.get("/dashboard/monthly-usage", response_class=JSONResponse)
 async def monthly_usage(db: SessionDep):
-    service = DashboardService(db)
-    data = await service.monthly_usage()
+    service = InventoryDashboardService(db)
+    data = await service.get_monthly_usage()
     return BaseResponse(data=data)
 
 

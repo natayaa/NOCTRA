@@ -2,7 +2,9 @@ from uuid import UUID
 from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
 from models.customer_inquiry import CustomerInquiry
+from models.projects import Project
 from repositories.base import BaseRepository  # assumes you have this
 from schemas.constants import InquiryStatus
 
@@ -72,14 +74,22 @@ class InquiryRepo(BaseRepository[CustomerInquiry]):
         return result.scalar_one_or_none()
 
     async def get_inquiry_with_details(self, inquiry_id: UUID):
-        """Get inquiry with photos, activities, and project loaded."""
         stmt = (
             select(CustomerInquiry)
             .where(CustomerInquiry.id == inquiry_id)
             .options(
                 selectinload(CustomerInquiry.photos),
                 selectinload(CustomerInquiry.activities),
-                selectinload(CustomerInquiry.project),
+                selectinload(CustomerInquiry.project).load_only(  # atau selectinload penuh
+                    Project.id,
+                    Project.name,
+                    Project.status,
+                    Project.progress,
+                    Project.estimated_cost,
+                    Project.actual_cost,
+                    Project.estimated_revenue,
+                    Project.actual_revenue,
+                )
             )
         )
         result = await self.db.execute(stmt)

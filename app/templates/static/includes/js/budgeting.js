@@ -1,364 +1,438 @@
-// ======================================
-// UTILITIES
-// ======================================
+/**
+ * NOCTRA Budgeting Dashboard
+ * Terintegrasi dengan backend API `/api/budgeting`
+ */
+(function() {
+    'use strict';
 
-const formatCurrency = (amount) => {
-  return `Rp ${Number(amount).toLocaleString("id-ID")}`;
-};
+    // ============================================================
+    // STATE
+    // ============================================================
+    const state = {
+        period: 'month',
+        expenses: [],
+        totalExpenses: 0,
+        summary: null,
+        kpis: null,
+        monthlyExpenses: [],
+        expenseBreakdown: [],
+        cashflow: [],
+        profitability: [],
+        currentPage: 1,
+        pageSize: 20
+    };
 
-const expenseModal = document.getElementById("expenseModal");
-const expenseForm = document.getElementById("expenseForm");
-const expenseTable = document.getElementById("expenseTable");
+    // ============================================================
+    // DOM REFS
+    // ============================================================
+    const dom = {
+        periodFilter: document.getElementById('periodFilter'),
+        refreshBtn: document.getElementById('refreshBudget'),
+        addExpenseBtn: document.getElementById('addExpenseBtn'),
+        expenseModal: document.getElementById('expenseModal'),
+        closeModal: document.getElementById('closeExpenseModal'),
+        expenseForm: document.getElementById('expenseForm'),
+        expenseDate: document.getElementById('expenseDate'),
+        expenseProject: document.getElementById('expenseProject'),
+        expenseCategory: document.getElementById('expenseCategory'),
+        expenseDescription: document.getElementById('expenseDescription'),
+        expenseAmount: document.getElementById('expenseAmount'),
+        expenseTable: document.getElementById('expenseTable'),
+        expenseSearch: document.getElementById('expenseSearch'),
+        expenseFilter: document.getElementById('expenseFilter'),
+        expenseTotal: document.getElementById('expenseTotal'),
+        profitabilityBody: document.getElementById('profitabilityBody'),
+        // Summary elements
+        activeProjects: document.getElementById('activeProjects'),
+        pendingPayments: document.getElementById('pendingPayments'),
+        materialRatio: document.getElementById('materialRatio'),
+        avgProfit: document.getElementById('avgProfit'),
+        // KPI elements
+        totalRevenue: document.getElementById('totalRevenue'),
+        totalExpensesKpi: document.getElementById('totalExpenses'),
+        netProfit: document.getElementById('netProfit'),
+        cashAvailable: document.getElementById('cashAvailable')
+    };
 
-// ======================================
-// MODAL
-// ======================================
+    // Chart instances
+    let expenseChart, expensePieChart, cashflowChart;
 
-document.getElementById("addExpenseBtn")?.addEventListener("click", () => {
-  expenseModal.classList.add("active");
-});
-
-document
-  .getElementById("closeExpenseModal")
-  ?.addEventListener("click", () => {
-    expenseModal.classList.remove("active");
-  });
-
-expenseModal?.addEventListener("click", (e) => {
-  if (e.target === expenseModal) {
-    expenseModal.classList.remove("active");
-  }
-});
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    expenseModal.classList.remove("active");
-  }
-});
-
-// ======================================
-// EXPENSE FORM
-// ======================================
-
-expenseForm?.addEventListener("submit", (e) => {
-  e.preventDefault();
-
-  const date = document.getElementById("expenseDate").value;
-  const project = document.getElementById("expenseProject").value;
-  const category = document.getElementById("expenseCategory").value;
-  const description = document
-    .getElementById("expenseDescription")
-    .value.trim();
-  const amount = document.getElementById("expenseAmount").value;
-
-  const row = document.createElement("tr");
-
-  row.innerHTML = `
-    <td>${date}</td>
-    <td>${project}</td>
-    <td>${category}</td>
-    <td>${description}</td>
-    <td>${formatCurrency(amount)}</td>
-  `;
-
-  expenseTable.prepend(row);
-
-  expenseForm.reset();
-  expenseModal.classList.remove("active");
-
-  updateExpenseSummary();
-});
-
-// ======================================
-// SEARCH
-// ======================================
-
-const expenseSearch = document.getElementById("expenseSearch");
-
-expenseSearch?.addEventListener("input", (e) => {
-  const searchTerm = e.target.value.toLowerCase();
-
-  [...expenseTable.querySelectorAll("tr")].forEach((row) => {
-    const text = row.textContent.toLowerCase();
-
-    row.style.display = text.includes(searchTerm) ? "" : "none";
-  });
-});
-
-// ======================================
-// CATEGORY FILTER
-// ======================================
-
-const expenseFilter = document.getElementById("expenseFilter");
-
-expenseFilter?.addEventListener("change", (e) => {
-  const selected = e.target.value.toLowerCase();
-
-  [...expenseTable.querySelectorAll("tr")].forEach((row) => {
-    const category =
-      row.children[2]?.textContent.toLowerCase() ?? "";
-
-    if (
-      selected === "all categories" ||
-      category === selected
-    ) {
-      row.style.display = "";
-    } else {
-      row.style.display = "none";
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    function formatCurrency(amount) {
+        return 'Rp ' + Number(amount).toLocaleString('id-ID');
     }
-  });
-});
 
-// ======================================
-// KPI UPDATE
-// ======================================
+    function showToast(msg, isError = false) {
+        const t = document.querySelector('.app-toast') || (() => {
+            const el = document.createElement('div');
+            el.className = 'app-toast';
+            document.body.appendChild(el);
+            return el;
+        })();
+        t.textContent = msg;
+        t.className = 'app-toast' + (isError ? ' error' : '');
+        setTimeout(() => t.classList.add('show'), 10);
+        clearTimeout(t._timeout);
+        t._timeout = setTimeout(() => t.classList.remove('show'), 3000);
+    }
 
-function updateExpenseSummary() {
-  let totalExpenses = 0;
+    function getPeriodLabel(period) {
+        const map = {
+            month: 'This Month',
+            last_month: 'Last Month',
+            quarter: 'This Quarter',
+            year: 'This Year'
+        };
+        return map[period] || period;
+    }
 
-  [...expenseTable.querySelectorAll("tr")].forEach((row) => {
-    const amountCell = row.children[4];
+    // ============================================================
+    // API FETCH
+    // ============================================================
+    async function fetchJSON(url, options = {}) {
+        const res = await fetch(url, {
+            ...options,
+            headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+        });
+        if (!res.ok) {
+            const err = await res.text();
+            throw new Error(err || `HTTP ${res.status}`);
+        }
+        const result = await res.json();
+        return result.data;
+    }
 
-    if (!amountCell) return;
+    async function loadAllData(period) {
+        try {
+            // Load all data in parallel
+            const [summary, kpis, monthlyExpenses, expenseBreakdown, cashflow, profitability, expensesData] = await Promise.all([
+                fetchJSON(`/api/budgeting/summary?period=${period}`),
+                fetchJSON(`/api/budgeting/kpis?period=${period}`),
+                fetchJSON(`/api/budgeting/charts/monthly-expenses?period=${period}`),
+                fetchJSON(`/api/budgeting/charts/expense-breakdown?period=${period}`),
+                fetchJSON(`/api/budgeting/charts/cashflow?period=${period}`),
+                fetchJSON(`/api/budgeting/profitability`),
+                fetchJSON(`/api/budgeting/expenses?period=${period}&page=1&limit=100`)
+            ]);
 
-    const value = amountCell.textContent
-      .replace(/[^\d]/g, "");
+            state.summary = summary;
+            state.kpis = kpis;
+            state.monthlyExpenses = monthlyExpenses || [];
+            state.expenseBreakdown = expenseBreakdown || [];
+            state.cashflow = cashflow || [];
+            state.profitability = profitability || [];
+            state.expenses = expensesData.items || [];
+            state.totalExpenses = expensesData.total || 0;
+            state.currentPage = expensesData.page || 1;
+            state.pageSize = expensesData.page_size || 20;
 
-    totalExpenses += Number(value);
-  });
+            renderAll();
+            return true;
+        } catch (err) {
+            console.error('Failed to load budgeting data:', err);
+            showToast('Failed to load data: ' + err.message, true);
+            return false;
+        }
+    }
 
-  const expenseCard = document.querySelector(
-    ".stat-card.expense h2"
-  );
+    // ============================================================
+    // RENDER FUNCTIONS
+    // ============================================================
 
-  if (expenseCard) {
-    expenseCard.textContent = formatCurrency(totalExpenses);
-  }
-}
+    function renderAll() {
+        renderSummary();
+        renderKPIs();
+        renderExpenses();
+        renderProfitability();
+        renderCharts();
+    }
 
-// ======================================
-// CHART DEFAULT CONFIG
-// ======================================
+    function renderSummary() {
+        const s = state.summary;
+        if (!s) return;
+        dom.activeProjects.textContent = s.active_projects || 0;
+        dom.pendingPayments.textContent = formatCurrency(s.pending_payments || 0);
+        dom.materialRatio.textContent = (s.material_cost_ratio || 0) + '%';
+        dom.avgProfit.textContent = formatCurrency(s.avg_project_profit || 0);
+    }
 
-Chart.defaults.color = "#9ca3af";
-Chart.defaults.borderColor = "rgba(255,255,255,0.08)";
-Chart.defaults.font.family =
-  "Inter, system-ui, sans-serif";
+    function renderKPIs() {
+        const k = state.kpis;
+        if (!k) return;
+        dom.totalRevenue.textContent = formatCurrency(k.revenue || 0);
+        dom.totalExpensesKpi.textContent = formatCurrency(k.expenses || 0);
+        dom.netProfit.textContent = formatCurrency(k.net_profit || 0);
+        dom.cashAvailable.textContent = formatCurrency(k.cash_available || 0);
+    }
 
-// ======================================
-// MONTHLY EXPENSES
-// ======================================
+    function renderExpenses() {
+        const filtered = filterExpenses();
+        dom.expenseTable.innerHTML = '';
+        let total = 0;
+        filtered.forEach(exp => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${exp.expense_date}</td>
+                <td>${exp.project_name || '—'}</td>
+                <td>${exp.category}</td>
+                <td>${exp.description}</td>
+                <td>${formatCurrency(exp.amount)}</td>
+                <td style="text-align:center;">
+                    <button class="btn-delete-expense" data-id="${exp.id}" title="Delete expense">×</button>
+                </td>
+            `;
+            dom.expenseTable.appendChild(row);
+            total += Number(exp.amount);
+        });
+        dom.expenseTotal.textContent = `Total: ${formatCurrency(total)}`;
 
-new Chart(
-  document.getElementById("expenseChart"),
-  {
-    type: "line",
+        // Delete event listeners
+        dom.expenseTable.querySelectorAll('.btn-delete-expense').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                deleteExpense(id);
+            });
+        });
+    }
 
-    data: {
-      labels: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-      ],
+    function filterExpenses() {
+        const search = dom.expenseSearch.value.toLowerCase();
+        const category = dom.expenseFilter.value;
+        return state.expenses.filter(exp => {
+            const matchSearch = (exp.description || '').toLowerCase().includes(search) ||
+                                (exp.project_name || '').toLowerCase().includes(search);
+            const matchCategory = !category || exp.category === category;
+            return matchSearch && matchCategory;
+        });
+    }
 
-      datasets: [
-        {
-          label: "Expenses",
+    function renderProfitability() {
+        const items = state.profitability || [];
+        dom.profitabilityBody.innerHTML = items.map(p => {
+            const margin = p.margin || 0;
+            const statusClass = p.status || 'success';
+            return `
+                <tr>
+                    <td>${p.project_name}</td>
+                    <td>${formatCurrency(p.revenue)}</td>
+                    <td>${formatCurrency(p.cost)}</td>
+                    <td>${formatCurrency(p.profit)}</td>
+                    <td>${margin}%</td>
+                    <td><span class="status-badge ${statusClass}">${statusClass === 'success' ? 'Highly Profitable' : statusClass === 'warning' ? 'Good' : 'Needs Review'}</span></td>
+                </tr>
+            `;
+        }).join('');
+    }
 
-          data: [
-            2000000,
-            3000000,
-            2500000,
-            4000000,
-            3800000,
-            5000000,
-          ],
+    // ============================================================
+    // CHARTS
+    // ============================================================
 
-          borderColor: "#00d5ff",
+    function renderCharts() {
+        // Destroy existing charts if any
+        if (expenseChart) { expenseChart.destroy(); expenseChart = null; }
+        if (expensePieChart) { expensePieChart.destroy(); expensePieChart = null; }
+        if (cashflowChart) { cashflowChart.destroy(); cashflowChart = null; }
 
-          backgroundColor:
-            "rgba(0,213,255,.12)",
+        // Monthly Expense Chart (line)
+        const ctx1 = document.getElementById('expenseChart').getContext('2d');
+        const monthlyData = state.monthlyExpenses || [];
+        expenseChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: monthlyData.map(d => d.month),
+                datasets: [{
+                    label: 'Expenses',
+                    data: monthlyData.map(d => Number(d.amount)),
+                    borderColor: '#ff7b2c',
+                    backgroundColor: 'rgba(255,123,44,0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4
+                }]
+            },
+            options: getLineOptions()
+        });
 
-          borderWidth: 3,
+        // Expense Breakdown Pie
+        const ctx2 = document.getElementById('expensePieChart').getContext('2d');
+        const breakdown = state.expenseBreakdown || [];
+        expensePieChart = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: breakdown.map(d => `${d.category} (${d.percentage}%)`),
+                datasets: [{
+                    data: breakdown.map(d => Number(d.amount)),
+                    backgroundColor: ['#ff7b2c', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6'],
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: getPieOptions()
+        });
 
-          fill: true,
+        // Cashflow Bar Chart
+        const ctx3 = document.getElementById('cashflowChart').getContext('2d');
+        const cashflowData = state.cashflow || [];
+        cashflowChart = new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels: cashflowData.map(d => d.month),
+                datasets: [
+                    { label: 'Revenue', data: cashflowData.map(d => Number(d.revenue)), backgroundColor: '#22c55e' },
+                    { label: 'Expenses', data: cashflowData.map(d => Number(d.expenses)), backgroundColor: '#ef4444' }
+                ]
+            },
+            options: getBarOptions()
+        });
+    }
 
-          tension: 0.4,
+    function getLineOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `Rp ${ctx.raw.toLocaleString()}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { callback: v => `Rp ${(v/1000000).toFixed(1)}M` }
+                }
+            }
+        };
+    }
 
-          pointRadius: 4,
-        },
-      ],
-    },
+    function getPieOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        };
+    }
 
-    options: {
-      responsive: true,
+    function getBarOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' }
+            },
+            scales: {
+                y: {
+                    ticks: { callback: v => `Rp ${(v/1000000).toFixed(1)}M` }
+                }
+            }
+        };
+    }
 
-      maintainAspectRatio: false,
+    // ============================================================
+    // CRUD OPERATIONS
+    // ============================================================
 
-      plugins: {
-        legend: {
-          display: false,
-        },
-      },
+    async function deleteExpense(id) {
+        if (!confirm('Delete this expense?')) return;
+        try {
+            await fetchJSON(`/api/budgeting/expenses/${id}`, { method: 'DELETE' });
+            showToast('Expense deleted');
+            loadAllData(state.period);
+        } catch (err) {
+            showToast('Failed to delete expense', true);
+        }
+    }
 
-      scales: {
-        y: {
-          ticks: {
-            callback: (value) =>
-              `Rp ${(value / 1000000).toFixed(0)}M`,
-          },
-        },
-      },
-    },
-  }
-);
+    async function handleExpenseSubmit(e) {
+        e.preventDefault();
+        const payload = {
+            project_id: dom.expenseProject.value || null,
+            category: dom.expenseCategory.value,
+            description: dom.expenseDescription.value.trim(),
+            amount: parseFloat(dom.expenseAmount.value),
+            expense_date: dom.expenseDate.value
+        };
+        if (!payload.category || !payload.amount) {
+            showToast('Please fill all required fields', true);
+            return;
+        }
+        try {
+            await fetchJSON('/api/budgeting/expenses', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            showToast('Expense added successfully');
+            dom.expenseForm.reset();
+            dom.expenseModal.classList.remove('active');
+            loadAllData(state.period);
+        } catch (err) {
+            showToast('Failed to add expense', true);
+        }
+    }
 
-// ======================================
-// EXPENSE BREAKDOWN
-// ======================================
+    // ============================================================
+    // EVENT HANDLERS
+    // ============================================================
 
-new Chart(
-  document.getElementById("expensePieChart"),
-  {
-    type: "doughnut",
+    function setupModal() {
+        dom.addExpenseBtn.addEventListener('click', () => {
+            dom.expenseModal.classList.add('active');
+            dom.expenseDate.value = new Date().toISOString().slice(0,10);
+            // Load projects for dropdown
+            fetch('/api/projects/')
+                .then(res => res.json())
+                .then(data => {
+                    const projects = data.data || [];
+                    dom.expenseProject.innerHTML = '<option value="">Select Project</option>' +
+                        projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+                })
+                .catch(() => {
+                    dom.expenseProject.innerHTML = '<option value="">Select Project</option>';
+                });
+        });
+        dom.closeModal.addEventListener('click', () => dom.expenseModal.classList.remove('active'));
+        dom.expenseModal.addEventListener('click', e => {
+            if (e.target === dom.expenseModal) dom.expenseModal.classList.remove('active');
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') dom.expenseModal.classList.remove('active');
+        });
+        dom.expenseForm.addEventListener('submit', handleExpenseSubmit);
+    }
 
-    data: {
-      labels: [
-        "Material",
-        "Labor",
-        "Operational",
-        "Equipment",
-      ],
+    function setupFilters() {
+        dom.periodFilter.addEventListener('change', function() {
+            state.period = this.value;
+            loadAllData(state.period);
+        });
+        dom.expenseSearch.addEventListener('input', renderExpenses);
+        dom.expenseFilter.addEventListener('change', renderExpenses);
+        dom.refreshBtn.addEventListener('click', function() {
+            loadAllData(state.period);
+        });
+    }
 
-      datasets: [
-        {
-          data: [45, 25, 20, 10],
+    // ============================================================
+    // INIT
+    // ============================================================
+    async function init() {
+        setupModal();
+        setupFilters();
+        await loadAllData(state.period);
+        // Resize charts after initial render
+        setTimeout(() => {
+            if (expenseChart) expenseChart.resize();
+            if (expensePieChart) expensePieChart.resize();
+            if (cashflowChart) cashflowChart.resize();
+        }, 200);
+    }
 
-          backgroundColor: [
-            "#06b6d4",
-            "#8b5cf6",
-            "#f59e0b",
-            "#ef4444",
-          ],
-
-          borderWidth: 0,
-        },
-      ],
-    },
-
-    options: {
-      responsive: true,
-
-      maintainAspectRatio: false,
-
-      cutout: "70%",
-
-      plugins: {
-        legend: {
-          position: "bottom",
-        },
-      },
-    },
-  }
-);
-
-// ======================================
-// REVENUE VS EXPENSES
-// ======================================
-
-new Chart(
-  document.getElementById("cashflowChart"),
-  {
-    type: "bar",
-
-    data: {
-      labels: [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-      ],
-
-      datasets: [
-        {
-          label: "Revenue",
-
-          data: [
-            6000000,
-            8500000,
-            7000000,
-            9500000,
-            8200000,
-            11000000,
-          ],
-
-          backgroundColor: "#22c55e",
-        },
-
-        {
-          label: "Expenses",
-
-          data: [
-            2000000,
-            3000000,
-            2500000,
-            4000000,
-            3800000,
-            5000000,
-          ],
-
-          backgroundColor: "#ef4444",
-        },
-      ],
-    },
-
-    options: {
-      responsive: true,
-
-      maintainAspectRatio: false,
-
-      borderRadius: 8,
-
-      plugins: {
-        legend: {
-          position: "top",
-        },
-      },
-
-      scales: {
-        y: {
-          ticks: {
-            callback: (value) =>
-              `Rp ${(value / 1000000).toFixed(0)}M`,
-          },
-        },
-      },
-    },
-  }
-);
-
-// ======================================
-// PERIOD FILTER (PLACEHOLDER)
-// ======================================
-
-document
-  .getElementById("periodFilter")
-  ?.addEventListener("change", (e) => {
-    console.log(
-      `Selected period: ${e.target.value}`
-    );
-
-    // TODO:
-    // fetch(`/api/budgeting?period=${e.target.value}`)
-  });
-
-// ======================================
-// INIT
-// ======================================
-
-updateExpenseSummary();
+    document.addEventListener('DOMContentLoaded', init);
+})();

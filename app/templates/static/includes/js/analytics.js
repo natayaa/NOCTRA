@@ -1,186 +1,337 @@
-document.addEventListener('DOMContentLoaded', function() {
-    
-    // Helper function untuk resize observer (opsional)
-    function initializeChart(ctx, config) {
-        return new Chart(ctx, config);
+/**
+ * NOCTRA Analytics Dashboard
+ * Terintegrasi dengan backend API `/api/analytics/full`
+ */
+(function() {
+    'use strict';
+
+    // ============================================================
+    // STATE
+    // ============================================================
+    const state = {
+        period: 'week',          // today, week, month, quarter, year
+        chartPeriod: {
+            revenueProfit: 'week',
+            conversion: 'week'
+        },
+        data: null,              // full data from backend
+        isLoading: false
+    };
+
+    // ============================================================
+    // DOM REFS
+    // ============================================================
+    const dom = {
+        periodFilter: document.getElementById('periodFilter'),
+        refreshBtn: document.getElementById('refreshAnalytics'),
+        lastUpdated: document.getElementById('lastUpdated'),
+        statsGrid: document.getElementById('statsGrid'),
+        insightGrid: document.getElementById('insightGrid'),
+        skeleton: document.getElementById('loadingSkeleton'),
+        topServicesBody: document.getElementById('topServicesBody'),
+        kpiList: document.getElementById('kpiList'),
+        revenueProfitChart: document.getElementById('revenueProfitChart'),
+        conversionChart: document.getElementById('conversionChart'),
+        serviceChart: document.getElementById('serviceChart'),
+        materialChart: document.getElementById('materialChart')
+    };
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    function formatCurrency(amount) {
+        return 'Rp ' + Number(amount).toLocaleString('id-ID');
     }
-    
-    // ========== 1. REVENUE VS PROFIT CHART ==========
-    const revCanvas = document.getElementById('revenueProfitChart');
-    if (revCanvas) {
-        const revCtx = revCanvas.getContext('2d');
-        
-        const revenueProfitData = {
-            week: {
-                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                revenue: [8.2, 9.1, 7.8, 10.2, 12.5, 14.3, 11.8],
-                profit: [5.2, 5.9, 5.0, 6.6, 8.1, 9.3, 7.7]
-            },
-            month: {
-                labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-                revenue: [32.5, 38.2, 42.8, 48.2],
-                profit: [21.1, 24.8, 27.8, 31.4]
-            },
-            year: {
-                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                revenue: [28.4, 30.2, 35.7, 38.9, 42.3, 48.2, 52.1, 55.4, 58.7, 62.3, 65.8, 68.2],
-                profit: [18.5, 19.6, 23.2, 25.3, 27.5, 31.4, 33.9, 36.0, 38.2, 40.5, 42.8, 44.3]
-            }
+
+    function formatCurrencyM(amount) {
+        const num = Number(amount);
+        if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+        if (num >= 1e3) return (num / 1e3).toFixed(0) + 'K';
+        return formatCurrency(num);
+    }
+
+    function formatPercent(value) {
+        return Number(value).toFixed(1) + '%';
+    }
+
+    function getPeriodLabel(period) {
+        const map = {
+            today: 'Today',
+            week: 'This Week',
+            month: 'This Month',
+            quarter: 'Last 3 Months',
+            year: 'This Year'
         };
-        
-        let revenueProfitChart = initializeChart(revCtx, {
-            type: 'line',
-            data: {
-                labels: revenueProfitData.week.labels,
-                datasets: [
-                    {
-                        label: 'Revenue (Rp M)',
-                        data: revenueProfitData.week.revenue,
-                        borderColor: '#ff7b2c',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2.5,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
-                        pointBackgroundColor: '#ff7b2c',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        tension: 0.2,
-                        fill: false
-                    },
-                    {
-                        label: 'Profit (Rp M)',
-                        data: revenueProfitData.week.profit,
-                        borderColor: '#10b981',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2.5,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
-                        pointBackgroundColor: '#10b981',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        tension: 0.2,
-                        fill: false
-                    }
-                ]
-            },
-            options: getLineChartOptions('Amount (Rp Million)')
-        });
-        
-        // Simpan chart dan data ke global scope untuk update nanti
-        window.revenueProfitChart = revenueProfitChart;
-        window.revenueProfitData = revenueProfitData;
+        return map[period] || period;
     }
-    
-    // ========== 2. INQUIRY CONVERSION CHART ==========
-    const convCanvas = document.getElementById('conversionChart');
-    if (convCanvas) {
-        const convCtx = convCanvas.getContext('2d');
-        
-        const conversionData = {
-            week: {
-                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                inquiries: [12, 15, 10, 18, 22, 8, 6],
-                conversions: [8, 11, 7, 14, 18, 5, 4]
-            },
-            month: {
-                labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-                inquiries: [45, 52, 48, 61],
-                conversions: [32, 38, 35, 48]
-            },
-            year: {
-                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                inquiries: [42, 48, 55, 62, 71, 85, 92, 88, 79, 73, 68, 91],
-                conversions: [30, 35, 41, 47, 55, 67, 73, 70, 62, 58, 54, 72]
-            }
-        };
-        
-        let conversionChart = initializeChart(convCtx, {
-            type: 'line',
-            data: {
-                labels: conversionData.week.labels,
-                datasets: [
-                    {
-                        label: 'Inquiries',
-                        data: conversionData.week.inquiries,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2.5,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
-                        pointBackgroundColor: '#3b82f6',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        tension: 0.2,
-                        fill: false
-                    },
-                    {
-                        label: 'Conversions',
-                        data: conversionData.week.conversions,
-                        borderColor: '#f59e0b',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2.5,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
-                        pointBackgroundColor: '#f59e0b',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        tension: 0.2,
-                        fill: false
-                    }
-                ]
-            },
-            options: getLineChartOptions('Count')
-        });
-        
-        window.conversionChart = conversionChart;
-        window.conversionData = conversionData;
+
+    function showToast(msg, isError = false) {
+        const t = document.querySelector('.app-toast') || (() => {
+            const el = document.createElement('div');
+            el.className = 'app-toast';
+            document.body.appendChild(el);
+            return el;
+        })();
+        t.textContent = msg;
+        t.className = 'app-toast' + (isError ? ' error' : '');
+        setTimeout(() => t.classList.add('show'), 10);
+        clearTimeout(t._timeout);
+        t._timeout = setTimeout(() => t.classList.remove('show'), 3000);
     }
-    
-    // ========== 3. SERVICE BREAKDOWN PIE CHART ==========
-    const serviceCanvas = document.getElementById('serviceChart');
-    if (serviceCanvas) {
-        const serviceCtx = serviceCanvas.getContext('2d');
-        let serviceChart = new Chart(serviceCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Full Restoration (38%)', 'Repaint (32%)', 'Custom Design (18%)', 'Ceramic Coating (12%)'],
-                datasets: [{
-                    data: [38, 32, 18, 12],
-                    backgroundColor: ['#ff7b2c', '#10b981', '#3b82f6', '#f59e0b'],
-                    borderWidth: 0,
-                    hoverOffset: 8
-                }]
-            },
-            options: getPieChartOptions()
-        });
-        window.serviceChart = serviceChart;
+
+    // ============================================================
+    // API FETCH
+    // ============================================================
+    async function fetchAnalyticsData(period) {
+        const response = await fetch(`/api/analytics/full?period=${period}`);
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err || `HTTP ${response.status}`);
+        }
+        const result = await response.json();
+        // Backend mengembalikan BaseResponse dengan data di dalamnya
+        return result.data;
     }
-    
-    // ========== 4. MATERIAL CONSUMPTION PIE CHART ==========
-    const materialCanvas = document.getElementById('materialChart');
-    if (materialCanvas) {
-        const materialCtx = materialCanvas.getContext('2d');
-        let materialChart = new Chart(materialCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Paint (45%)', 'Primer (25%)', 'Clear Coat (18%)', 'Sandpaper (12%)'],
-                datasets: [{
-                    data: [45, 25, 18, 12],
-                    backgroundColor: ['#ff7b2c', '#10b981', '#3b82f6', '#f59e0b'],
-                    borderWidth: 0,
-                    hoverOffset: 8
-                }]
-            },
-            options: getPieChartOptions()
-        });
-        window.materialChart = materialChart;
+
+    // ============================================================
+    // RENDER FUNCTIONS
+    // ============================================================
+
+    function renderKPIs(kpis) {
+        // Revenue
+        const revenue = kpis.total_revenue;
+        document.getElementById('totalRevenue').textContent = formatCurrency(revenue.value);
+        const revTrend = revenue.trend_percent ?? 0;
+        document.getElementById('revenueTrend').textContent = (revTrend >= 0 ? '+' : '') + revTrend.toFixed(1) + '%';
+        document.getElementById('revenueTrend').className = 'stat-trend ' + (revTrend >= 0 ? 'positive' : 'negative');
+
+        // Profit
+        const profit = kpis.net_profit;
+        document.getElementById('netProfit').textContent = formatCurrency(profit.value);
+        const profitTrend = profit.trend_percent ?? 0;
+        document.getElementById('profitTrend').textContent = (profitTrend >= 0 ? '+' : '') + profitTrend.toFixed(1) + '%';
+        document.getElementById('profitTrend').className = 'stat-trend ' + (profitTrend >= 0 ? 'positive' : 'negative');
+
+        // Conversion Rate
+        const conv = kpis.conversion_rate;
+        document.getElementById('conversionRate').textContent = formatPercent(conv.value);
+        const convTrend = conv.trend_percent ?? 0;
+        document.getElementById('conversionTrend').textContent = (convTrend >= 0 ? '+' : '') + convTrend.toFixed(1) + '%';
+        document.getElementById('conversionTrend').className = 'stat-trend ' + (convTrend >= 0 ? 'positive' : 'negative');
+
+        // Completed Projects
+        const completed = kpis.completed_projects;
+        document.getElementById('completedProjects').textContent = completed.value;
+        const compTrend = completed.trend_percent ?? 0;
+        document.getElementById('completedTrend').textContent = (compTrend >= 0 ? '+' : '') + compTrend;
+        document.getElementById('completedTrend').className = 'stat-trend ' + (compTrend >= 0 ? 'positive' : 'negative');
     }
-    
-    // Helper function untuk line chart options
+
+    function renderInsights(insights) {
+        const container = dom.insightGrid;
+        if (!container) return;
+        if (!insights || insights.length === 0) {
+            container.innerHTML = `<div class="insight-card neutral">
+                <div class="insight-icon"><i class="fas fa-info-circle"></i></div>
+                <div class="insight-content"><p>No insights available</p></div>
+            </div>`;
+            return;
+        }
+        container.innerHTML = insights.map(item => `
+            <div class="insight-card ${item.type}">
+                <div class="insight-icon"><i class="fas ${item.icon}"></i></div>
+                <div class="insight-content">
+                    <p>${item.message}</p>
+                    ${item.link ? `<a href="${item.link}" class="insight-link">View →</a>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderTopServices(services) {
+        if (!dom.topServicesBody) return;
+        if (!services || services.length === 0) {
+            dom.topServicesBody.innerHTML = `<tr><td colspan="4" class="text-center">No data</td></tr>`;
+            return;
+        }
+        dom.topServicesBody.innerHTML = services.map(s => {
+            const trend = s.trend ?? 0;
+            const trendClass = trend >= 0 ? 'trend-up' : 'trend-down';
+            const arrow = trend >= 0 ? '↑' : '↓';
+            return `
+                <tr>
+                    <td>${s.name}</td>
+                    <td>${s.projects}</td>
+                    <td>${formatCurrency(s.revenue)}</td>
+                    <td><span class="${trendClass}">${arrow} ${Math.abs(trend).toFixed(1)}%</span></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderOperationalKPIs(kpis) {
+        if (!dom.kpiList) return;
+        if (!kpis || kpis.length === 0) {
+            dom.kpiList.innerHTML = '<p class="text-center">No KPIs available</p>';
+            return;
+        }
+        dom.kpiList.innerHTML = kpis.map(k => `
+            <div class="kpi-item">
+                <div class="kpi-info">
+                    <span>${k.label}</span>
+                    <strong>${k.value}</strong>
+                </div>
+                <div class="kpi-progress">
+                    <div class="progress-bar ${k.color || ''}" style="width: ${Math.min(k.progress || 0, 100)}%;"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // ============================================================
+    // CHARTS
+    // ============================================================
+    let revenueProfitChart = null;
+    let conversionChart = null;
+    let serviceChart = null;
+    let materialChart = null;
+
+    function initCharts(data) {
+        // Revenue vs Profit
+        if (dom.revenueProfitChart) {
+            const ctx = dom.revenueProfitChart.getContext('2d');
+            const chartData = data.revenue_profit;
+            const periodData = chartData.data || [];
+            revenueProfitChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: periodData.map(d => d.label),
+                    datasets: [
+                        {
+                            label: 'Revenue (Rp M)',
+                            data: periodData.map(d => d.revenue),
+                            borderColor: '#ff7b2c',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2.5,
+                            pointRadius: 3,
+                            tension: 0.2
+                        },
+                        {
+                            label: 'Profit (Rp M)',
+                            data: periodData.map(d => d.profit),
+                            borderColor: '#10b981',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2.5,
+                            pointRadius: 3,
+                            tension: 0.2
+                        }
+                    ]
+                },
+                options: getLineChartOptions('Amount (Rp Million)')
+            });
+        }
+
+        // Conversion
+        if (dom.conversionChart) {
+            const ctx = dom.conversionChart.getContext('2d');
+            const chartData = data.conversion;
+            const periodData = chartData.data || [];
+            conversionChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: periodData.map(d => d.label),
+                    datasets: [
+                        {
+                            label: 'Inquiries',
+                            data: periodData.map(d => d.inquiries),
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2.5,
+                            pointRadius: 3,
+                            tension: 0.2
+                        },
+                        {
+                            label: 'Conversions',
+                            data: periodData.map(d => d.conversions),
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2.5,
+                            pointRadius: 3,
+                            tension: 0.2
+                        }
+                    ]
+                },
+                options: getLineChartOptions('Count')
+            });
+        }
+
+        // Service Breakdown (doughnut)
+        if (dom.serviceChart) {
+            const ctx = dom.serviceChart.getContext('2d');
+            const items = data.service_breakdown?.items || [];
+            serviceChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: items.map(i => `${i.name} (${i.value}%)`),
+                    datasets: [{
+                        data: items.map(i => i.value),
+                        backgroundColor: items.map(i => i.color || '#ff7b2c'),
+                        borderWidth: 0,
+                        hoverOffset: 8
+                    }]
+                },
+                options: getPieChartOptions()
+            });
+        }
+
+        // Material Consumption
+        if (dom.materialChart) {
+            const ctx = dom.materialChart.getContext('2d');
+            const items = data.material_consumption?.items || [];
+            materialChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: items.map(i => `${i.name} (${i.value}%)`),
+                    datasets: [{
+                        data: items.map(i => i.value),
+                        backgroundColor: items.map(i => i.color || '#10b981'),
+                        borderWidth: 0,
+                        hoverOffset: 8
+                    }]
+                },
+                options: getPieChartOptions()
+            });
+        }
+    }
+
+    function updateCharts(data) {
+        // Update revenue-profit
+        if (revenueProfitChart) {
+            const chartData = data.revenue_profit;
+            const periodData = chartData.data || [];
+            revenueProfitChart.data.labels = periodData.map(d => d.label);
+            revenueProfitChart.data.datasets[0].data = periodData.map(d => d.revenue);
+            revenueProfitChart.data.datasets[1].data = periodData.map(d => d.profit);
+            revenueProfitChart.update();
+        }
+
+        // Update conversion
+        if (conversionChart) {
+            const chartData = data.conversion;
+            const periodData = chartData.data || [];
+            conversionChart.data.labels = periodData.map(d => d.label);
+            conversionChart.data.datasets[0].data = periodData.map(d => d.inquiries);
+            conversionChart.data.datasets[1].data = periodData.map(d => d.conversions);
+            conversionChart.update();
+        }
+
+        // Pie charts tidak perlu update karena data statis (tidak bergantung period)
+    }
+
     function getLineChartOptions(yAxisLabel) {
         return {
             responsive: true,
-            maintainAspectRatio: false,  // Kunci: ini harus false agar chart mengikuti container
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     position: 'top',
@@ -188,10 +339,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     labels: {
                         usePointStyle: true,
                         boxWidth: 8,
-                        boxHeight: 8,
-                        font: { size: 11, weight: '500' },
-                        padding: 12,
-                        color: '#475569'
+                        font: { size: 11 },
+                        padding: 12
                     }
                 },
                 tooltip: {
@@ -201,44 +350,36 @@ document.addEventListener('DOMContentLoaded', function() {
                     borderColor: '#334155',
                     borderWidth: 1,
                     padding: 10,
-                    cornerRadius: 8,
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.dataset.label || '';
-                            let value = context.raw;
-                            return `${label}: ${value.toLocaleString()}`;
-                        }
-                    }
+                    cornerRadius: 8
                 }
             },
             scales: {
                 y: {
                     beginAtZero: true,
-                    grid: { color: '#e2e8f0', drawBorder: false, lineWidth: 1 },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
                     border: { display: false },
-                    ticks: { font: { size: 11 }, color: '#64748b' },
+                    ticks: { font: { size: 11 } },
                     title: {
                         display: true,
                         text: yAxisLabel,
-                        font: { size: 11, weight: '500' },
-                        color: '#64748b',
+                        font: { size: 11 },
                         padding: { bottom: 8 }
                     }
                 },
                 x: {
                     grid: { display: false },
                     border: { display: false },
-                    ticks: { font: { size: 11 }, color: '#64748b' }
+                    ticks: { font: { size: 11 } }
                 }
             },
             interaction: { mode: 'index', intersect: false }
         };
     }
-    
+
     function getPieChartOptions() {
         return {
             responsive: true,
-            maintainAspectRatio: false,  // Kunci: false agar pie chart tidak collapse
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     position: 'bottom',
@@ -252,11 +393,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tooltip: {
                     backgroundColor: '#1e293b',
                     callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = context.raw;
-                            return `${label}: ${value}%`;
-                        }
+                        label: ctx => `${ctx.label}: ${ctx.raw}%`
                     }
                 }
             },
@@ -264,86 +401,99 @@ document.addEventListener('DOMContentLoaded', function() {
             radius: '80%'
         };
     }
-    
-    // ========== PERIOD SWITCHING FUNCTIONALITY ==========
-    function updateRevenueProfitChart(period) {
-        if (window.revenueProfitChart && window.revenueProfitData) {
-            const data = window.revenueProfitData[period];
-            if (data) {
-                window.revenueProfitChart.data.labels = data.labels;
-                window.revenueProfitChart.data.datasets[0].data = data.revenue;
-                window.revenueProfitChart.data.datasets[1].data = data.profit;
-                window.revenueProfitChart.update();
-            }
-        }
-    }
-    
-    function updateConversionChart(period) {
-        if (window.conversionChart && window.conversionData) {
-            const data = window.conversionData[period];
-            if (data) {
-                window.conversionChart.data.labels = data.labels;
-                window.conversionChart.data.datasets[0].data = data.inquiries;
-                window.conversionChart.data.datasets[1].data = data.conversions;
-                window.conversionChart.update();
-            }
-        }
-    }
-    
-    // Attach event listeners to all period buttons
-    const periodButtons = document.querySelectorAll('.chart-period');
-    periodButtons.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const period = this.getAttribute('data-period');
-            const chartType = this.getAttribute('data-chart');
-            
-            const parentControls = this.closest('.chart-controls');
-            if (parentControls) {
-                parentControls.querySelectorAll('.chart-period').forEach(b => {
-                    b.classList.remove('active');
+
+    // ============================================================
+    // PERIOD SWITCHING (chart internal)
+    // ============================================================
+    function setupPeriodButtons() {
+        document.querySelectorAll('.chart-controls').forEach(container => {
+            const chartType = container.dataset.chart;
+            container.querySelectorAll('.chart-period').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    container.querySelectorAll('.chart-period').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    const period = this.dataset.period;
+                    state.chartPeriod[chartType] = period;
+                    // Reload data with new period for the specific chart
+                    loadAnalytics(false);
                 });
-                this.classList.add('active');
-            }
-            
-            if (chartType === 'revenueProfit') {
-                updateRevenueProfitChart(period);
-            } else if (chartType === 'conversion') {
-                updateConversionChart(period);
-            }
+            });
         });
+    }
+
+    // ============================================================
+    // GLOBAL PERIOD FILTER
+    // ============================================================
+    function setupPeriodFilter() {
+        dom.periodFilter.addEventListener('change', function() {
+            state.period = this.value;
+            // Reset chart period to default
+            state.chartPeriod.revenueProfit = 'week';
+            state.chartPeriod.conversion = 'week';
+            // Reset active states on chart buttons
+            document.querySelectorAll('.chart-controls').forEach(c => {
+                c.querySelectorAll('.chart-period').forEach(b => {
+                    b.classList.toggle('active', b.dataset.period === 'week');
+                });
+            });
+            loadAnalytics();
+        });
+    }
+
+    // ============================================================
+    // REFRESH
+    // ============================================================
+    dom.refreshBtn.addEventListener('click', function() {
+        loadAnalytics(true);
     });
-    
-    // ========== FORCE RESIZE AFTER LOAD (SOLUSI UNTUK CHART JATUH) ==========
-    setTimeout(function() {
-        if (window.revenueProfitChart) window.revenueProfitChart.resize();
-        if (window.conversionChart) window.conversionChart.resize();
-        if (window.serviceChart) window.serviceChart.resize();
-        if (window.materialChart) window.materialChart.resize();
-    }, 100);
-    
-    // ========== RESIZE HANDLER ==========
-    let resizeTimer;
-    window.addEventListener('resize', function() {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
-            if (window.revenueProfitChart) window.revenueProfitChart.resize();
-            if (window.conversionChart) window.conversionChart.resize();
-            if (window.serviceChart) window.serviceChart.resize();
-            if (window.materialChart) window.materialChart.resize();
-        }, 250);
-    });
-    
-    // ========== ANIMATION ON LOAD ==========
-    const statCards = document.querySelectorAll('.stat-card');
-    statCards.forEach((card, idx) => {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(12px)';
-        card.style.transition = `opacity 0.3s ease ${idx * 0.05}s, transform 0.3s ease ${idx * 0.05}s`;
-        setTimeout(() => {
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-        }, 50);
-    });
-    
-    console.log('NOCTRA Analytics Dashboard — Clean charts initialized');
-});
+
+    // ============================================================
+    // MAIN LOAD FUNCTION
+    // ============================================================
+    async function loadAnalytics(forceRefresh = false) {
+        if (state.isLoading) return;
+        state.isLoading = true;
+        dom.skeleton.classList.add('show');
+        dom.statsGrid.style.display = 'none';
+        dom.insightGrid.style.display = 'none';
+
+        try {
+            const data = await fetchAnalyticsData(state.period);
+            state.data = data;
+
+            // Render all sections
+            renderKPIs(data.kpis);
+            renderInsights(data.insights?.items || []);
+            renderTopServices(data.top_services?.items || []);
+            renderOperationalKPIs(data.operational_kpis?.items || []);
+
+            // Charts
+            if (!revenueProfitChart) {
+                initCharts(data);
+            } else {
+                updateCharts(data);
+            }
+
+            dom.lastUpdated.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+        } catch (err) {
+            console.error('Failed to load analytics:', err);
+            showToast('Failed to load analytics data: ' + err.message, true);
+        } finally {
+            state.isLoading = false;
+            dom.skeleton.classList.remove('show');
+            dom.statsGrid.style.display = 'grid';
+            dom.insightGrid.style.display = 'grid';
+        }
+    }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    function init() {
+        setupPeriodFilter();
+        setupPeriodButtons();
+        loadAnalytics();
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+})();

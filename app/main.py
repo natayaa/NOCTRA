@@ -19,6 +19,8 @@ from routes.api.v1.customer_inquiry import customer_inquiry
 from routes.api.v1.inventories import inventory_router
 from routes.api.v1.projects import project_router
 from routes.api.v1.price_list import price_list
+from routes.api.v1.analytics import analytics
+from routes.api.v1.budgeting import budgeting
 
 
 @asynccontextmanager
@@ -54,6 +56,10 @@ app.include_router(inventory_router)
 app.include_router(project_router)
 
 app.include_router(price_list)
+
+app.include_router(analytics)
+
+app.include_router(budgeting)
 
 if __name__ == "__main__":
     uvicorn.run(
