@@ -30,3 +30,4 @@ async def inquiry_page(request: Request):
         context=context, 
         status_code=status.HTTP_200_OK
     )
+    

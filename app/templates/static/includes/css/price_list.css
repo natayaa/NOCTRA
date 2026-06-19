@@ -1,0 +1,541 @@
+/* =========================================================
+   Price List – NOCTRA Workshop OS
+   ========================================================= */
+
+:root {
+    --primary: #ff7b2c;
+    --primary-dark: #e66312;
+    --primary-light: #ff9f4a;
+    --accent: #00d5ff;
+    --bg-body: #0a0a0f;
+    --card-bg: rgba(255, 255, 255, 0.03);
+    --border-color: rgba(255, 255, 255, 0.06);
+    --text-primary: #ffffff;
+    --text-secondary: #e2e8f0;
+    --text-muted: #94a3b8;
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* ----- Toolbar ----- */
+.price-list-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    backdrop-filter: blur(12px);
+    flex-wrap: wrap;
+}
+
+.toolbar-left,
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.search-box {
+    position: relative;
+    min-width: 280px;
+}
+
+.search-box i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+}
+
+.search-box input {
+    width: 100%;
+    padding: 0.6rem 0.6rem 0.6rem 2.2rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    transition: 0.2s;
+}
+
+.search-box input:focus {
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.search-box input::placeholder {
+    color: var(--text-muted);
+}
+
+.toolbar-left select {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 0.6rem 1rem;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    cursor: pointer;
+    min-width: 160px;
+}
+
+.toolbar-left select:focus {
+    border-color: var(--accent);
+}
+
+.toolbar-left select option {
+    background: #1a1a2e;
+    color: var(--text-primary);
+}
+
+.btn-primary {
+    background: var(--primary);
+    border: none;
+    border-radius: 12px;
+    padding: 0.6rem 1.2rem;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(255, 123, 44, 0.3);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 0.6rem 1.2rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* ----- Table ----- */
+.table-container {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    overflow-x: auto;
+    padding: 0.5rem;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+thead {
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    padding: 0.9rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+}
+
+td {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: middle;
+}
+
+tbody tr {
+    transition: background 0.2s;
+}
+
+tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.loading-placeholder {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 3rem 0;
+}
+
+/* ----- Category Badges ----- */
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.category-service {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.category-material {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.category-labor {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+}
+
+.category-bike_model {
+    background: rgba(236, 72, 153, 0.2);
+    color: #f472b6;
+}
+
+/* ----- Status Badge ----- */
+.status-badge {
+    display: inline-block;
+    padding: 0.2rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.status-badge.active {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.status-badge.inactive {
+    background: rgba(107, 114, 128, 0.2);
+    color: #9ca3af;
+}
+
+/* ----- Action Buttons ----- */
+.action-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.action-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+
+.action-btn.edit-btn:hover {
+    color: var(--accent);
+}
+
+.action-btn.delete-btn:hover {
+    color: #ef4444;
+}
+
+/* ----- Modal ----- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    z-index: 9999;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal {
+    width: 100%;
+    max-width: 560px;
+    background: #14141f;
+    border: 1px solid var(--border-color);
+    border-radius: 28px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    animation: modalEnter 0.25s ease;
+}
+
+@keyframes modalEnter {
+    from {
+        opacity: 0;
+        transform: scale(0.96) translateY(-12px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 1.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.modal-header button {
+    width: 42px;
+    height: 42px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.modal-header button:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+
+#priceForm {
+    padding: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.form-group label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    padding: 0.7rem 1rem;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    transition: 0.2s;
+    font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+    color: var(--text-muted);
+}
+
+.form-group input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+/* ----- Toast container (reused from other pages) ----- */
+#toastContainer {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 400px;
+}
+
+/* ----- Responsive ----- */
+@media (max-width: 992px) {
+    .price-list-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .toolbar-left,
+    .toolbar-right {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .search-box {
+        min-width: 100%;
+        flex: 1;
+    }
+
+    .toolbar-right button {
+        flex: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .modal {
+        max-width: 100%;
+        border-radius: 20px;
+        max-height: 95vh;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        padding: 1rem 1.25rem;
+    }
+
+    #priceForm {
+        padding: 1.25rem;
+    }
+
+    /* Table becomes card style on mobile */
+    table,
+    thead,
+    tbody,
+    th,
+    td,
+    tr {
+        display: block;
+    }
+
+    thead tr {
+        display: none;
+    }
+
+    tr {
+        margin-bottom: 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 0.5rem;
+        background: rgba(255, 255, 255, 0.01);
+    }
+
+    td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    td:last-child {
+        border-bottom: none;
+    }
+
+    td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        font-size: 0.7rem;
+    }
+
+    td .actions {
+        justify-content: flex-end;
+    }
+}
+/* Pagination */
+.pagination-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0.5rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.pagination-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.5rem 1rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent);
+}
+
+.pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+#pageInfo {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}

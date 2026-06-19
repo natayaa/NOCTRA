@@ -1,481 +1,368 @@
-{% extends "base.html" %} {% block title %}Projects | NOCTRA{% endblock %} {%
-block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('static', path='css/projects.css') }}"
-/>
-{% endblock %} {% block page_title %}Projects{% endblock %} {% block
-page_subtitle %} Manage restorations, paint jobs, fabrication, and production
-workflow {% endblock %} {% block content %}
+{% extends "base.html" %}
+{% block title %}Projects | NOCTRA{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/projects.css') }}" />
+{% endblock %}
+{% block page_title %}Projects{% endblock %}
+{% block page_subtitle %}Manage restorations, paint jobs, fabrication, and production workflow{% endblock %}
+{% block content %}
 
 <!-- DASHBOARD -->
-
 <section class="project-dashboard">
   <div class="overview-card">
-    <div class="overview-icon">
-      <i class="ph ph-briefcase"></i>
-    </div>
-
+    <div class="overview-icon"><i class="ph ph-briefcase"></i></div>
     <div>
       <span>Active Projects</span>
-      <h2>14</h2>
-      <small>+3 this week</small>
+      <h2 id="activeCount">0</h2>
+      <small>Total active</small>
     </div>
   </div>
-
   <div class="overview-card">
-    <div class="overview-icon">
-      <i class="ph ph-gear-six"></i>
-    </div>
-
+    <div class="overview-icon"><i class="ph ph-gear-six"></i></div>
     <div>
       <span>In Production</span>
-      <h2>7</h2>
+      <h2 id="prodCount">0</h2>
       <small>Currently running</small>
     </div>
   </div>
-
   <div class="overview-card">
-    <div class="overview-icon">
-      <i class="ph ph-check-circle"></i>
-    </div>
-
+    <div class="overview-icon"><i class="ph ph-check-circle"></i></div>
     <div>
       <span>Completed</span>
-      <h2>8</h2>
+      <h2 id="completedCount">0</h2>
       <small>This month</small>
     </div>
   </div>
-
   <div class="overview-card">
-    <div class="overview-icon">
-      <i class="ph ph-wallet"></i>
-    </div>
-
+    <div class="overview-icon"><i class="ph ph-wallet"></i></div>
     <div>
       <span>Revenue</span>
-      <h2>Rp 48.2M</h2>
+      <h2 id="revenueTotal">Rp 0</h2>
       <small>Estimated gross</small>
     </div>
   </div>
 </section>
 
 <!-- TOOLBAR -->
-
 <section class="projects-toolbar glass">
   <div class="toolbar-left">
     <div class="search-box">
       <i class="ph ph-magnifying-glass"></i>
-      <input
-        type="search"
-        id="projectSearch"
-        placeholder="Search customer, vehicle, project..."
-      />
+      <input type="search" id="projectSearch" placeholder="Search customer, vehicle, project..." />
     </div>
-
-    <select id="projectFilter">
-      <option>All Projects</option>
-      <option>Restoration</option>
-      <option>Custom Paint</option>
-      <option>Engine Build</option>
-      <option>Fabrication</option>
+    <select id="statusFilter">
+      <option value="">All Status</option>
+      <option value="new">New</option>
+      <option value="quoted">Quoted</option>
+      <option value="approved">Approved</option>
+      <option value="preparation">Preparation</option>
+      <option value="painting">Painting</option>
+      <option value="assembly">Assembly</option>
+      <option value="completed">Completed</option>
     </select>
-
-    <select>
-      <option>All Status</option>
-      <option>On Track</option>
-      <option>Delayed</option>
-      <option>Urgent</option>
-    </select>
-  </div>
-
-  <div class="toolbar-right">
-    <button class="btn-secondary">
-      <i class="ph ph-file-arrow-down"></i>
-      Export
-    </button>
-
-    <button class="btn-primary" id="newProjectBtn">
-      <i class="ph ph-plus"></i>
-      New Project
-    </button>
   </div>
 </section>
 
-<!-- BOARD -->
-
-<section class="kanban-wrapper">
-  <div class="kanban-board">
-    <!-- NEW -->
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <div>
-          <h3>New Inquiry</h3>
-          <span>Waiting review</span>
-        </div>
-
-        <strong>2</strong>
-      </div>
-
-      <div class="column-body" data-column="new">
-        <article class="project-card priority-high" draggable="true">
-          <div class="card-priority">
-            <span>High Priority</span>
-          </div>
-
-          <div class="project-top">
-            <div>
-              <h5>Mio Sporty Restoration</h5>
-              <small>Ivan Saputra</small>
-            </div>
-
-            <span class="status-badge active"> Active </span>
-          </div>
-
-          <!--div class="project-tags">
-            <span>Restoration</span>
-            <span>2 Stroke Paint</span>
-          </div-->
-
-          <div class="project-meta">
-            <div>
-              <label>Vehicle</label>
-              <h5>Yamaha Mio Sporty</h5>
-            </div>
-
-            <div>
-              <label>Value</label>
-              <p>Rp 7.500.000</p>
-            </div>
-          </div>
-
-          <div class="progress-section">
-            <div class="progress-header">
-              <span>Progress</span>
-              <span>15%</span>
-            </div>
-
-            <div class="progress-bar">
-              <div class="progress-fill" style="width: 15%"></div>
-            </div>
-          </div>
-
-          <div class="project-footer">
-            <div class="footer-users">
-              <div class="avatar">I</div>
-              <div class="avatar">A</div>
-            </div>
-
-            <span>15 Jul</span>
-          </div>
-        </article>
-      </div>
-    </div>
-
-    <!-- QUOTED -->
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <div>
-          <h3>Quotation</h3>
-          <span>Awaiting approval</span>
-        </div>
-
-        <strong>1</strong>
-      </div>
-
-      <div class="column-body" data-column="quoted"></div>
-    </div>
-
-    <!-- APPROVED -->
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <div>
-          <h3>Approved</h3>
-          <span>Ready production</span>
-        </div>
-
-        <strong>3</strong>
-      </div>
-
-      <div class="column-body" data-column="approved"></div>
-    </div>
-
-    <!-- PREP -->
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <div>
-          <h3>Preparation</h3>
-          <span>Parts & teardown</span>
-        </div>
-
-        <strong>2</strong>
-      </div>
-
-      <div class="column-body" data-column="preparation"></div>
-    </div>
-
-    <!-- PAINT -->
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <div>
-          <h3>Painting</h3>
-          <span>Surface & coating</span>
-        </div>
-
-        <strong>3</strong>
-      </div>
-
-      <div class="column-body" data-column="painting"></div>
-    </div>
-
-    <!-- ASSEMBLY -->
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <div>
-          <h3>Assembly</h3>
-          <span>Final rebuild</span>
-        </div>
-
-        <strong>1</strong>
-      </div>
-
-      <div class="column-body" data-column="assembly"></div>
-    </div>
-
-    <!-- DONE -->
-
-    <div class="kanban-column">
-      <div class="column-header">
-        <div>
-          <h3>Completed</h3>
-          <span>Delivered</span>
-        </div>
-
-        <strong>8</strong>
-      </div>
-
-      <div class="column-body" data-column="completed"></div>
-    </div>
+<!-- CARD GRID -->
+<section class="card-wrapper">
+  <div class="card-grid" id="projectCardGrid">
+    <div class="loading-placeholder" style="grid-column:1/-1; text-align:center; padding:3rem 0;">Loading projects...</div>
   </div>
 </section>
 
-<!-- MODAL -->
+<div class="modal-overlay" id="progressPopup">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div>
+        <h2 id="progressPopupTitle">Update Progress</h2>
+        <p id="progressPopupSubtitle">Drag the slider to update progress</p>
+      </div>
+      <button id="closeProgressPopup">×</button>
+    </div>
+    <div class="modal-body" style="padding:1.5rem;">
+      <div style="margin-bottom:1.5rem;">
+        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">
+          Progress: <span id="progressPopupValue">0</span>%
+        </label>
+        <input type="range" id="progressPopupSlider" min="0" max="100" value="0"
+               style="width:100%; height:8px; -webkit-appearance:none; appearance:none;
+                      background: rgba(255,255,255,0.1); border-radius:10px; outline:none;" />
+      </div>
 
+      <div id="progressPopupMilestones" style="margin-bottom:1.5rem;">
+        <!-- Milestones rendered by JS -->
+      </div>
+
+      <div class="form-group">
+        <label for="progressPopupNote">Quick Note</label>
+        <textarea id="progressPopupNote" rows="3" placeholder="Add a quick update note..."></textarea>
+      </div>
+
+      <div class="form-group" style="margin-top:0.5rem;">
+        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+          <input type="checkbox" id="markCompleteCheckbox" />
+          <span>Mark as Completed (when progress reaches 100%)</span>
+        </label>
+      </div>
+
+      <div class="modal-actions" style="margin-top:1rem;">
+        <button type="button" class="btn-secondary" id="cancelProgressBtn">Cancel</button>
+        <button type="button" class="btn-primary" id="saveProgressBtn">Save Progress</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL (Create / Edit) -->
 <div class="modal-overlay" id="projectModal">
   <div class="modal modal-lg">
     <div class="modal-header">
       <div>
-        <h2>Create New Project</h2>
-        <p>Register workshop project and production schedule</p>
+        <h2 id="modalTitle">Create New Project</h2>
+        <p id="modalSubtitle">Register workshop project and production schedule</p>
       </div>
-
       <button id="closeModal">×</button>
     </div>
-
     <form id="projectForm">
+      <input type="hidden" id="editProjectId" value="">
+
       <div class="form-grid">
+        <!-- Project Info -->
         <div class="form-group">
-          <label>Customer Name</label>
+          <label for="projectName">Project Name</label>
+          <input type="text" id="projectName" required placeholder="e.g. Mio Sporty Restoration" />
+        </div>
+        <div class="form-group">
+          <label for="customerName">Customer Name</label>
           <input type="text" id="customerName" required />
         </div>
-
         <div class="form-group">
-          <label>Phone Number</label>
-          <input type="text" />
+          <label for="phoneNumber">Phone Number</label>
+          <input type="text" id="phoneNumber" placeholder="e.g. 08123456789" />
         </div>
-
         <div class="form-group">
-          <label>Vehicle</label>
-          <input type="text" id="motorbike" required />
-        </div>
-
-        <div class="form-group">
-          <label>License Plate</label>
-          <input type="text" />
-        </div>
-
-        <div class="form-group">
-          <label>Project Type</label>
-
-          <select>
-            <option>Full Restoration</option>
-            <option>Custom Paint</option>
-            <option>Engine Build</option>
-            <option>Fabrication</option>
+          <label for="projectStatus">Status</label>
+          <select id="projectStatus">
+            <option value="new">New</option>
+            <option value="quoted">Quoted</option>
+            <option value="approved">Approved</option>
+            <option value="preparation">Preparation</option>
+            <option value="painting">Painting</option>
+            <option value="assembly">Assembly</option>
+            <option value="completed">Completed</option>
           </select>
         </div>
-
-        <div class="form-group">
-          <label>Project Value</label>
-          <input type="number" id="price" required />
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="progressSliderForm">Progress: <span id="progressDisplay">0</span>%</label>
+          <input type="range" id="progressSliderForm" min="0" max="100" value="0" style="width:100%;" />
         </div>
 
+        <!-- Vehicle Details -->
         <div class="form-group">
-          <label>Start Date</label>
-          <input type="date" />
+          <label for="vehicleBrand">Vehicle Brand</label>
+          <input type="text" id="vehicleBrand" required placeholder="e.g. Yamaha" />
+        </div>
+        <div class="form-group">
+          <label for="vehicleModel">Vehicle Model</label>
+          <input type="text" id="vehicleModel" required placeholder="e.g. Mio Sporty" />
+        </div>
+        <div class="form-group">
+          <label for="licensePlate">License Plate</label>
+          <input type="text" id="licensePlate" placeholder="e.g. B 1234 XYZ" />
         </div>
 
+        <!-- Financial -->
         <div class="form-group">
-          <label>Target Delivery</label>
-          <input type="date" />
+          <label for="estimatedCost">Estimated Cost (Rp)</label>
+          <input type="number" id="estimatedCost" step="0.01" />
         </div>
-      </div>
+        <div class="form-group">
+          <label for="estimatedRevenue">Estimated Revenue (Rp)</label>
+          <input type="number" id="estimatedRevenue" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label for="actualCost">Actual Cost (Rp)</label>
+          <input type="number" id="actualCost" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label for="actualRevenue">Actual Revenue (Rp)</label>
+          <input type="number" id="actualRevenue" step="0.01" />
+        </div>
 
-      <div class="form-group">
-        <label>Description</label>
-        <textarea rows="5"></textarea>
+        <!-- Dates -->
+        <div class="form-group">
+          <label for="startDate">Start Date</label>
+          <input type="date" id="startDate" />
+        </div>
+        <div class="form-group">
+          <label for="targetDelivery">Target Delivery</label>
+          <input type="date" id="targetDelivery" />
+        </div>
+
+        <!-- Notes (full width) -->
+        <div class="form-group" style="grid-column: span 2;">
+          <label for="projectNotes">Notes / Description</label>
+          <textarea id="projectNotes" rows="4" placeholder="Add any notes or description..."></textarea>
+        </div>
       </div>
 
       <div class="modal-actions">
-        <button type="button" class="btn-secondary">Cancel</button>
-
-        <button type="submit" class="btn-primary">Create Project</button>
+        <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+        <button type="submit" class="btn-primary" id="submitProjectBtn">Create Project</button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- DRAWER -->
-
+<!-- DRAWER (Project Details) -->
+<!-- DRAWER (Project Details) – Dengan TAB -->
 <aside class="drawer" id="projectDrawer">
   <div class="drawer-header">
     <div>
-      <h2 id="drawerTitle">Mio Sporty Restoration</h2>
-      <span>Project Details</span>
+      <h2 id="drawerTitle">Project Details</h2>
+      <span id="drawerSubtitle">View full project information</span>
     </div>
-
     <button id="closeDrawer">×</button>
   </div>
 
+  <!-- Tab Navigation -->
+  <div class="drawer-tabs">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="material">Material</button>
+    <button class="tab-btn" data-tab="labor">Labor</button>
+    <button class="tab-btn" data-tab="timeline">Timeline</button>
+  </div>
+
   <div class="drawer-content">
-    <section class="detail-card">
-      <div class="section-header">
-        <h3>Overview</h3>
-      </div>
-
-      <div class="detail-grid">
-        <div class="detail-section">
-          <label>Customer</label>
-          <p id="drawerCustomer">Ivan</p>
+    <!-- TAB 1: OVERVIEW -->
+    <div class="tab-panel active" id="tab-overview">
+      <section class="detail-card">
+        <h3>Customer & Vehicle</h3>
+        <div class="detail-grid">
+          <div class="detail-item"><label>Customer</label><p id="drawerCustomer">-</p></div>
+          <div class="detail-item"><label>Phone</label><p id="drawerPhone">-</p></div>
+          <div class="detail-item"><label>Brand</label><p id="drawerBrand">-</p></div>
+          <div class="detail-item"><label>Model</label><p id="drawerModel">-</p></div>
+          <div class="detail-item"><label>License Plate</label><p id="drawerPlate">-</p></div>
+          <div class="detail-item">
+            <label>Status</label>
+            <p id="drawerStatus"><span class="status-badge">-</span></p>
+          </div>
+          <div class="detail-item" style="grid-column: span 2;">
+            <label>Progress</label>
+            <div class="progress-small">
+              <div class="bar"><div class="fill" id="drawerProgressFill" style="width:0%;"></div></div>
+              <span id="drawerProgressText">0%</span>
+            </div>
+          </div>
         </div>
-
-        <div class="detail-section">
-          <label>Vehicle</label>
-          <p id="drawerMotorbike">Yamaha Mio Sporty</p>
+      </section>
+      <section class="detail-card">
+        <h3>Notes</h3>
+        <p id="drawerNotes" style="white-space:pre-wrap; color: var(--text-secondary);">-</p>
+      </section>
+      <!-- Financial Summary (bisa disembunyikan untuk pegawai dengan role nanti) -->
+      <section class="detail-card" id="financialSection">
+        <h3>Financial Summary</h3>
+        <div class="detail-grid">
+          <div class="detail-item"><label>Estimated Cost</label><h4 id="drawerEstCost">Rp 0</h4></div>
+          <div class="detail-item"><label>Actual Cost</label><h4 id="drawerActualCost">Rp 0</h4></div>
+          <div class="detail-item"><label>Estimated Revenue</label><h4 id="drawerEstRevenue">Rp 0</h4></div>
+          <div class="detail-item"><label>Actual Revenue</label><h4 id="drawerActualRevenue">Rp 0</h4></div>
+          <div class="detail-item"><label>Profit</label><h4 id="drawerProfit">Rp 0</h4></div>
+          <div class="detail-item"><label>Margin</label><h4 id="drawerMargin">0%</h4></div>
         </div>
+      </section>
+    </div>
 
-        <div class="detail-section">
-          <label>Status</label>
-          <p>Preparation</p>
+    <!-- TAB 2: MATERIAL -->
+    <div class="tab-panel" id="tab-material">
+      <section class="detail-card">
+        <h3>Consume Material</h3>
+        <div class="material-form">
+          <select id="materialSelect" class="form-control">
+            <option value="">Select Material</option>
+          </select>
+          <input type="number" id="materialQty" placeholder="Qty" min="1" style="width:80px;" />
+          <button class="btn-primary" id="consumeMaterialBtn"><i class="ph ph-check"></i> Pakai</button>
         </div>
-
-        <div class="detail-section">
-          <label>Delivery</label>
-          <p>15 Jul 2026</p>
+      </section>
+      <section class="detail-card">
+        <h3>Material Usage History</h3>
+        <div id="drawerMaterialsList">
+          <p style="color:var(--text-muted);">No materials consumed yet.</p>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
-    <section class="detail-card">
-      <h3>Production Progress</h3>
-
-      <div class="detail-section">
-        <label>Overall Progress</label>
-        <input type="range" min="0" max="100" value="65" id="progressSlider" />
-      </div>
-
-      <div class="milestone-list">
-        <div class="milestone done">
-          <i class="ph ph-check-circle"></i>
-          Inquiry Approved
+    <!-- TAB 3: LABOR -->
+    <div class="tab-panel" id="tab-labor">
+      <section class="detail-card">
+        <h3>Add Labor</h3>
+        <div class="labor-form">
+          <select id="laborTypeSelect" class="form-control">
+            <option value="">Pilih Labor</option>
+          </select>
+          <input type="number" id="laborHours" placeholder="Jam" min="0.5" step="0.5" style="width:80px;" />
+          <button class="btn-primary" id="addLaborBtn"><i class="ph ph-plus"></i> Tambah</button>
         </div>
-
-        <div class="milestone done">
-          <i class="ph ph-check-circle"></i>
-          Parts Ordered
+      </section>
+      <section class="detail-card">
+        <h3>Labor History</h3>
+        <div id="laborList">
+          <p style="color:var(--text-muted);">No labor recorded.</p>
         </div>
-
-        <div class="milestone active">
-          <i class="ph ph-gear-six"></i>
-          Disassembly Process
+      </section>
+    </div>
+    <!-- TAB 4: TIMELINE -->
+    <div class="tab-panel" id="tab-timeline">
+      <section class="detail-card">
+        <h3>Timeline</h3>
+        <div class="detail-grid">
+          <div class="detail-item"><label>Start Date</label><p id="drawerStartDate">-</p></div>
+          <div class="detail-item"><label>Target Delivery</label><p id="drawerDelivery">-</p></div>
+          <div class="detail-item" style="grid-column: span 2;"><label>Duration</label><p id="drawerDuration">-</p></div>
+          <div class="detail-item" style="grid-column: span 2;"><label>Status</label><p id="drawerTimelineStatus">-</p></div>
         </div>
+      </section>
 
-        <div class="milestone">
-          <i class="ph ph-circle"></i>
-          Paint Preparation
+      <!-- Milestones -->
+      <section class="detail-card">
+        <h3>Milestones</h3>
+        <div id="timelineMilestones">
+          <!-- diisi oleh JS -->
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="detail-card">
-      <h3>Team Assignment</h3>
-
-      <div class="form-group">
-        <label>Project Lead</label>
-
-        <select>
-          <option>Unassigned</option>
-          <option>Andi</option>
-          <option>Rizki</option>
-          <option>Fikri</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>Painter</label>
-
-        <select>
-          <option>Unassigned</option>
-          <option>Andi</option>
-          <option>Rizki</option>
-          <option>Fikri</option>
-        </select>
-      </div>
-    </section>
-
-    <section class="detail-card">
-      <h3>Financial Summary</h3>
-
-      <div class="detail-grid">
-        <div class="detail-section">
-          <label>Revenue</label>
-          <h4>Rp 7.500.000</h4>
-        </div>
-
-        <div class="detail-section">
-          <label>Cost</label>
-          <h4>Rp 4.300.000</h4>
-        </div>
-
-        <div class="detail-section">
-          <label>Profit</label>
-          <h4>Rp 3.200.000</h4>
-        </div>
-
-        <div class="detail-section">
-          <label>Margin</label>
-          <h4>42%</h4>
-        </div>
-      </div>
-    </section>
-
-    <section class="detail-card">
-      <h3>Workshop Notes</h3>
-
-      <textarea
-        rows="7"
-        placeholder="Add project notes, progress update, customer requests..."
-      ></textarea>
-    </section>
+      <!-- Catatan Timeline (opsional) -->
+      <section class="detail-card">
+        <h3>Notes</h3>
+        <p id="timelineNote" style="color:var(--text-muted);">-</p>
+      </section>
+    </div>
   </div>
 </aside>
 
-{% endblock %} {% block extra_js %}
+
+<!-- Material Usage Section -->
+<!--section class="detail-card" id="materialUsageSection">
+  <h3>Materials Used</h3>
+  <div class="material-usage-row">
+    <select id="materialSelect" class="form-control" style="flex:1;">
+      <option value="">Select Material</option>
+    </select>
+    <input type="number" id="materialQty" placeholder="Qty" min="1" style="width:80px;" />
+    <button class="btn-primary" id="consumeMaterialBtn" style="padding:0.5rem 1rem;">Consume</button>
+  </div>
+  <div id="materialUsageList" style="margin-top:1rem;">
+    <!-- list of used materials >
+  </div>
+</section-->
+
+<!-- TOAST -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+{% block extra_js %}
 <script src="{{ url_for('static', path='js/projects.js') }}"></script>
 {% endblock %}

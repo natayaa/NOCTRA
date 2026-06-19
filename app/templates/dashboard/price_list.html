@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Price List | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/price_list.css') }}" />
+{% endblock %}
+
+{% block page_title %}Price List{% endblock %}
+{% block page_subtitle %}Manage prices for services, materials, and bike models{% endblock %}
+
+{% block content %}
+
+<!-- Toolbar -->
+<div class="price-list-toolbar">
+  <div class="toolbar-left">
+    <div class="search-box">
+      <i class="ph ph-magnifying-glass"></i>
+      <input type="search" id="searchPrice" placeholder="Search by name or description..." />
+    </div>
+    <select id="categoryFilter">
+      <option value="">All Categories</option>
+      <option value="service">Service</option>
+      <option value="material">Material</option>
+      <option value="labor">Labor</option>
+      <option value="bike_model">Bike Model</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-primary" id="addPriceBtn"><i class="ph ph-plus"></i> Add Price</button>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Name</th>
+        <th>Description</th>
+        <th>Price</th>
+        <th>Unit</th>
+        <th>Vehicle</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="priceTableBody">
+      <tr><td colspan="8" class="loading-placeholder">Loading prices...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination-container" id="paginationContainer">
+  <button class="pagination-btn" id="prevPageBtn" disabled>
+    <i class="ph ph-caret-left"></i> Previous
+  </button>
+  <span id="pageInfo">Page 1 of 1</span>
+  <button class="pagination-btn" id="nextPageBtn" disabled>
+    Next <i class="ph ph-caret-right"></i>
+  </button>
+</div>
+
+<!-- Modal (Add/Edit) -->
+<div class="modal-overlay" id="priceModal">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <h2 id="modalTitle">Add Price Item</h2>
+      <button id="closeModalBtn">×</button>
+    </div>
+    <form id="priceForm">
+      <input type="hidden" id="editId" />
+      <div class="form-group">
+        <label for="category">Category *</label>
+        <select id="category" required>
+          <option value="">Select Category</option>
+          <option value="service">Service</option>
+          <option value="material">Material</option>
+          <option value="labor">Labor</option>
+          <option value="bike_model">Bike Model</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="name">Name *</label>
+        <input type="text" id="name" placeholder="e.g. Full Repaint" required />
+      </div>
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea id="description" rows="3" placeholder="Optional description"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="price">Price *</label>
+          <input type="number" id="price" step="0.01" placeholder="e.g. 2500000" required />
+        </div>
+        <div class="form-group">
+          <label for="unit">Unit</label>
+          <input type="text" id="unit" placeholder="e.g. per job, per liter, per hour" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="vehicleBrand">Vehicle Brand (optional)</label>
+          <input type="text" id="vehicleBrand" placeholder="e.g. Yamaha" />
+        </div>
+        <div class="form-group">
+          <label for="vehicleModel">Vehicle Model (optional)</label>
+          <input type="text" id="vehicleModel" placeholder="e.g. Mio Sporty" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="effectiveDate">Effective Date</label>
+        <input type="date" id="effectiveDate" />
+      </div>
+      <div class="form-group" style="display:flex;align-items:center;gap:0.75rem;">
+        <input type="checkbox" id="isActive" checked />
+        <label for="isActive" style="margin:0;">Active</label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+        <button type="submit" class="btn-primary" id="submitBtn">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='js/price_list.js') }}"></script>
+{% endblock %}

@@ -9,9 +9,11 @@ class ItemCreate(BaseModel):
     name: str
     category: str
     unit: str
+    current_stock: int
     cost_price: float = 0
     selling_price: Optional[float] = None
     min_stock_threshold: int = 0
+    
 
 
 class ItemUpdate(BaseModel):

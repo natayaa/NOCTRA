@@ -47,24 +47,25 @@ document.querySelectorAll(".sidebar-nav a").forEach((link) => {
 /* ==========================
    GLOBAL SEARCH
 ========================== */
+/*
 
-const searchInput = document.querySelector(".search-box input");
+// const searchInput = document.querySelector(".search-box input");
 
-if (searchInput) {
-  let debounceTimer;
+// if (searchInput) {
+//  let debounceTimer;
+//
+//  searchInput.addEventListener("keyup", (e) => {
+//    clearTimeout(debounceTimer);
 
-  searchInput.addEventListener("keyup", (e) => {
-    clearTimeout(debounceTimer);
-
-    debounceTimer = setTimeout(() => {
-      const query = e.target.value.trim();
-      if (query.length > 1) {
-        console.log("Searching:", query);
+//    debounceTimer = setTimeout(() => {
+//      const query = e.target.value.trim();
+//      if (query.length > 1) {
+//        console.log("Searching:", query);
         // TODO: hook into search API
-      }
-    }, 300);
-  });
-}
+//      }
+//    }, 300);
+//  });
+//}
 
 /* ==========================
    TOAST SYSTEM

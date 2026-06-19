@@ -23,11 +23,11 @@ class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=func.now()
+        server_default=func.now()  # Database sets this on INSERT
     )
-
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=func.now()
+        server_default=func.now(),  # Database sets this on INSERT
+        onupdate=func.now()         # Database updates this on UPDATE
     )

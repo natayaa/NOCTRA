@@ -35,3 +35,24 @@ class DashboardService:
         )
 
         return result.all()
+    
+    async def get_stock_alerts(self, db: AsyncSession):
+        items = await db.execute(
+            select(InventoryItems).where(
+                InventoryItems.current_stock <= InventoryItems.min_stock_threshold
+            )
+        )
+        items = items.scalars().all()
+        alerts = []
+        for item in items:
+            threshold = item.min_stock_threshold
+            critical = item.current_stock <= threshold // 2
+            alerts.append({
+                "id": str(item.id),
+                "name": item.name,
+                "category": item.category,
+                "current_stock": item.current_stock,
+                "min_stock_threshold": threshold,
+                "status": "critical" if critical else "low"
+            })
+        return alerts

@@ -1,8 +1,7 @@
+# models/inventory/inventory_items.py
 from sqlalchemy import String, Integer, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
-
 from database.base import Base, UUIDMixin, TimestampMixin
-
 
 class InventoryItems(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "tb_inventory_items"

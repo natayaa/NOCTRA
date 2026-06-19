@@ -14,6 +14,7 @@
       href="https://cdn.jsdelivr.net/npm/remixicon@4.6.0/fonts/remixicon.css"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" />
     <link rel="stylesheet" href="{{ url_for('static', path='css/base.css') }}" />
     {% block extra_css %}{% endblock %}
   </head>
@@ -45,7 +46,7 @@
           </a>
           <a href="/management/inquiries">
             <i class="ri-question-answer-line"></i>
-            Inquiries
+            Inquiries & Invoicing
           </a>
           <a href="/management/budgeting">
             <i class="ri-wallet-3-line"></i>
@@ -63,13 +64,13 @@
             <i class="ri-group-line"></i>
             Customers
           </a>
-          <a href="/management/quotations">
+          <a href="/management/price-list">
             <i class="ri-file-list-3-line"></i>
-            Quotation
+            Price lists
           </a>
           <a href="/management/invoices">
             <i class="ri-bill-line"></i>
-            Invoices
+            Operationals
           </a>
           <a href="/management/calendars">
             <i class="ri-calendar-line"></i>
@@ -111,10 +112,10 @@
           </div>
 
           <div class="topbar-actions">
-            <div class="search-box">
+            <!--div class="search-box">
               <i class="ri-search-line"></i>
               <input type="text" placeholder="Search..." />
-            </div>
+            </div-->
 
             <button class="notification-btn" aria-label="Notifications">
               <i class="ri-notification-3-line"></i>

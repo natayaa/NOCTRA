@@ -3,351 +3,230 @@
 {% block title %}Inquiries | NOCTRA{% endblock %}
 
 {% block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('static', path='css/inquiries.css') }}"
-/>
+<link rel="stylesheet" href="{{ url_for('static', path='css/inquiries.css') }}" />
 {% endblock %}
 
 {% block page_title %}Customer Inquiries{% endblock %}
-{% block page_subtitle %}Manage incoming customer requests and convert them into projects{% endblock %}
+{% block page_subtitle %}Manage incoming requests and convert them to projects{% endblock %}
 
 {% block content %}
 
-<!-- OVERVIEW -->
-
-<div class="inquiry-overview">
-
+<!-- DASHBOARD -->
+<div class="inquiry-dashboard">
   <div class="overview-card">
-    <span>Total Inquiries</span>
-    <h2>48</h2>
+    <div class="overview-icon"><i class="ph ph-file-text"></i></div>
+    <div>
+      <span>Total Inquiries</span>
+      <h2 id="totalCount">0</h2>
+      <small>All time</small>
+    </div>
   </div>
-
   <div class="overview-card">
-    <span>New Requests</span>
-    <h2>12</h2>
+    <div class="overview-icon"><i class="ph ph-newspaper"></i></div>
+    <div>
+      <span>New Requests</span>
+      <h2 id="newCount">0</h2>
+      <small>Awaiting review</small>
+    </div>
   </div>
-
   <div class="overview-card">
-    <span>Quoted</span>
-    <h2>18</h2>
+    <div class="overview-icon"><i class="ph ph-file-text"></i></div>
+    <div>
+      <span>Quoted</span>
+      <h2 id="quotedCount">0</h2>
+      <small>Awaiting approval</small>
+    </div>
   </div>
-
   <div class="overview-card">
-    <span>Converted</span>
-    <h2>9</h2>
+    <div class="overview-icon"><i class="ph ph-check-circle"></i></div>
+    <div>
+      <span>Converted</span>
+      <h2 id="convertedCount">0</h2>
+      <small>Became projects</small>
+    </div>
   </div>
-
 </div>
 
-<!-- MAIN -->
-
-<div class="inquiries-layout">
-
-  <!-- SIDEBAR -->
-
-  <aside class="inquiry-list-panel">
-
-    <div class="panel-header">
-
-      <div>
-        <h3>Inquiries</h3>
-        <span>Incoming customer requests</span>
-      </div>
-
+<!-- TOOLBAR -->
+<section class="inquiries-toolbar glass">
+  <div class="toolbar-left">
+    <div class="search-box">
+      <i class="ph ph-magnifying-glass"></i>
+      <input type="search" id="searchInquiry" placeholder="Search customer, vehicle, or phone..." />
     </div>
+    <select id="statusFilter">
+      <option value="">All Status</option>
+      <option value="new">New</option>
+      <option value="quoted">Quoted</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+      <option value="converted">Converted</option>
+      <option value="completed">Completed</option>
+    </select>
+  </div>
+  <div class="toolbar-right">
+    <button class="btn-secondary" id="exportInquiriesBtn"><i class="ph ph-file-arrow-down"></i> Export</button>
+  </div>
+</section>
 
-    <div class="panel-filters">
+<!-- TABLE -->
+<section class="table-wrapper">
+  <div class="table-container">
+    <table id="inquiriesTable">
+      <thead>
+        <tr>
+          <th>Customer</th>
+          <th>Vehicle</th>
+          <th>Project Type</th>
+          <th>Status</th>
+          <th>Project Status</th>
+          <th>Created</th>
+          <th style="text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="inquiriesBody">
+        <tr><td colspan="6" class="loading-placeholder">Loading inquiries...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
 
-      <input
-        type="search"
-        id="searchInquiry"
-        placeholder="Search customer..."
-      />
-
-      <select id="statusFilter">
-        <option>All Status</option>
-        <option>New</option>
-        <option>Quoted</option>
-        <option>Approved</option>
-        <option>Rejected</option>
-      </select>
-
+<!-- DRAWER -->
+<aside class="drawer" id="inquiryDrawer">
+  <div class="drawer-header">
+    <div>
+      <h2 id="drawerCustomerName">Customer Name</h2>
+      <span id="drawerStatusBadge" class="status-badge">New</span>
     </div>
+    <button id="closeDrawer">×</button>
+  </div>
 
-    <div class="inquiry-list" id="inquiryList">
-
-      <!-- ITEM -->
-
-      <div
-        class="inquiry-card active"
-
-        data-customer="Ivan"
-        data-motorbike="Yamaha Mio Sporty"
-        data-service="Full Restoration"
-        data-budget="7500000"
-        data-phone="08123456789"
-        data-status="New"
-      >
-
-        <div class="inquiry-card-top">
-          <h4>Ivan</h4>
-
-          <span class="badge new">
-            NEW
-          </span>
-        </div>
-
-        <p>Yamaha Mio Sporty</p>
-
-        <small>
-          Full Restoration
-        </small>
-
-      </div>
-
-      <div
-        class="inquiry-card"
-
-        data-customer="Dimas"
-        data-motorbike="Yamaha Vixion"
-        data-service="Custom Paint"
-        data-budget="4500000"
-        data-phone="081298765432"
-        data-status="Quoted"
-      >
-
-        <div class="inquiry-card-top">
-          <h4>Dimas</h4>
-
-          <span class="badge quoted">
-            QUOTED
-          </span>
-        </div>
-
-        <p>Yamaha Vixion</p>
-
-        <small>
-          Custom Paint
-        </small>
-
-      </div>
-
-    </div>
-
-  </aside>
-
-  <!-- DETAIL -->
-
-  <section class="inquiry-detail-panel">
-
-    <div class="detail-header">
-
-      <div>
-        <h2 id="customerName">
-          Ivan
-        </h2>
-
-        <span id="inquiryStatus">
-          New Inquiry
-        </span>
-      </div>
-
-      <div class="detail-actions-top">
-
-        <button
-          class="btn-primary"
-          id="createProjectBtn"
-        >
-          Create Project
-        </button>
-
-      </div>
-
-    </div>
-
-    <!-- CUSTOMER -->
-
-    <div class="detail-card">
-
-      <div class="card-header">
-        <h3>Customer Information</h3>
-      </div>
-
+  <div class="drawer-content">
+    <!-- Customer Info -->
+    <section class="detail-card">
+      <h3>Customer</h3>
       <div class="detail-grid">
-
-        <div class="detail-item">
-          <label>Customer Name</label>
-          <p id="customerNameDetail">
-            Ivan
-          </p>
-        </div>
-
-        <div class="detail-item">
-          <label>Phone Number</label>
-          <p id="phone">
-            08123456789
-          </p>
-        </div>
-
+        <div class="detail-item"><label>Name</label><p id="drawerName">-</p></div>
+        <div class="detail-item"><label>Phone</label><p id="drawerPhone">-</p></div>
+        <div class="detail-item"><label>Email</label><p id="drawerEmail">-</p></div>
       </div>
+    </section>
 
-    </div>
-
-    <!-- PROJECT -->
-
-    <div class="detail-card">
-
-      <div class="card-header">
-        <h3>Project Request</h3>
-      </div>
-
+    <!-- Vehicle & Project -->
+    <section class="detail-card">
+      <h3>Vehicle & Project</h3>
       <div class="detail-grid">
-
-        <div class="detail-item">
-          <label>Vehicle</label>
-
-          <p id="motorbikeName">
-            Yamaha Mio Sporty
-          </p>
-        </div>
-
-        <div class="detail-item">
-          <label>Requested Service</label>
-
-          <p id="serviceName">
-            Full Restoration
-          </p>
-        </div>
-
-        <div class="detail-item">
-          <label>Estimated Budget</label>
-
-          <p id="budget">
-            Rp 7.500.000
-          </p>
-        </div>
-
-        <div class="detail-item">
-          <label>Expected Timeline</label>
-
-          <p>
-            30 - 45 Days
-          </p>
-        </div>
-
+        <div class="detail-item"><label>Brand</label><p id="drawerBrand">-</p></div>
+        <div class="detail-item"><label>Model</label><p id="drawerModel">-</p></div>
+        <div class="detail-item"><label>License Plate</label><p id="drawerPlate">-</p></div>
+        <div class="detail-item"><label>Condition</label><p id="drawerCondition">-</p></div>
+        <div class="detail-item"><label>Project Type</label><p id="drawerType">-</p></div>
+        <div class="detail-item"><label>Estimated Budget</label><p id="drawerBudget">-</p></div>
+        <div class="detail-item"><label>Target</label><p id="drawerTarget">-</p></div>
+        <div class="detail-item"><label>Project Status</label><p id="drawerProjectStatus">-</p></div>
       </div>
+    </section>
+    
 
-    </div>
-
-    <!-- REQUEST DETAILS -->
-
-    <div class="detail-card">
-
-      <div class="card-header">
-        <h3>Customer Requirements</h3>
+    <!-- Description & Reference -->
+    <section class="detail-card">
+      <h3>Requirements</h3>
+      <div class="request-box" id="drawerDescription">No description provided.</div>
+      <div style="margin-top: 12px;">
+        <a href="#" id="drawerReference" target="_blank" style="display:none;">🔗 View Reference Link</a>
       </div>
+    </section>
 
-      <div class="request-box">
+    <!-- Photos -->
+    <section class="detail-card" id="drawerPhotosSection" style="display:none;">
+      <h3>Photos</h3>
+      <div class="photo-grid" id="drawerPhotos"></div>
+    </section>
 
-        Customer wants a complete restoration with
-        repaint, engine overhaul, wheel restoration,
-        and wiring inspection.
-
+    <!-- Timeline -->
+    <section class="detail-card">
+      <h3>Activity Timeline</h3>
+      <div class="timeline" id="drawerTimeline">
+        <div class="timeline-item"><span>—</span><p>No activity yet</p></div>
       </div>
+    </section>
 
-    </div>
-
-    <!-- ACTIONS -->
-
-    <div class="detail-card">
-
-      <div class="card-header">
-        <h3>Actions</h3>
+    <!-- Notes -->
+    <section class="detail-card">
+      <h3>Internal Notes</h3>
+      <textarea id="drawerNotes" rows="5" placeholder="Add internal notes…"></textarea>
+      <div style="text-align:right; font-size:0.8rem; color:var(--muted); margin-top:4px;">
+        <span id="noteCounter">0</span> / 500
       </div>
+    </section>
 
+    <!-- Actions -->
+    <section class="detail-card">
+      <h3>Actions</h3>
       <div class="action-section">
-
-        <button
-          class="btn-success"
-          id="approveBtn"
-        >
-          Approve
-        </button>
-
-        <button
-          class="btn-primary"
-          id="quoteBtn"
-        >
-          Send Quote
-        </button>
-
-        <button
-          class="btn-danger"
-          id="rejectBtn"
-        >
-          Reject
-        </button>
-
-        <button
-          class="btn-secondary"
-          id="whatsappBtn"
-        >
-          WhatsApp Customer
-        </button>
-
+        <button class="btn-success" id="drawerApproveBtn">Approve</button>
+        <button class="btn-primary" id="drawerQuoteBtn">Send Quote</button>
+        <button class="btn-danger" id="drawerRejectBtn">Reject</button>
+        <button class="btn-secondary" id="drawerWhatsappBtn">WhatsApp</button>
+        <button class="btn-primary" id="drawerConvertBtn">Convert to Project</button>
+        <a href="#" id="drawerViewProjectBtn" class="btn-secondary" style="display:none;">View Project</a>
       </div>
+    </section>
+  </div>
+</aside>
 
+<!-- MODAL: Send Quotation -->
+<div class="modal-overlay" id="quoteModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div>
+        <h2>Send Quotation</h2>
+        <p>Enter estimated cost and revenue</p>
+      </div>
+      <button id="closeQuoteModal">×</button>
     </div>
-
-    <!-- INTERNAL NOTES -->
-
-    <div class="detail-card">
-
-      <div class="card-header">
-        <h3>Internal Notes</h3>
+    <form id="quoteForm">
+      <div class="form-group">
+        <label for="quoteCost">Estimated Cost (Rp)</label>
+        <input type="number" id="quoteCost" step="0.01" required />
       </div>
-
-      <textarea
-        id="customerNotes"
-        rows="8"
-        placeholder="Write internal notes, customer preferences, follow-up information, quotation details, etc..."
-      ></textarea>
-
-    </div>
-
-    <!-- TIMELINE -->
-
-    <div class="detail-card">
-
-      <div class="card-header">
-        <h3>Activity Timeline</h3>
+      <div class="form-group">
+        <label for="quoteRevenue">Estimated Revenue (Rp)</label>
+        <input type="number" id="quoteRevenue" step="0.01" required />
       </div>
-
-      <div class="timeline">
-
-        <div class="timeline-item">
-          <span>08:15</span>
-          <p>Inquiry submitted</p>
-        </div>
-
-        <div class="timeline-item">
-          <span>08:30</span>
-          <p>Customer contacted via WhatsApp</p>
-        </div>
-
-        <div class="timeline-item">
-          <span>09:00</span>
-          <p>Waiting for quotation approval</p>
-        </div>
-
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelQuoteBtn">Cancel</button>
+        <button type="submit" class="btn-primary">Send Quote</button>
       </div>
-
-    </div>
-
-  </section>
-
+    </form>
+  </div>
 </div>
+
+<!-- MODAL: Reject -->
+<div class="modal-overlay" id="rejectModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div>
+        <h2>Reject Inquiry</h2>
+        <p>Provide a reason (optional)</p>
+      </div>
+      <button id="closeRejectModal">×</button>
+    </div>
+    <form id="rejectForm">
+      <div class="form-group">
+        <label for="rejectReason">Reason</label>
+        <textarea id="rejectReason" rows="4" placeholder="Why is this inquiry being rejected?"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelRejectBtn">Cancel</button>
+        <button type="submit" class="btn-danger">Reject</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- TOAST container (used by JS) -->
+<div id="toastContainer"></div>
 
 {% endblock %}
 

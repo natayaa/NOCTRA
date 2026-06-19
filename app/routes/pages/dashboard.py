@@ -122,3 +122,7 @@ async def get_invoices(request: Request):
         context={},
         status_code=status.HTTP_200_OK
     )
+    
+@dashboard.get("/price-list")
+async def price_list_page(request: Request):
+    return template.TemplateResponse(request=request, name="price_list.html")

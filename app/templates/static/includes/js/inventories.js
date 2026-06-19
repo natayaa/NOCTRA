@@ -1,599 +1,704 @@
-// ==========================================================
-// NOCTRA INVENTORY MANAGEMENT
-// ==========================================================
+/* =========================================================
+   inventories.js – Full Inventory Management with Project Integration
+   ========================================================= */
 
+// ---------------------------------------------------------
+// State
+// ---------------------------------------------------------
+let inventoryData = [];
 let selectedInventoryId = null;
+let isSubmitting = false;
 
-const inventoryData = [
-    {
-        id: 1,
-        name: "Epoxy Primer",
-        category: "Paint",
-        stock: 4,
-        unit: "Liter",
-        cost: 200000,
-        reorderLevel: 10,
-        supplier: "CV Sinar Paint",
-        icon: "fa-paint-roller"
-    },
-    {
-        id: 2,
-        name: "Clear Coat Premium",
-        category: "Paint",
-        stock: 8,
-        unit: "Liter",
-        cost: 350000,
-        reorderLevel: 10,
-        supplier: "PT Auto Color",
-        icon: "fa-spray-can"
-    },
-    {
-        id: 3,
-        name: "Sandpaper P800",
-        category: "Consumable",
-        stock: 50,
-        unit: "PCS",
-        cost: 3500,
-        reorderLevel: 20,
-        supplier: "Sinar Abrasive",
-        icon: "fa-layer-group"
-    },
-    {
-        id: 4,
-        name: "Body Filler",
-        category: "Consumable",
-        stock: 12,
-        unit: "KG",
-        cost: 85000,
-        reorderLevel: 5,
-        supplier: "Putty Indonesia",
-        icon: "fa-toolbox"
-    }
-];
+// ---------------------------------------------------------
+// DOM Refs
+// ---------------------------------------------------------
+const tbody = document.getElementById('inventoryItemsList');
+const searchInput = document.getElementById('searchInventory');
+const categoryFilter = document.getElementById('categoryFilter');
+const stockFilter = document.getElementById('stockFilter');
+const totalValueEl = document.getElementById('totalValue');
+const totalItemsEl = document.getElementById('totalItems');
+const lowStockCountEl = document.getElementById('lowStockCount');
 
-// ==========================================================
-// UTILITIES
-// ==========================================================
+// Modal refs
+const modal = document.getElementById('inventoryModal');
+const modalTitle = document.getElementById('modalTitle');
+const editId = document.getElementById('editId');
+const itemName = document.getElementById('itemName');
+const itemCategory = document.getElementById('itemCategory');
+const itemStock = document.getElementById('itemStock');
+const itemUnit = document.getElementById('itemUnit');
+const itemCost = document.getElementById('itemCost');
+const reorderLevel = document.getElementById('reorderLevel');
+const itemSupplier = document.getElementById('itemSupplier');
+const inventoryForm = document.getElementById('inventoryForm');
 
+// Detail panel refs
+const detailContent = document.getElementById('itemDetailContent');
+const editItemBtn = document.getElementById('editItemBtn');
+const deleteItemBtn = document.getElementById('deleteItemBtn');
+const detailActionsBottom = document.getElementById('detailActionsBottom');
+const reorderBtn = document.getElementById('reorderBtn');
+const historyBtn = document.getElementById('historyBtn');
+
+// ---------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------
 function formatCurrency(value) {
-    return new Intl.NumberFormat("id-ID", {
-        style: "currency",
-        currency: "IDR",
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
         maximumFractionDigits: 0
-    }).format(value);
+    }).format(value || 0);
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
 }
 
 function getStockStatus(item) {
-
-    const criticalLevel = Math.floor(item.reorderLevel / 2);
-
-    if (item.stock <= criticalLevel) {
-        return {
-            label: "Critical",
-            className: "status-critical"
-        };
+    const threshold = item.min_stock_threshold || 0;
+    const criticalLevel = Math.floor(threshold / 2);
+    if (item.current_stock <= criticalLevel && threshold > 0) {
+        return { label: 'Critical', className: 'status-critical' };
     }
-
-    if (item.stock <= item.reorderLevel) {
-        return {
-            label: "Low Stock",
-            className: "status-low"
-        };
+    if (item.current_stock <= threshold && threshold > 0) {
+        return { label: 'Low Stock', className: 'status-low' };
     }
-
-    return {
-        label: "Normal",
-        className: "status-normal"
-    };
+    return { label: 'Normal', className: 'status-normal' };
 }
 
-// ==========================================================
-// TABLE RENDER
-// ==========================================================
-
-function renderInventoryTable(items = inventoryData) {
-
-    const tbody =
-        document.getElementById("inventoryItemsList");
-
-    if (!tbody) return;
-
-    tbody.innerHTML = "";
-
-    items.forEach(item => {
-
-        const status = getStockStatus(item);
-        const totalValue = item.stock * item.cost;
-
-        const row = document.createElement("tr");
-
-        row.innerHTML = `
-            <td>
-                <strong>${item.name}</strong>
-            </td>
-
-            <td>${item.category}</td>
-
-            <td>${item.stock}</td>
-
-            <td>${item.unit}</td>
-
-            <td>
-                <span class="${status.className}">
-                    ${status.label}
-                </span>
-            </td>
-
-            <td>
-                ${formatCurrency(totalValue)}
-            </td>
-
-            <td>
-                <button
-                    class="table-view-btn"
-                    data-id="${item.id}"
-                >
-                    <i class="fas fa-eye"></i>
-                </button>
-            </td>
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) {
+        // Create container if it doesn't exist
+        const newContainer = document.createElement('div');
+        newContainer.id = 'toastContainer';
+        newContainer.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-width: 400px;
         `;
+        document.body.appendChild(newContainer);
+        return showToast(message, type);
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.style.cssText = `
+        padding: 12px 18px;
+        border-radius: 12px;
+        background: ${type === 'error' ? '#7f1d1d' : '#111827'};
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        transform: translateX(100%);
+        opacity: 0;
+        transition: all 0.3s ease;
+    `;
+    toast.textContent = message;
+    container.appendChild(toast);
 
-        tbody.appendChild(row);
+    // Trigger animation
+    requestAnimationFrame(() => {
+        toast.style.transform = 'translateX(0)';
+        toast.style.opacity = '1';
     });
 
-    document
-        .querySelectorAll(".table-view-btn")
-        .forEach(button => {
-
-            button.addEventListener("click", () => {
-                const id =
-                    Number(button.dataset.id);
-
-                showItemDetails(id);
-            });
-
-        });
+    setTimeout(() => {
+        toast.style.transform = 'translateX(100%)';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
-// ==========================================================
-// DETAILS
-// ==========================================================
+// ---------------------------------------------------------
+// API Helpers
+// ---------------------------------------------------------
+async function fetchJSON(url, options = {}) {
+    const res = await fetch(url, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || res.statusText);
+    }
+    return res.json();
+}
 
+// ---------------------------------------------------------
+// Load Data
+// ---------------------------------------------------------
+async function loadInventoryItems() {
+    try {
+        const data = await fetchJSON('/api/inventory/');
+        inventoryData = data.data || [];
+        renderTable(inventoryData);
+        applyFilters();
+    } catch (err) {
+        console.error('Failed to load inventory:', err);
+        showToast('Error loading inventory', 'error');
+        tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Error loading inventory</td></tr>`;
+    }
+}
+
+async function loadDashboardStats() {
+    try {
+        const [kpis, usage, alerts] = await Promise.all([
+            fetchJSON('/api/inventory/dashboard/kpis'),
+            fetchJSON('/api/inventory/dashboard/monthly-usage'),
+            fetchJSON('/api/inventory/alerts')
+        ]);
+
+        if (kpis.data) {
+            totalValueEl.textContent = formatCurrency(kpis.data.total_value || 0);
+            totalItemsEl.textContent = kpis.data.total_skus || 0;
+            lowStockCountEl.textContent = kpis.data.low_stock_count || 0;
+        }
+
+        if (usage.data) {
+            const usageEl = document.querySelector('.overview-card.usage h2');
+            if (usageEl) usageEl.textContent = formatCurrency(usage.data.monthly_usage || 0);
+        }
+
+        if (alerts.data) {
+            renderAlerts(alerts.data);
+        }
+    } catch (err) {
+        console.error('Failed to load dashboard stats:', err);
+    }
+}
+
+async function loadRecentMovements() {
+    try {
+        const data = await fetchJSON('/api/inventory/movement/recent');
+        const container = document.querySelector('.movement-list');
+        if (!container) return;
+        container.innerHTML = '';
+        if (!data.data || data.data.length === 0) {
+            container.innerHTML = '<div style="color:var(--gray-500);font-size:0.85rem;">No recent movements</div>';
+            return;
+        }
+        data.data.slice(0, 5).forEach(move => {
+            const div = document.createElement('div');
+            div.className = `movement-item ${move.type === 'in' ? 'stock-in' : 'stock-out'}`;
+            const icon = move.type === 'in' ? 'fa-arrow-down' : 'fa-arrow-up';
+            div.innerHTML = `
+                <i class="fas ${icon}"></i>
+                <div>
+                    <strong>${move.type === 'in' ? '+' : '-'}${move.quantity}</strong>
+                    <small>${escapeHtml(move.item_name || 'Unknown')}</small>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    } catch (err) {
+        console.error('Failed to load movements:', err);
+    }
+}
+
+// ---------------------------------------------------------
+// Render Table
+// ---------------------------------------------------------
+function renderTable(items) {
+    if (!tbody) return;
+    if (!items || items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">No inventory items found</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = items.map(item => {
+        const status = getStockStatus(item);
+        const totalValue = item.current_stock * item.cost_price;
+        return `
+            <tr data-id="${item.id}">
+                <td><strong>${escapeHtml(item.name)}</strong></td>
+                <td>${escapeHtml(item.category)}</td>
+                <td>${item.current_stock}</td>
+                <td>${escapeHtml(item.unit)}</td>
+                <td><span class="${status.className}">${status.label}</span></td>
+                <td>${formatCurrency(totalValue)}</td>
+                <td>
+                    <button class="table-view-btn" data-id="${item.id}" title="View Details">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // Attach view button events
+    document.querySelectorAll('.table-view-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.id;
+            showItemDetails(id);
+        });
+    });
+
+    // Click row to view details
+    tbody.querySelectorAll('tr').forEach(row => {
+        row.addEventListener('click', () => {
+            const id = row.dataset.id;
+            if (id) showItemDetails(id);
+        });
+    });
+}
+
+// ---------------------------------------------------------
+// Render Alerts
+// ---------------------------------------------------------
+function renderAlerts(alerts) {
+    const container = document.querySelector('.alert-list');
+    if (!container) return;
+    if (!alerts || alerts.length === 0) {
+        container.innerHTML = '<div class="alert-item" style="color:var(--gray-500);">✅ All items are well stocked</div>';
+        return;
+    }
+    container.innerHTML = alerts.map(alert => `
+        <div class="alert-item ${alert.status === 'critical' ? 'critical' : 'warning'}">
+            <div>
+                <strong>${escapeHtml(alert.name)}</strong>
+                <span>${escapeHtml(alert.category)} • Stock: ${alert.current_stock}</span>
+            </div>
+            <span class="alert-badge">${alert.status === 'critical' ? 'Critical' : 'Low Stock'}</span>
+        </div>
+    `).join('');
+}
+
+// ---------------------------------------------------------
+// Filters
+// ---------------------------------------------------------
+function applyFilters() {
+    const keyword = searchInput?.value.toLowerCase().trim() || '';
+    const category = categoryFilter?.value || '';
+    const stockStatus = stockFilter?.value || '';
+
+    let filtered = [...inventoryData];
+
+    if (keyword) {
+        filtered = filtered.filter(item =>
+            item.name.toLowerCase().includes(keyword) ||
+            item.category.toLowerCase().includes(keyword)
+        );
+    }
+    if (category) {
+        filtered = filtered.filter(item => item.category === category);
+    }
+    if (stockStatus) {
+        filtered = filtered.filter(item => {
+            const threshold = item.min_stock_threshold || 0;
+            const criticalLevel = Math.floor(threshold / 2);
+            if (stockStatus === 'critical') return item.current_stock <= criticalLevel && threshold > 0;
+            if (stockStatus === 'low') return item.current_stock <= threshold && item.current_stock > criticalLevel && threshold > 0;
+            if (stockStatus === 'normal') return item.current_stock > threshold || threshold === 0;
+            return true;
+        });
+    }
+    renderTable(filtered);
+}
+
+// ---------------------------------------------------------
+// Item Details
+// ---------------------------------------------------------
 function showItemDetails(id) {
-
-    const item =
-        inventoryData.find(x => x.id === id);
-
-    if (!item) return;
+    const item = inventoryData.find(x => x.id === id);
+    if (!item) {
+        showToast('Item not found', 'error');
+        return;
+    }
 
     selectedInventoryId = id;
-
-    const detailContent =
-        document.getElementById("itemDetailContent");
-
-    const totalValue =
-        item.stock * item.cost;
-
-    const status =
-        getStockStatus(item);
+    const status = getStockStatus(item);
+    const totalValue = item.current_stock * item.cost_price;
 
     detailContent.innerHTML = `
         <div class="detail-grid">
-
             <div class="detail-card">
                 <label>Item Name</label>
-                <strong>${item.name}</strong>
+                <strong>${escapeHtml(item.name)}</strong>
             </div>
-
             <div class="detail-card">
                 <label>Category</label>
-                <strong>${item.category}</strong>
+                <strong>${escapeHtml(item.category)}</strong>
             </div>
-
             <div class="detail-card">
                 <label>Current Stock</label>
-                <strong>${item.stock} ${item.unit}</strong>
+                <strong>${item.current_stock} ${escapeHtml(item.unit)}</strong>
             </div>
-
             <div class="detail-card">
                 <label>Reorder Level</label>
-                <strong>${item.reorderLevel}</strong>
+                <strong>${item.min_stock_threshold || 0}</strong>
             </div>
-
             <div class="detail-card">
                 <label>Unit Cost</label>
-                <strong>${formatCurrency(item.cost)}</strong>
+                <strong>${formatCurrency(item.cost_price)}</strong>
             </div>
-
             <div class="detail-card">
                 <label>Total Value</label>
                 <strong>${formatCurrency(totalValue)}</strong>
             </div>
-
             <div class="detail-card">
                 <label>Status</label>
                 <strong>${status.label}</strong>
             </div>
-
             <div class="detail-card">
-                <label>Supplier</label>
-                <strong>${item.supplier || "-"}</strong>
+                <label>Condition</label>
+                <strong>${item.status === 'active' ? 'Active' : 'Inactive'}</strong>
             </div>
-
+            <div class="detail-card" style="grid-column: span 2;">
+                <label>Supplier</label>
+                <strong>${escapeHtml(item.supplier || '—')}</strong>
+            </div>
         </div>
     `;
 
-    document.getElementById(
-        "detailActionsBottom"
-    ).style.display = "flex";
-
-    document.getElementById(
-        "editItemBtn"
-    ).style.display = "inline-flex";
-
-    document.getElementById(
-        "deleteItemBtn"
-    ).style.display = "inline-flex";
+    detailActionsBottom.style.display = 'flex';
+    editItemBtn.style.display = 'inline-flex';
+    deleteItemBtn.style.display = 'inline-flex';
 }
 
-// ==========================================================
-// STATS
-// ==========================================================
-
-function updateStats() {
-
-    const totalItems =
-        inventoryData.length;
-
-    const totalValue =
-        inventoryData.reduce(
-            (acc, item) =>
-                acc + (item.stock * item.cost),
-            0
-        );
-
-    const lowStockCount =
-        inventoryData.filter(
-            item => item.stock <= item.reorderLevel
-        ).length;
-
-    const totalValueEl =
-        document.getElementById("totalValue");
-
-    const totalItemsEl =
-        document.getElementById("totalItems");
-
-    const lowStockEl =
-        document.getElementById("lowStockCount");
-
-    if (totalValueEl)
-        totalValueEl.textContent =
-            formatCurrency(totalValue);
-
-    if (totalItemsEl)
-        totalItemsEl.textContent =
-            totalItems;
-
-    if (lowStockEl)
-        lowStockEl.textContent =
-            lowStockCount;
-}
-
-// ==========================================================
-// FILTERS
-// ==========================================================
-
-function applyFilters() {
-
-    const keyword =
-        document
-            .getElementById("searchInventory")
-            ?.value
-            ?.toLowerCase()
-            ?.trim() || "";
-
-    const category =
-        document
-            .getElementById("categoryFilter")
-            ?.value || "";
-
-    const stock =
-        document
-            .getElementById("stockFilter")
-            ?.value || "";
-
-    let filtered =
-        [...inventoryData];
-
-    if (keyword) {
-
-        filtered = filtered.filter(item =>
-            item.name.toLowerCase().includes(keyword) ||
-            item.category.toLowerCase().includes(keyword) ||
-            item.supplier.toLowerCase().includes(keyword)
-        );
+// ---------------------------------------------------------
+// Modal (Create / Edit)
+// ---------------------------------------------------------
+function openModal(editMode = false, item = null) {
+    if (!modal) return;
+    if (editMode && item) {
+        modalTitle.textContent = 'Edit Inventory Item';
+        editId.value = item.id;
+        itemName.value = item.name || '';
+        itemCategory.value = item.category || '';
+        itemStock.value = item.current_stock || 0;
+        itemUnit.value = item.unit || '';
+        itemCost.value = item.cost_price || 0;
+        reorderLevel.value = item.min_stock_threshold || 0;
+        itemSupplier.value = item.supplier || '';
+    } else {
+        modalTitle.textContent = 'Add Inventory Item';
+        inventoryForm.reset();
+        editId.value = '';
+        itemStock.value = 0;
+        reorderLevel.value = 5;
     }
-
-    if (category) {
-
-        filtered = filtered.filter(
-            item => item.category === category
-        );
-    }
-
-    if (stock) {
-
-        filtered = filtered.filter(item => {
-
-            const critical =
-                item.stock <=
-                Math.floor(item.reorderLevel / 2);
-
-            const low =
-                item.stock <= item.reorderLevel;
-
-            if (stock === "critical")
-                return critical;
-
-            if (stock === "low")
-                return low && !critical;
-
-            if (stock === "normal")
-                return !low;
-
-            return true;
-        });
-    }
-
-    renderInventoryTable(filtered);
-}
-
-// ==========================================================
-// MODAL
-// ==========================================================
-
-function openModal() {
-
-    const modal =
-        document.getElementById(
-            "inventoryModal"
-        );
-
-    if (modal)
-        modal.classList.add("active");
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
 }
 
 function closeModal() {
-
-    const modal =
-        document.getElementById(
-            "inventoryModal"
-        );
-
-    if (modal)
-        modal.classList.remove("active");
+    if (!modal) return;
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
 }
 
-// ==========================================================
-// FORM SUBMIT
-// ==========================================================
+// ---------------------------------------------------------
+// Form Submit (Create / Update)
+// ---------------------------------------------------------
+async function handleInventorySubmit(e) {
+    e.preventDefault();
+    if (isSubmitting) return;
+    isSubmitting = true;
 
-function handleInventorySubmit(event) {
-
-    event.preventDefault();
-
-    const item = {
-        id: Date.now(),
-
-        name:
-            document.getElementById(
-                "itemName"
-            ).value,
-
-        category:
-            document.getElementById(
-                "itemCategory"
-            ).value,
-
-        stock:
-            Number(
-                document.getElementById(
-                    "itemStock"
-                ).value
-            ),
-
-        unit:
-            document.getElementById(
-                "itemUnit"
-            ).value,
-
-        cost:
-            Number(
-                document.getElementById(
-                    "itemCost"
-                ).value
-            ),
-
-        reorderLevel:
-            Number(
-                document.getElementById(
-                    "reorderLevel"
-                ).value
-            ),
-
-        supplier:
-            document.getElementById(
-                "itemSupplier"
-            ).value
+    const id = editId.value;
+    const payload = {
+        name: itemName.value.trim(),
+        category: itemCategory.value,
+        unit: itemUnit.value,
+        current_stock: parseInt(itemStock.value) || 0,
+        cost_price: parseFloat(itemCost.value) || 0,
+        min_stock_threshold: parseInt(reorderLevel.value) || 0,
+        supplier: itemSupplier.value.trim() || null
     };
 
-    inventoryData.push(item);
-
-    renderInventoryTable();
-    updateStats();
-
-    event.target.reset();
-
-    closeModal();
-
-    showToast(
-        "Inventory item added successfully",
-        "success"
-    );
-}
-
-// ==========================================================
-// DELETE
-// ==========================================================
-
-function deleteSelectedItem() {
-
-    if (!selectedInventoryId)
-        return;
-
-    const index =
-        inventoryData.findIndex(
-            x => x.id === selectedInventoryId
-        );
-
-    if (index === -1)
-        return;
-
-    const confirmed =
-        confirm(
-            "Delete selected inventory item?"
-        );
-
-    if (!confirmed)
-        return;
-
-    inventoryData.splice(index, 1);
-
-    renderInventoryTable();
-    updateStats();
-
-    document.getElementById(
-        "itemDetailContent"
-    ).innerHTML = `
-        <div class="empty-state">
-            <i class="fas fa-box-open"></i>
-            <h4>No Item Selected</h4>
-            <p>Select an inventory item to view details.</p>
-        </div>
-    `;
-
-    selectedInventoryId = null;
-
-    showToast(
-        "Item deleted successfully",
-        "success"
-    );
-}
-
-// ==========================================================
-// TOAST
-// ==========================================================
-
-function showToast(message, type = "success") {
-
-    const container =
-        document.getElementById(
-            "toastContainer"
-        );
-
-    if (!container)
-        return;
-
-    const toast =
-        document.createElement("div");
-
-    toast.className =
-        `toast ${type}`;
-
-    toast.innerHTML = `
-        <span>${message}</span>
-    `;
-
-    container.appendChild(toast);
-
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
-}
-
-// ==========================================================
-// EVENT BINDING
-// ==========================================================
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-
-        renderInventoryTable();
-        updateStats();
-
-        document
-            .getElementById("searchInventory")
-            ?.addEventListener(
-                "input",
-                applyFilters
-            );
-
-        document
-            .getElementById("categoryFilter")
-            ?.addEventListener(
-                "change",
-                applyFilters
-            );
-
-        document
-            .getElementById("stockFilter")
-            ?.addEventListener(
-                "change",
-                applyFilters
-            );
-
-        document
-            .getElementById("addItemBtn")
-            ?.addEventListener(
-                "click",
-                openModal
-            );
-
-        document
-            .getElementById(
-                "closeInventoryModal"
-            )
-            ?.addEventListener(
-                "click",
-                closeModal
-            );
-
-        document
-            .getElementById(
-                "cancelModalBtn"
-            )
-            ?.addEventListener(
-                "click",
-                closeModal
-            );
-
-        document
-            .getElementById(
-                "inventoryForm"
-            )
-            ?.addEventListener(
-                "submit",
-                handleInventorySubmit
-            );
-
-        document
-            .getElementById(
-                "deleteItemBtn"
-            )
-            ?.addEventListener(
-                "click",
-                deleteSelectedItem
-            );
+    try {
+        let url = '/api/inventory/';
+        let method = 'POST';
+        if (id) {
+            url = `/api/inventory/${id}`;
+            method = 'PUT';
+        }
+        await fetchJSON(url, { method, body: JSON.stringify(payload) });
+        showToast(id ? 'Item updated' : 'Item added');
+        closeModal();
+        await loadInventoryItems();
+        await loadDashboardStats();
+        if (id && selectedInventoryId === id) {
+            showItemDetails(id);
+        }
+    } catch (err) {
+        console.error(err);
+        showToast(err.message || 'Save failed', 'error');
+    } finally {
+        isSubmitting = false;
     }
-);
+}
+
+// ---------------------------------------------------------
+// Delete Item
+// ---------------------------------------------------------
+async function deleteSelectedItem() {
+    if (!selectedInventoryId) return;
+    if (!confirm('Delete this inventory item permanently?')) return;
+
+    try {
+        await fetchJSON(`/api/inventory/${selectedInventoryId}`, { method: 'DELETE' });
+        showToast('Item deleted');
+        await loadInventoryItems();
+        await loadDashboardStats();
+        detailContent.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-box-open"></i>
+                <h4>No Item Selected</h4>
+                <p>Select an inventory item to view details.</p>
+            </div>
+        `;
+        detailActionsBottom.style.display = 'none';
+        editItemBtn.style.display = 'none';
+        deleteItemBtn.style.display = 'none';
+        selectedInventoryId = null;
+    } catch (err) {
+        console.error(err);
+        showToast('Delete failed', 'error');
+    }
+}
+
+// ---------------------------------------------------------
+// Edit Selected Item
+// ---------------------------------------------------------
+function editSelectedItem() {
+    if (!selectedInventoryId) return;
+    const item = inventoryData.find(x => x.id === selectedInventoryId);
+    if (item) openModal(true, item);
+}
+
+// ---------------------------------------------------------
+// Reorder / History (placeholder actions)
+// ---------------------------------------------------------
+function handleReorder() {
+    if (!selectedInventoryId) return;
+    const item = inventoryData.find(x => x.id === selectedInventoryId);
+    if (!item) return;
+    const qty = prompt(`Enter reorder quantity for "${item.name}":`, item.min_stock_threshold * 2 || 10);
+    if (qty === null) return;
+    const quantity = parseInt(qty);
+    if (isNaN(quantity) || quantity < 1) {
+        showToast('Invalid quantity', 'error');
+        return;
+    }
+    // TODO: Implement reorder logic (purchase order, stock in movement)
+    showToast(`Reorder for ${item.name}: ${quantity} ${item.unit} (feature coming soon)`);
+}
+
+function handleHistory() {
+    if (!selectedInventoryId) return;
+    const item = inventoryData.find(x => x.id === selectedInventoryId);
+    if (!item) return;
+    // TODO: Show movement history for this item
+    showToast(`History for ${item.name} (feature coming soon)`);
+}
+
+// ---------------------------------------------------------
+// Initialize Search & Filters
+// ---------------------------------------------------------
+function initializeFilters() {
+    searchInput?.addEventListener('input', applyFilters);
+    categoryFilter?.addEventListener('change', applyFilters);
+    stockFilter?.addEventListener('change', applyFilters);
+}
+
+// ---------------------------------------------------------
+// Initialize Modal Events
+// ---------------------------------------------------------
+function initializeModal() {
+    const closeBtn = document.getElementById('closeInventoryModal');
+    const cancelBtn = document.getElementById('cancelModalBtn');
+    const addBtn = document.getElementById('addItemBtn');
+
+    closeBtn?.addEventListener('click', closeModal);
+    cancelBtn?.addEventListener('click', closeModal);
+    modal?.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+    addBtn?.addEventListener('click', () => openModal(false));
+    inventoryForm?.addEventListener('submit', handleInventorySubmit);
+}
+
+// ---------------------------------------------------------
+// Initialize Detail Panel Actions
+// ---------------------------------------------------------
+function initializeDetailActions() {
+    editItemBtn?.addEventListener('click', editSelectedItem);
+    deleteItemBtn?.addEventListener('click', deleteSelectedItem);
+    reorderBtn?.addEventListener('click', handleReorder);
+    historyBtn?.addEventListener('click', handleHistory);
+}
+
+// ---------------------------------------------------------
+// Category Chips
+// ---------------------------------------------------------
+function initializeCategoryChips() {
+    document.querySelectorAll('.category-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            const category = chip.textContent.trim();
+            if (category === 'All') {
+                categoryFilter.value = '';
+            } else {
+                categoryFilter.value = category;
+            }
+            applyFilters();
+        });
+    });
+}
+
+// ---------------------------------------------------------
+// Toast Container
+// ---------------------------------------------------------
+function ensureToastContainer() {
+    if (!document.getElementById('toastContainer')) {
+        const container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.style.cssText = `
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-width: 400px;
+        `;
+        document.body.appendChild(container);
+    }
+}
+
+// ---------------------------------------------------------
+// CSS for Status Badges (inject if not present)
+// ---------------------------------------------------------
+function injectStatusStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .status-critical {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+        .status-low {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+        }
+        .status-normal {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+        }
+        .loading-placeholder {
+            text-align: center;
+            color: var(--gray-500);
+            padding: 2rem 0;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        .detail-card {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 0.75rem;
+            border-radius: 10px;
+            border: 1px solid var(--gray-200);
+        }
+        .detail-card label {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            margin-bottom: 0.25rem;
+        }
+        .detail-card strong {
+            color: var(--gray-800);
+        }
+        @media (max-width: 768px) {
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// ---------------------------------------------------------
+// Init
+// ---------------------------------------------------------
+async function init() {
+    ensureToastContainer();
+    injectStatusStyles();
+
+    // Load data
+    await loadInventoryItems();
+    await loadDashboardStats();
+    await loadRecentMovements();
+
+    // Initialize UI
+    initializeModal();
+    initializeFilters();
+    initializeDetailActions();
+    initializeCategoryChips();
+
+    // Show default empty state
+    if (!selectedInventoryId) {
+        detailContent.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-box-open"></i>
+                <h4>No Item Selected</h4>
+                <p>Select an inventory item to view detailed information.</p>
+            </div>
+        `;
+        detailActionsBottom.style.display = 'none';
+        editItemBtn.style.display = 'none';
+        deleteItemBtn.style.display = 'none';
+    }
+
+    // Auto-refresh every 60 seconds
+    setInterval(() => {
+        loadInventoryItems();
+        loadDashboardStats();
+        loadRecentMovements();
+    }, 60000);
+}
+
+// ---------------------------------------------------------
+// Start when DOM ready
+// ---------------------------------------------------------
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}

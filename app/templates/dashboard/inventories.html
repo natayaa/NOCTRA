@@ -343,13 +343,17 @@ page_subtitle %}Materials, Parts, Tools & Workshop Stock Control{% endblock %}
 
         <div class="form-group">
           <label>Unit</label>
-          <input
-            type="text"
-            id="itemUnit"
-            placeholder="Liter, PCS, Box"
-            required
-          />
-        </div>
+          <select id="itemUnit" required>
+              <option value="">Select Unit</option>
+              <option value="Liter">Liter</option>
+              <option value="PCS">PCS</option>
+              <option value="KG">KG</option>
+              <option value="Box">Box</option>
+              <option value="Roll">Roll</option>
+              <option value="Set">Set</option>
+              <option value="Unit">Unit</option>
+          </select>
+      </div>
 
         <div class="form-group">
           <label>Unit Cost (Rp)</label>

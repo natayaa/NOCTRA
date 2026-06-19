@@ -1,7 +1,7 @@
 # app/schemas/inventory/workshop_job.py
 from pydantic import BaseModel
 from typing import Optional
-
+from uuid import UUID
 
 class WorkshopJobCreate(BaseModel):
     unit_name: Optional[str] = None
@@ -10,8 +10,9 @@ class WorkshopJobCreate(BaseModel):
 
 
 class WorkshopJobResponse(BaseModel):
-    id: str
-    unit_name: Optional[str]
+    id: UUID
+    project_id: Optional[UUID] = None
+    unit_name: Optional[str] = None
     status: str
     estimated_cost: float
     actual_cost: float

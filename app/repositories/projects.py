@@ -3,6 +3,9 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.orm import selectinload
 
 from models.projects import Project
+from models.inventory_material_usage import JobMaterialUsage
+from models.inventory_workshop_jobs import WorkshopJob
+from models.customer_inquiry import CustomerInquiry
 
 
 class ProjectRepository:
@@ -17,13 +20,23 @@ class ProjectRepository:
         result = await db.execute(
             select(Project)
             .where(Project.id == project_id)
-            .options(selectinload(Project.tasks))  # penting untuk kanban
+            .options(
+                selectinload(Project.inquiry)
+                    .selectinload(CustomerInquiry.project),
+                selectinload(Project.tasks),
+                selectinload(Project.expenses),
+                selectinload(Project.labor_items),
+                selectinload(Project.workshop_job)
+                    .selectinload(WorkshopJob.material_usages)
+                    .selectinload(JobMaterialUsage.item)
+            )
         )
         return result.scalar_one_or_none()
 
     async def list(self, db: AsyncSession) -> list[Project]:
         result = await db.execute(
             select(Project)
+            .options(selectinload(Project.inquiry))  # ← Eager load
             .order_by(Project.created_at.desc())
         )
         return result.scalars().all()
