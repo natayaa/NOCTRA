@@ -1,192 +1,213 @@
-{% extends "base.html" %} 
-{% block title %}Analytics | NOCTRA{% endblock %} 
+{% extends "base.html" %}
+{% block title %}Analytics | NOCTRA{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', path='css/analytics.css') }}" />
-{% endblock %} 
-{% block page_title %}Analytics{% endblock %} 
-{% block page_subtitle %}Business Intelligence & Performance{% endblock %} 
+{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+{% block page_subtitle %}Business Intelligence &amp; Performance{% endblock %}
+
 {% block content %}
 
-<!-- TOOLBAR FILTER GLOBAL -->
-<div class="analytics-toolbar glass">
-  <div class="toolbar-left">
-    <div class="period-selector">
-      <label for="periodFilter">Period</label>
-      <select id="periodFilter">
-        <option value="today">Today</option>
-        <option value="week" selected>This Week</option>
-        <option value="month">This Month</option>
-        <option value="quarter">Last 3 Months</option>
-        <option value="year">This Year</option>
-      </select>
+<!-- ============================================================
+     TOOLBAR
+     ============================================================ -->
+<div class="analytics-toolbar glass" role="toolbar" aria-label="Analytics controls">
+    <div class="toolbar-left">
+        <div class="period-selector">
+            <label for="periodFilter">Period</label>
+            <select id="periodFilter" aria-label="Select time period">
+                <option value="today">Today</option>
+                <option value="week" selected>This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">Last 3 Months</option>
+                <option value="year">This Year</option>
+            </select>
+        </div>
+        <button class="btn-refresh" id="refreshAnalytics" aria-label="Refresh analytics data">
+            <i class="fas fa-sync" aria-hidden="true"></i> Refresh
+        </button>
     </div>
-    <button class="btn-refresh" id="refreshAnalytics">
-      <i class="fas fa-sync"></i> Refresh
-    </button>
-  </div>
-  <div class="toolbar-right">
-    <span class="last-updated" id="lastUpdated">Last updated: just now</span>
-  </div>
+    <div class="toolbar-right">
+        <span class="last-updated" id="lastUpdated">Last updated: just now</span>
+    </div>
 </div>
 
-<!-- INSIGHT CARDS -->
-<div class="insight-grid" id="insightGrid">
-  <div class="insight-card positive">
-    <div class="insight-icon"><i class="fas fa-arrow-up"></i></div>
-    <div class="insight-content">
-      <p>Revenue <strong>+18.2%</strong> vs last period</p>
+<!-- ============================================================
+     INSIGHT CARDS
+     ============================================================ -->
+<section aria-label="Key insights">
+    <div class="insight-grid" id="insightGrid">
+        <div class="insight-card positive">
+            <div class="insight-icon"><i class="fas fa-arrow-up" aria-hidden="true"></i></div>
+            <div class="insight-content">
+                <p>Revenue <strong>+18.2%</strong> vs last period</p>
+            </div>
+        </div>
+        <div class="insight-card warning">
+            <div class="insight-icon"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i></div>
+            <div class="insight-content">
+                <p>8 items <strong>low stock</strong> – reorder soon</p>
+            </div>
+        </div>
+        <div class="insight-card neutral">
+            <div class="insight-icon"><i class="fas fa-chart-pie" aria-hidden="true"></i></div>
+            <div class="insight-content">
+                <p>Top service: <strong>Full Restoration</strong> (38%)</p>
+            </div>
+        </div>
     </div>
-  </div>
-  <div class="insight-card warning">
-    <div class="insight-icon"><i class="fas fa-exclamation-triangle"></i></div>
-    <div class="insight-content">
-      <p>8 items <strong>low stock</strong> – reorder soon</p>
-    </div>
-  </div>
-  <div class="insight-card neutral">
-    <div class="insight-icon"><i class="fas fa-chart-pie"></i></div>
-    <div class="insight-content">
-      <p>Top service: <strong>Full Restoration</strong> (38%)</p>
-    </div>
-  </div>
-</div>
+</section>
 
-<!-- STATS GRID -->
-<div class="stats-grid" id="statsGrid">
-  <div class="stat-card" data-stat="revenue">
-    <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
-    <div class="stat-info">
-      <span>Total Revenue</span>
-      <h2 id="totalRevenue">Rp 0</h2>
-      <small class="stat-trend" id="revenueTrend">+0%</small>
+<!-- ============================================================
+     STATS GRID + SKELETON
+     ============================================================ -->
+<section aria-label="Key performance indicators">
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card" data-stat="revenue">
+            <div class="stat-icon"><i class="fas fa-chart-line" aria-hidden="true"></i></div>
+            <div class="stat-info">
+                <span>Total Revenue</span>
+                <h2 id="totalRevenue">Rp 0</h2>
+                <small class="stat-trend" id="revenueTrend">+0%</small>
+            </div>
+        </div>
+        <div class="stat-card" data-stat="profit">
+            <div class="stat-icon"><i class="fas fa-wallet" aria-hidden="true"></i></div>
+            <div class="stat-info">
+                <span>Net Profit</span>
+                <h2 id="netProfit">Rp 0</h2>
+                <small class="stat-trend" id="profitTrend">+0%</small>
+            </div>
+        </div>
+        <div class="stat-card" data-stat="conversion">
+            <div class="stat-icon"><i class="fas fa-percent" aria-hidden="true"></i></div>
+            <div class="stat-info">
+                <span>Conversion Rate</span>
+                <h2 id="conversionRate">0%</h2>
+                <small class="stat-trend" id="conversionTrend">+0%</small>
+            </div>
+        </div>
+        <div class="stat-card" data-stat="completed">
+            <div class="stat-icon"><i class="fas fa-check-circle" aria-hidden="true"></i></div>
+            <div class="stat-info">
+                <span>Projects Completed</span>
+                <h2 id="completedProjects">0</h2>
+                <small class="stat-trend" id="completedTrend">+0</small>
+            </div>
+        </div>
     </div>
-  </div>
-  <div class="stat-card" data-stat="profit">
-    <div class="stat-icon"><i class="fas fa-wallet"></i></div>
-    <div class="stat-info">
-      <span>Net Profit</span>
-      <h2 id="netProfit">Rp 0</h2>
-      <small class="stat-trend" id="profitTrend">+0%</small>
-    </div>
-  </div>
-  <div class="stat-card" data-stat="conversion">
-    <div class="stat-icon"><i class="fas fa-percent"></i></div>
-    <div class="stat-info">
-      <span>Conversion Rate</span>
-      <h2 id="conversionRate">0%</h2>
-      <small class="stat-trend" id="conversionTrend">+0%</small>
-    </div>
-  </div>
-  <div class="stat-card" data-stat="completed">
-    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-    <div class="stat-info">
-      <span>Projects Completed</span>
-      <h2 id="completedProjects">0</h2>
-      <small class="stat-trend" id="completedTrend">+0</small>
-    </div>
-  </div>
-</div>
 
-<!-- LOADING SKELETON (tersembunyi) -->
-<div class="loading-skeleton" id="loadingSkeleton">
-  <div class="skeleton-card"></div>
-  <div class="skeleton-card"></div>
-  <div class="skeleton-card"></div>
-  <div class="skeleton-card"></div>
-</div>
+    <!-- Loading Skeleton (hidden by default) -->
+    <div class="loading-skeleton" id="loadingSkeleton" role="status" aria-label="Loading analytics data">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+    </div>
+</section>
 
-<!-- CHARTS GRID -->
-<div class="analytics-grid">
-  <!-- Revenue vs Profit -->
-  <div class="chart-card">
-    <div class="card-header">
-      <h3><i class="fas fa-chart-line"></i> Revenue vs Profit</h3>
-      <div class="chart-controls" data-chart="revenueProfit">
-        <button class="chart-period active" data-period="week">Week</button>
-        <button class="chart-period" data-period="month">Month</button>
-        <button class="chart-period" data-period="year">Year</button>
-      </div>
-    </div>
-    <div class="chart-container">
-      <canvas id="revenueProfitChart"></canvas>
-    </div>
-  </div>
+<!-- ============================================================
+     CHARTS GRID (Row 1)
+     ============================================================ -->
+<section aria-label="Analytics charts">
+    <div class="analytics-grid">
+        <!-- Revenue vs Profit -->
+        <div class="chart-card">
+            <div class="card-header">
+                <h3><i class="fas fa-chart-line" aria-hidden="true"></i> Revenue vs Profit</h3>
+                <div class="chart-controls" data-chart="revenueProfit" role="group" aria-label="Chart period controls">
+                    <button class="chart-period active" data-period="week" aria-pressed="true">Week</button>
+                    <button class="chart-period" data-period="month" aria-pressed="false">Month</button>
+                    <button class="chart-period" data-period="year" aria-pressed="false">Year</button>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="revenueProfitChart" aria-label="Revenue vs Profit chart"></canvas>
+            </div>
+        </div>
 
-  <!-- Inquiry Conversion -->
-  <div class="chart-card">
-    <div class="card-header">
-      <h3><i class="fas fa-funnel-dollar"></i> Inquiry Conversion</h3>
-      <div class="chart-controls" data-chart="conversion">
-        <button class="chart-period active" data-period="week">Week</button>
-        <button class="chart-period" data-period="month">Month</button>
-        <button class="chart-period" data-period="year">Year</button>
-      </div>
+        <!-- Inquiry Conversion -->
+        <div class="chart-card">
+            <div class="card-header">
+                <h3><i class="fas fa-funnel-dollar" aria-hidden="true"></i> Inquiry Conversion</h3>
+                <div class="chart-controls" data-chart="conversion" role="group" aria-label="Chart period controls">
+                    <button class="chart-period active" data-period="week" aria-pressed="true">Week</button>
+                    <button class="chart-period" data-period="month" aria-pressed="false">Month</button>
+                    <button class="chart-period" data-period="year" aria-pressed="false">Year</button>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="conversionChart" aria-label="Inquiry conversion chart"></canvas>
+            </div>
+        </div>
     </div>
-    <div class="chart-container">
-      <canvas id="conversionChart"></canvas>
-    </div>
-  </div>
-</div>
 
-<div class="analytics-grid">
-  <!-- Service Breakdown -->
-  <div class="chart-card">
-    <div class="card-header">
-      <h3><i class="fas fa-chart-pie"></i> Service Breakdown</h3>
-    </div>
-    <div class="chart-container pie-chart-container">
-      <canvas id="serviceChart"></canvas>
-    </div>
-  </div>
+    <!-- ============================================================
+         CHARTS GRID (Row 2 – Pie charts)
+         ============================================================ -->
+    <div class="analytics-grid">
+        <!-- Service Breakdown -->
+        <div class="chart-card">
+            <div class="card-header">
+                <h3><i class="fas fa-chart-pie" aria-hidden="true"></i> Service Breakdown</h3>
+            </div>
+            <div class="chart-container pie-chart-container">
+                <canvas id="serviceChart" aria-label="Service breakdown chart"></canvas>
+            </div>
+        </div>
 
-  <!-- Material Consumption -->
-  <div class="chart-card">
-    <div class="card-header">
-      <h3><i class="fas fa-boxes"></i> Material Consumption</h3>
+        <!-- Material Consumption -->
+        <div class="chart-card">
+            <div class="card-header">
+                <h3><i class="fas fa-boxes" aria-hidden="true"></i> Material Consumption</h3>
+            </div>
+            <div class="chart-container pie-chart-container">
+                <canvas id="materialChart" aria-label="Material consumption chart"></canvas>
+            </div>
+        </div>
     </div>
-    <div class="chart-container pie-chart-container">
-      <canvas id="materialChart"></canvas>
-    </div>
-  </div>
-</div>
 
-<div class="analytics-grid">
-  <!-- Top Services Table -->
-  <div class="table-card">
-    <div class="table-header">
-      <h3><i class="fas fa-trophy"></i> Top Services</h3>
-      <span class="table-badge">Performance</span>
-    </div>
-    <div class="table-responsive">
-      <table id="topServicesTable">
-        <thead>
-          <tr>
-            <th>Service</th>
-            <th>Projects</th>
-            <th>Revenue</th>
-            <th>Trend</th>
-          </tr>
-        </thead>
-        <tbody id="topServicesBody">
-          <!-- akan diisi JS -->
-        </tbody>
-      </table>
-    </div>
-  </div>
+    <!-- ============================================================
+         TABLES & KPIs
+         ============================================================ -->
+    <div class="analytics-grid">
+        <!-- Top Services Table -->
+        <div class="table-card">
+            <div class="table-header">
+                <h3><i class="fas fa-trophy" aria-hidden="true"></i> Top Services</h3>
+                <span class="table-badge">Performance</span>
+            </div>
+            <div class="table-responsive">
+                <table id="topServicesTable" aria-label="Top services table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Service</th>
+                            <th scope="col">Projects</th>
+                            <th scope="col">Revenue</th>
+                            <th scope="col">Trend</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topServicesBody">
+                        <!-- Dynamic content -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-  <!-- Operational KPIs -->
-  <div class="table-card">
-    <div class="table-header">
-      <h3><i class="fas fa-chart-line"></i> Operational KPIs</h3>
-      <span class="table-badge">Metrics</span>
+        <!-- Operational KPIs -->
+        <div class="table-card">
+            <div class="table-header">
+                <h3><i class="fas fa-chart-line" aria-hidden="true"></i> Operational KPIs</h3>
+                <span class="table-badge">Metrics</span>
+            </div>
+            <div class="kpi-list" id="kpiList">
+                <!-- Dynamic content -->
+            </div>
+        </div>
     </div>
-    <div class="kpi-list" id="kpiList">
-      <!-- akan diisi JS -->
-    </div>
-  </div>
-</div>
+</section>
 
-{% endblock %} 
+{% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

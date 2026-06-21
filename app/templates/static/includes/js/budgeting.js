@@ -1,438 +1,520 @@
 /**
  * NOCTRA Budgeting Dashboard
  * Terintegrasi dengan backend API `/api/budgeting`
+ * 
+ * Refactored to be modular, maintainable, and performant.
+ * All logic is encapsulated in a single class.
  */
 (function() {
     'use strict';
 
-    // ============================================================
-    // STATE
-    // ============================================================
-    const state = {
-        period: 'month',
-        expenses: [],
-        totalExpenses: 0,
-        summary: null,
-        kpis: null,
-        monthlyExpenses: [],
-        expenseBreakdown: [],
-        cashflow: [],
-        profitability: [],
-        currentPage: 1,
-        pageSize: 20
+    // ─── Constants ──────────────────────────────────────────────
+    const PERIOD_LABELS = {
+        month: 'This Month',
+        last_month: 'Last Month',
+        quarter: 'This Quarter',
+        year: 'This Year'
     };
 
-    // ============================================================
-    // DOM REFS
-    // ============================================================
-    const dom = {
-        periodFilter: document.getElementById('periodFilter'),
-        refreshBtn: document.getElementById('refreshBudget'),
-        addExpenseBtn: document.getElementById('addExpenseBtn'),
-        expenseModal: document.getElementById('expenseModal'),
-        closeModal: document.getElementById('closeExpenseModal'),
-        expenseForm: document.getElementById('expenseForm'),
-        expenseDate: document.getElementById('expenseDate'),
-        expenseProject: document.getElementById('expenseProject'),
-        expenseCategory: document.getElementById('expenseCategory'),
-        expenseDescription: document.getElementById('expenseDescription'),
-        expenseAmount: document.getElementById('expenseAmount'),
-        expenseTable: document.getElementById('expenseTable'),
-        expenseSearch: document.getElementById('expenseSearch'),
-        expenseFilter: document.getElementById('expenseFilter'),
-        expenseTotal: document.getElementById('expenseTotal'),
-        profitabilityBody: document.getElementById('profitabilityBody'),
-        // Summary elements
-        activeProjects: document.getElementById('activeProjects'),
-        pendingPayments: document.getElementById('pendingPayments'),
-        materialRatio: document.getElementById('materialRatio'),
-        avgProfit: document.getElementById('avgProfit'),
-        // KPI elements
-        totalRevenue: document.getElementById('totalRevenue'),
-        totalExpensesKpi: document.getElementById('totalExpenses'),
-        netProfit: document.getElementById('netProfit'),
-        cashAvailable: document.getElementById('cashAvailable')
+    const CHART_COLORS = {
+        expense: '#ff7b2c',
+        revenue: '#22c55e',
+        expenseRed: '#ef4444',
+        pie: ['#ff7b2c', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6']
     };
 
-    // Chart instances
-    let expenseChart, expensePieChart, cashflowChart;
-
-    // ============================================================
-    // HELPERS
-    // ============================================================
-    function formatCurrency(amount) {
-        return 'Rp ' + Number(amount).toLocaleString('id-ID');
-    }
-
-    function showToast(msg, isError = false) {
-        const t = document.querySelector('.app-toast') || (() => {
-            const el = document.createElement('div');
-            el.className = 'app-toast';
-            document.body.appendChild(el);
-            return el;
-        })();
-        t.textContent = msg;
-        t.className = 'app-toast' + (isError ? ' error' : '');
-        setTimeout(() => t.classList.add('show'), 10);
-        clearTimeout(t._timeout);
-        t._timeout = setTimeout(() => t.classList.remove('show'), 3000);
-    }
-
-    function getPeriodLabel(period) {
-        const map = {
-            month: 'This Month',
-            last_month: 'Last Month',
-            quarter: 'This Quarter',
-            year: 'This Year'
+    // ─── Main Class ──────────────────────────────────────────────
+    class BudgetingDashboard {
+        // ─── Private fields ──────────────────────────────────────
+        #state = {
+            period: 'month',
+            expenses: [],
+            totalExpenses: 0,
+            summary: null,
+            kpis: null,
+            monthlyExpenses: [],
+            expenseBreakdown: [],
+            cashflow: [],
+            profitability: [],
+            currentPage: 1,
+            pageSize: 20
         };
-        return map[period] || period;
-    }
 
-    // ============================================================
-    // API FETCH
-    // ============================================================
-    async function fetchJSON(url, options = {}) {
-        const res = await fetch(url, {
-            ...options,
-            headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
-        });
-        if (!res.ok) {
-            const err = await res.text();
-            throw new Error(err || `HTTP ${res.status}`);
+        #dom = {};
+        #charts = {
+            expense: null,
+            pie: null,
+            cashflow: null
+        };
+        #searchDebounceTimer = null;
+        #isLoading = false;
+
+        // ─── Constructor ──────────────────────────────────────────
+        constructor() {
+            this.#cacheDomRefs();
+            this.#bindEvents();
+            this.#loadData();
         }
-        const result = await res.json();
-        return result.data;
-    }
 
-    async function loadAllData(period) {
-        try {
-            // Load all data in parallel
-            const [summary, kpis, monthlyExpenses, expenseBreakdown, cashflow, profitability, expensesData] = await Promise.all([
-                fetchJSON(`/api/budgeting/summary?period=${period}`),
-                fetchJSON(`/api/budgeting/kpis?period=${period}`),
-                fetchJSON(`/api/budgeting/charts/monthly-expenses?period=${period}`),
-                fetchJSON(`/api/budgeting/charts/expense-breakdown?period=${period}`),
-                fetchJSON(`/api/budgeting/charts/cashflow?period=${period}`),
-                fetchJSON(`/api/budgeting/profitability`),
-                fetchJSON(`/api/budgeting/expenses?period=${period}&page=1&limit=100`)
-            ]);
-
-            state.summary = summary;
-            state.kpis = kpis;
-            state.monthlyExpenses = monthlyExpenses || [];
-            state.expenseBreakdown = expenseBreakdown || [];
-            state.cashflow = cashflow || [];
-            state.profitability = profitability || [];
-            state.expenses = expensesData.items || [];
-            state.totalExpenses = expensesData.total || 0;
-            state.currentPage = expensesData.page || 1;
-            state.pageSize = expensesData.page_size || 20;
-
-            renderAll();
-            return true;
-        } catch (err) {
-            console.error('Failed to load budgeting data:', err);
-            showToast('Failed to load data: ' + err.message, true);
-            return false;
-        }
-    }
-
-    // ============================================================
-    // RENDER FUNCTIONS
-    // ============================================================
-
-    function renderAll() {
-        renderSummary();
-        renderKPIs();
-        renderExpenses();
-        renderProfitability();
-        renderCharts();
-    }
-
-    function renderSummary() {
-        const s = state.summary;
-        if (!s) return;
-        dom.activeProjects.textContent = s.active_projects || 0;
-        dom.pendingPayments.textContent = formatCurrency(s.pending_payments || 0);
-        dom.materialRatio.textContent = (s.material_cost_ratio || 0) + '%';
-        dom.avgProfit.textContent = formatCurrency(s.avg_project_profit || 0);
-    }
-
-    function renderKPIs() {
-        const k = state.kpis;
-        if (!k) return;
-        dom.totalRevenue.textContent = formatCurrency(k.revenue || 0);
-        dom.totalExpensesKpi.textContent = formatCurrency(k.expenses || 0);
-        dom.netProfit.textContent = formatCurrency(k.net_profit || 0);
-        dom.cashAvailable.textContent = formatCurrency(k.cash_available || 0);
-    }
-
-    function renderExpenses() {
-        const filtered = filterExpenses();
-        dom.expenseTable.innerHTML = '';
-        let total = 0;
-        filtered.forEach(exp => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${exp.expense_date}</td>
-                <td>${exp.project_name || '—'}</td>
-                <td>${exp.category}</td>
-                <td>${exp.description}</td>
-                <td>${formatCurrency(exp.amount)}</td>
-                <td style="text-align:center;">
-                    <button class="btn-delete-expense" data-id="${exp.id}" title="Delete expense">×</button>
-                </td>
-            `;
-            dom.expenseTable.appendChild(row);
-            total += Number(exp.amount);
-        });
-        dom.expenseTotal.textContent = `Total: ${formatCurrency(total)}`;
-
-        // Delete event listeners
-        dom.expenseTable.querySelectorAll('.btn-delete-expense').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const id = this.dataset.id;
-                deleteExpense(id);
+        // ─── DOM Caching ──────────────────────────────────────────
+        #cacheDomRefs() {
+            const ids = [
+                'periodFilter',
+                'refreshBudget',
+                'addExpenseBtn',
+                'expenseModal',
+                'closeExpenseModal',
+                'expenseForm',
+                'expenseDate',
+                'expenseProject',
+                'expenseCategory',
+                'expenseDescription',
+                'expenseAmount',
+                'expenseTable',
+                'expenseSearch',
+                'expenseFilter',
+                'expenseTotal',
+                'profitabilityBody',
+                'activeProjects',
+                'pendingPayments',
+                'materialRatio',
+                'avgProfit',
+                'totalRevenue',
+                'totalExpenses',
+                'netProfit',
+                'cashAvailable',
+                'expenseChart',
+                'expensePieChart',
+                'cashflowChart'
+            ];
+            const refs = {};
+            ids.forEach(id => {
+                refs[id] = document.getElementById(id);
             });
-        });
-    }
+            this.#dom = refs;
+        }
 
-    function filterExpenses() {
-        const search = dom.expenseSearch.value.toLowerCase();
-        const category = dom.expenseFilter.value;
-        return state.expenses.filter(exp => {
-            const matchSearch = (exp.description || '').toLowerCase().includes(search) ||
-                                (exp.project_name || '').toLowerCase().includes(search);
-            const matchCategory = !category || exp.category === category;
-            return matchSearch && matchCategory;
-        });
-    }
+        // ─── Event Binding ────────────────────────────────────────
+        #bindEvents() {
+            const { periodFilter, refreshBudget, expenseSearch, expenseFilter } = this.#dom;
 
-    function renderProfitability() {
-        const items = state.profitability || [];
-        dom.profitabilityBody.innerHTML = items.map(p => {
-            const margin = p.margin || 0;
-            const statusClass = p.status || 'success';
-            return `
-                <tr>
-                    <td>${p.project_name}</td>
-                    <td>${formatCurrency(p.revenue)}</td>
-                    <td>${formatCurrency(p.cost)}</td>
-                    <td>${formatCurrency(p.profit)}</td>
-                    <td>${margin}%</td>
-                    <td><span class="status-badge ${statusClass}">${statusClass === 'success' ? 'Highly Profitable' : statusClass === 'warning' ? 'Good' : 'Needs Review'}</span></td>
-                </tr>
-            `;
-        }).join('');
-    }
+            // Period filter
+            periodFilter?.addEventListener('change', (e) => {
+                this.#state.period = e.target.value;
+                this.#loadData();
+            });
 
-    // ============================================================
-    // CHARTS
-    // ============================================================
+            // Refresh button
+            refreshBudget?.addEventListener('click', () => this.#loadData(true));
 
-    function renderCharts() {
-        // Destroy existing charts if any
-        if (expenseChart) { expenseChart.destroy(); expenseChart = null; }
-        if (expensePieChart) { expensePieChart.destroy(); expensePieChart = null; }
-        if (cashflowChart) { cashflowChart.destroy(); cashflowChart = null; }
+            // Search & filter (debounced search)
+            expenseSearch?.addEventListener('input', () => {
+                clearTimeout(this.#searchDebounceTimer);
+                this.#searchDebounceTimer = setTimeout(() => this.#renderExpenses(), 250);
+            });
+            expenseFilter?.addEventListener('change', () => this.#renderExpenses());
 
-        // Monthly Expense Chart (line)
-        const ctx1 = document.getElementById('expenseChart').getContext('2d');
-        const monthlyData = state.monthlyExpenses || [];
-        expenseChart = new Chart(ctx1, {
-            type: 'line',
-            data: {
-                labels: monthlyData.map(d => d.month),
-                datasets: [{
-                    label: 'Expenses',
-                    data: monthlyData.map(d => Number(d.amount)),
-                    borderColor: '#ff7b2c',
-                    backgroundColor: 'rgba(255,123,44,0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 4
-                }]
-            },
-            options: getLineOptions()
-        });
+            // Modal setup
+            this.#setupModal();
+        }
 
-        // Expense Breakdown Pie
-        const ctx2 = document.getElementById('expensePieChart').getContext('2d');
-        const breakdown = state.expenseBreakdown || [];
-        expensePieChart = new Chart(ctx2, {
-            type: 'doughnut',
-            data: {
-                labels: breakdown.map(d => `${d.category} (${d.percentage}%)`),
-                datasets: [{
-                    data: breakdown.map(d => Number(d.amount)),
-                    backgroundColor: ['#ff7b2c', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6'],
-                    borderWidth: 0,
-                    hoverOffset: 8
-                }]
-            },
-            options: getPieOptions()
-        });
+        // ─── Modal Setup ──────────────────────────────────────────
+        #setupModal() {
+            const { addExpenseBtn, expenseModal, closeExpenseModal, expenseForm } = this.#dom;
 
-        // Cashflow Bar Chart
-        const ctx3 = document.getElementById('cashflowChart').getContext('2d');
-        const cashflowData = state.cashflow || [];
-        cashflowChart = new Chart(ctx3, {
-            type: 'bar',
-            data: {
-                labels: cashflowData.map(d => d.month),
-                datasets: [
-                    { label: 'Revenue', data: cashflowData.map(d => Number(d.revenue)), backgroundColor: '#22c55e' },
-                    { label: 'Expenses', data: cashflowData.map(d => Number(d.expenses)), backgroundColor: '#ef4444' }
-                ]
-            },
-            options: getBarOptions()
-        });
-    }
+            if (!addExpenseBtn || !expenseModal) return;
 
-    function getLineOptions() {
-        return {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => `Rp ${ctx.raw.toLocaleString()}`
+            // Open modal
+            addExpenseBtn.addEventListener('click', () => {
+                expenseModal.classList.add('active');
+                this.#populateProjectDropdown();
+                // Set default date to today
+                const dateInput = this.#dom.expenseDate;
+                if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+            });
+
+            // Close modal
+            const closeModal = () => expenseModal.classList.remove('active');
+            closeExpenseModal?.addEventListener('click', closeModal);
+            expenseModal.addEventListener('click', (e) => {
+                if (e.target === expenseModal) closeModal();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && expenseModal.classList.contains('active')) closeModal();
+            });
+
+            // Form submit
+            expenseForm?.addEventListener('submit', (e) => this.#handleExpenseSubmit(e));
+        }
+
+        // ─── Project Dropdown (lazy load) ────────────────────────
+        async #populateProjectDropdown() {
+            const select = this.#dom.expenseProject;
+            if (!select) return;
+            // Avoid re-fetching if already populated
+            if (select.dataset.loaded) return;
+
+            try {
+                const response = await fetch('/api/projects/');
+                if (!response.ok) throw new Error('Failed to load projects');
+                const result = await response.json();
+                const projects = result.data || [];
+                select.innerHTML = '<option value="">Select Project</option>' +
+                    projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+                select.dataset.loaded = 'true';
+            } catch (err) {
+                console.warn('Could not load projects:', err);
+                select.innerHTML = '<option value="">Select Project</option>';
+            }
+        }
+
+        // ─── Data Loading ─────────────────────────────────────────
+        async #loadData(forceRefresh = false) {
+            if (this.#isLoading) return;
+            this.#isLoading = true;
+
+            // Show loading state (optional)
+            const skeleton = document.getElementById('loadingSkeleton');
+            if (skeleton) skeleton.classList.add('show');
+
+            try {
+                const period = this.#state.period;
+                // Parallel fetch all endpoints
+                const [summary, kpis, monthlyExpenses, expenseBreakdown, cashflow, profitability, expensesData] =
+                    await Promise.all([
+                        this.#fetchJSON(`/api/budgeting/summary?period=${period}`),
+                        this.#fetchJSON(`/api/budgeting/kpis?period=${period}`),
+                        this.#fetchJSON(`/api/budgeting/charts/monthly-expenses?period=${period}`),
+                        this.#fetchJSON(`/api/budgeting/charts/expense-breakdown?period=${period}`),
+                        this.#fetchJSON(`/api/budgeting/charts/cashflow?period=${period}`),
+                        this.#fetchJSON(`/api/budgeting/profitability`),
+                        this.#fetchJSON(`/api/budgeting/expenses?period=${period}&page=1&limit=100`)
+                    ]);
+
+                // Update state
+                this.#state.summary = summary;
+                this.#state.kpis = kpis;
+                this.#state.monthlyExpenses = monthlyExpenses || [];
+                this.#state.expenseBreakdown = expenseBreakdown || [];
+                this.#state.cashflow = cashflow || [];
+                this.#state.profitability = profitability || [];
+                this.#state.expenses = expensesData.items || [];
+                this.#state.totalExpenses = expensesData.total || 0;
+                this.#state.currentPage = expensesData.page || 1;
+                this.#state.pageSize = expensesData.page_size || 20;
+
+                // Render everything
+                this.#renderAll();
+            } catch (err) {
+                console.error('Budgeting load error:', err);
+                this.#showToast('Failed to load data: ' + err.message, true);
+            } finally {
+                this.#isLoading = false;
+                if (skeleton) skeleton.classList.remove('show');
+            }
+        }
+
+        // ─── Fetch helper ─────────────────────────────────────────
+        async #fetchJSON(url, options = {}) {
+            const response = await fetch(url, {
+                ...options,
+                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(errText || `HTTP ${response.status}`);
+            }
+            const result = await response.json();
+            return result.data;
+        }
+
+        // ─── Rendering ────────────────────────────────────────────
+        #renderAll() {
+            this.#renderSummary();
+            this.#renderKPIs();
+            this.#renderExpenses();
+            this.#renderProfitability();
+            this.#renderCharts();
+        }
+
+        #renderSummary() {
+            const s = this.#state.summary;
+            if (!s) return;
+            this.#setText('activeProjects', s.active_projects ?? 0);
+            this.#setText('pendingPayments', this.#formatCurrency(s.pending_payments ?? 0));
+            this.#setText('materialRatio', (s.material_cost_ratio ?? 0) + '%');
+            this.#setText('avgProfit', this.#formatCurrency(s.avg_project_profit ?? 0));
+        }
+
+        #renderKPIs() {
+            const k = this.#state.kpis;
+            if (!k) return;
+            this.#setText('totalRevenue', this.#formatCurrency(k.revenue ?? 0));
+            this.#setText('totalExpenses', this.#formatCurrency(k.expenses ?? 0));
+            this.#setText('netProfit', this.#formatCurrency(k.net_profit ?? 0));
+            this.#setText('cashAvailable', this.#formatCurrency(k.cash_available ?? 0));
+        }
+
+        #renderExpenses() {
+            const { expenseTable, expenseSearch, expenseFilter, expenseTotal } = this.#dom;
+            if (!expenseTable) return;
+
+            const search = expenseSearch?.value?.toLowerCase() || '';
+            const category = expenseFilter?.value || '';
+
+            const filtered = this.#state.expenses.filter(exp => {
+                const matchSearch = (exp.description || '').toLowerCase().includes(search) ||
+                                    (exp.project_name || '').toLowerCase().includes(search);
+                const matchCategory = !category || exp.category === category;
+                return matchSearch && matchCategory;
+            });
+
+            let total = 0;
+            const rows = filtered.map(exp => {
+                total += Number(exp.amount);
+                return `
+                    <tr>
+                        <td>${exp.expense_date}</td>
+                        <td>${exp.project_name || '—'}</td>
+                        <td>${exp.category}</td>
+                        <td>${exp.description}</td>
+                        <td>${this.#formatCurrency(exp.amount)}</td>
+                        <td style="text-align:center;">
+                            <button class="btn-delete-expense" data-id="${exp.id}" title="Delete expense">×</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            expenseTable.innerHTML = rows || '<tr><td colspan="6" class="text-center">No expenses found</td></tr>';
+            if (expenseTotal) expenseTotal.textContent = `Total: ${this.#formatCurrency(total)}`;
+
+            // Attach delete events
+            expenseTable.querySelectorAll('.btn-delete-expense').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.id;
+                    this.#deleteExpense(id);
+                });
+            });
+        }
+
+        #renderProfitability() {
+            const body = this.#dom.profitabilityBody;
+            if (!body) return;
+            const items = this.#state.profitability || [];
+            body.innerHTML = items.map(p => {
+                const margin = p.margin ?? 0;
+                const statusClass = p.status || 'success';
+                const statusLabel = statusClass === 'success' ? 'Highly Profitable' :
+                                    statusClass === 'warning' ? 'Good' : 'Needs Review';
+                return `
+                    <tr>
+                        <td>${p.project_name}</td>
+                        <td>${this.#formatCurrency(p.revenue)}</td>
+                        <td>${this.#formatCurrency(p.cost)}</td>
+                        <td>${this.#formatCurrency(p.profit)}</td>
+                        <td>${margin}%</td>
+                        <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // ─── Charts ────────────────────────────────────────────────
+        #renderCharts() {
+            // Destroy existing charts
+            Object.values(this.#charts).forEach(chart => {
+                if (chart) { chart.destroy(); }
+            });
+            this.#charts = { expense: null, pie: null, cashflow: null };
+
+            // Monthly Expense Chart (line)
+            const monthlyCtx = this.#dom.expenseChart?.getContext('2d');
+            if (monthlyCtx) {
+                const data = this.#state.monthlyExpenses || [];
+                this.#charts.expense = new Chart(monthlyCtx, {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => d.month),
+                        datasets: [{
+                            label: 'Expenses',
+                            data: data.map(d => Number(d.amount)),
+                            borderColor: CHART_COLORS.expense,
+                            backgroundColor: 'rgba(255,123,44,0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 4
+                        }]
+                    },
+                    options: this.#getLineOptions()
+                });
+            }
+
+            // Expense Breakdown Pie
+            const pieCtx = this.#dom.expensePieChart?.getContext('2d');
+            if (pieCtx) {
+                const breakdown = this.#state.expenseBreakdown || [];
+                this.#charts.pie = new Chart(pieCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: breakdown.map(d => `${d.category} (${d.percentage}%)`),
+                        datasets: [{
+                            data: breakdown.map(d => Number(d.amount)),
+                            backgroundColor: CHART_COLORS.pie.slice(0, breakdown.length),
+                            borderWidth: 0,
+                            hoverOffset: 8
+                        }]
+                    },
+                    options: this.#getPieOptions()
+                });
+            }
+
+            // Cashflow Bar Chart
+            const cashCtx = this.#dom.cashflowChart?.getContext('2d');
+            if (cashCtx) {
+                const cashflow = this.#state.cashflow || [];
+                this.#charts.cashflow = new Chart(cashCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: cashflow.map(d => d.month),
+                        datasets: [
+                            {
+                                label: 'Revenue',
+                                data: cashflow.map(d => Number(d.revenue)),
+                                backgroundColor: CHART_COLORS.revenue
+                            },
+                            {
+                                label: 'Expenses',
+                                data: cashflow.map(d => Number(d.expenses)),
+                                backgroundColor: CHART_COLORS.expenseRed
+                            }
+                        ]
+                    },
+                    options: this.#getBarOptions()
+                });
+            }
+
+            // Resize charts after a small delay to ensure container is rendered
+            setTimeout(() => {
+                Object.values(this.#charts).forEach(chart => {
+                    if (chart && chart.resize) chart.resize();
+                });
+            }, 100);
+        }
+
+        #getLineOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: v => `Rp ${(v / 1e6).toFixed(1)}M`
+                        }
                     }
                 }
-            },
-            scales: {
-                y: {
-                    ticks: { callback: v => `Rp ${(v/1000000).toFixed(1)}M` }
+            };
+        }
+
+        #getPieOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: { legend: { position: 'bottom' } }
+            };
+        }
+
+        #getBarOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top' } },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: v => `Rp ${(v / 1e6).toFixed(1)}M`
+                        }
+                    }
                 }
-            }
-        };
-    }
-
-    function getPieOptions() {
-        return {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '60%',
-            plugins: {
-                legend: { position: 'bottom' }
-            }
-        };
-    }
-
-    function getBarOptions() {
-        return {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'top' }
-            },
-            scales: {
-                y: {
-                    ticks: { callback: v => `Rp ${(v/1000000).toFixed(1)}M` }
-                }
-            }
-        };
-    }
-
-    // ============================================================
-    // CRUD OPERATIONS
-    // ============================================================
-
-    async function deleteExpense(id) {
-        if (!confirm('Delete this expense?')) return;
-        try {
-            await fetchJSON(`/api/budgeting/expenses/${id}`, { method: 'DELETE' });
-            showToast('Expense deleted');
-            loadAllData(state.period);
-        } catch (err) {
-            showToast('Failed to delete expense', true);
+            };
         }
-    }
 
-    async function handleExpenseSubmit(e) {
-        e.preventDefault();
-        const payload = {
-            project_id: dom.expenseProject.value || null,
-            category: dom.expenseCategory.value,
-            description: dom.expenseDescription.value.trim(),
-            amount: parseFloat(dom.expenseAmount.value),
-            expense_date: dom.expenseDate.value
-        };
-        if (!payload.category || !payload.amount) {
-            showToast('Please fill all required fields', true);
-            return;
+        // ─── CRUD ──────────────────────────────────────────────────
+        async #deleteExpense(id) {
+            if (!confirm('Delete this expense?')) return;
+            try {
+                await this.#fetchJSON(`/api/budgeting/expenses/${id}`, { method: 'DELETE' });
+                this.#showToast('Expense deleted');
+                this.#loadData(true);
+            } catch (err) {
+                this.#showToast('Failed to delete expense: ' + err.message, true);
+            }
         }
-        try {
-            await fetchJSON('/api/budgeting/expenses', {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
-            showToast('Expense added successfully');
-            dom.expenseForm.reset();
-            dom.expenseModal.classList.remove('active');
-            loadAllData(state.period);
-        } catch (err) {
-            showToast('Failed to add expense', true);
-        }
-    }
 
-    // ============================================================
-    // EVENT HANDLERS
-    // ============================================================
-
-    function setupModal() {
-        dom.addExpenseBtn.addEventListener('click', () => {
-            dom.expenseModal.classList.add('active');
-            dom.expenseDate.value = new Date().toISOString().slice(0,10);
-            // Load projects for dropdown
-            fetch('/api/projects/')
-                .then(res => res.json())
-                .then(data => {
-                    const projects = data.data || [];
-                    dom.expenseProject.innerHTML = '<option value="">Select Project</option>' +
-                        projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-                })
-                .catch(() => {
-                    dom.expenseProject.innerHTML = '<option value="">Select Project</option>';
+        async #handleExpenseSubmit(e) {
+            e.preventDefault();
+            const { expenseDate, expenseProject, expenseCategory, expenseDescription, expenseAmount } = this.#dom;
+            const payload = {
+                project_id: expenseProject?.value || null,
+                category: expenseCategory?.value || '',
+                description: expenseDescription?.value.trim() || '',
+                amount: parseFloat(expenseAmount?.value || 0),
+                expense_date: expenseDate?.value || ''
+            };
+            if (!payload.category || !payload.amount || !payload.expense_date) {
+                this.#showToast('Please fill all required fields', true);
+                return;
+            }
+            try {
+                await this.#fetchJSON('/api/budgeting/expenses', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
                 });
-        });
-        dom.closeModal.addEventListener('click', () => dom.expenseModal.classList.remove('active'));
-        dom.expenseModal.addEventListener('click', e => {
-            if (e.target === dom.expenseModal) dom.expenseModal.classList.remove('active');
-        });
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') dom.expenseModal.classList.remove('active');
-        });
-        dom.expenseForm.addEventListener('submit', handleExpenseSubmit);
+                this.#showToast('Expense added successfully');
+                this.#dom.expenseForm?.reset();
+                this.#dom.expenseModal?.classList.remove('active');
+                this.#loadData(true);
+            } catch (err) {
+                this.#showToast('Failed to add expense: ' + err.message, true);
+            }
+        }
+
+        // ─── Helpers ──────────────────────────────────────────────
+        #formatCurrency(amount) {
+            return 'Rp ' + Number(amount).toLocaleString('id-ID');
+        }
+
+        #setText(elementId, value) {
+            const el = this.#dom[elementId];
+            if (el) el.textContent = value;
+        }
+
+        // Toast – fallback to global if exists, else local
+        #showToast(message, isError = false) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(message, isError ? 'error' : 'success');
+            } else {
+                // Fallback simple toast
+                const toast = document.querySelector('.app-toast') || (() => {
+                    const el = document.createElement('div');
+                    el.className = 'app-toast';
+                    document.body.appendChild(el);
+                    return el;
+                })();
+                toast.textContent = message;
+                toast.className = 'app-toast' + (isError ? ' error' : '');
+                clearTimeout(toast._timeout);
+                requestAnimationFrame(() => toast.classList.add('show'));
+                toast._timeout = setTimeout(() => toast.classList.remove('show'), 3000);
+            }
+        }
     }
 
-    function setupFilters() {
-        dom.periodFilter.addEventListener('change', function() {
-            state.period = this.value;
-            loadAllData(state.period);
-        });
-        dom.expenseSearch.addEventListener('input', renderExpenses);
-        dom.expenseFilter.addEventListener('change', renderExpenses);
-        dom.refreshBtn.addEventListener('click', function() {
-            loadAllData(state.period);
-        });
-    }
+    // ─── Instantiate ─────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+        new BudgetingDashboard();
+    });
 
-    // ============================================================
-    // INIT
-    // ============================================================
-    async function init() {
-        setupModal();
-        setupFilters();
-        await loadAllData(state.period);
-        // Resize charts after initial render
-        setTimeout(() => {
-            if (expenseChart) expenseChart.resize();
-            if (expensePieChart) expensePieChart.resize();
-            if (cashflowChart) cashflowChart.resize();
-        }, 200);
-    }
-
-    document.addEventListener('DOMContentLoaded', init);
 })();

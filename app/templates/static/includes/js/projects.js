@@ -1,1013 +1,1261 @@
-/* =========================================================
-   projects.js – Simplified Card view with Tabbed Drawer
-   (Workers: update progress, consume material, add labor)
-   ========================================================= */
+/**
+ * NOCTRA Project Management
+ * Card view with Tabbed Drawer, Progress Popup, Material & Labor management.
+ *
+ * Refactored as modular class with clear separation of concerns.
+ * Designed for easy extension and maintenance.
+ */
 (function () {
   "use strict";
 
+  // ─── Constants ──────────────────────────────────────────────
   const API_BASE = "/api/projects";
-  let projectsData = [];
-  let currentFilter = "";
-  let currentSearch = "";
-  let currentProjectId = null;
+  const STATUS_LABELS = {
+    new: "New",
+    quoted: "Quoted",
+    approved: "Approved",
+    preparation: "Preparation",
+    painting: "Painting",
+    assembly: "Assembly",
+    completed: "Completed",
+  };
 
-  // ---- DOM refs ----
-  const cardGrid = document.getElementById("projectCardGrid");
-  const searchInput = document.getElementById("projectSearch");
-  const statusFilter = document.getElementById("statusFilter");
-  const activeCount = document.getElementById("activeCount");
-  const prodCount = document.getElementById("prodCount");
-  const completedCount = document.getElementById("completedCount");
-  const revenueTotal = document.getElementById("revenueTotal");
+  const MILESTONE_STAGES = [
+    { key: "disassembly", label: "Disassembly", threshold: 20 },
+    { key: "paint_prep", label: "Paint Prep", threshold: 40 },
+    { key: "painting", label: "Painting", threshold: 60 },
+    { key: "assembly", label: "Assembly", threshold: 80 },
+    { key: "qc", label: "Quality Check", threshold: 95 },
+    { key: "delivery", label: "Ready for Delivery", threshold: 100 },
+  ];
 
-  // ---- Helpers ----
-  function formatCurrency(amount) {
-    return `Rp ${Number(amount || 0).toLocaleString("id-ID")}`;
-  }
-
-  function escapeHtml(str) {
-    if (!str) return "";
-    return String(str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  function statusLabel(status) {
-    const map = {
-      new: "New",
-      quoted: "Quoted",
-      approved: "Approved",
-      preparation: "Preparation",
-      painting: "Painting",
-      assembly: "Assembly",
-      completed: "Completed",
-    };
-    return map[status] || status;
-  }
-
-  function showToast(msg, isError = false) {
-    let t = document.querySelector(".app-toast");
-    if (!t) {
-      t = document.createElement("div");
-      t.className = "app-toast";
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    t.className = "app-toast" + (isError ? " error" : "");
-    setTimeout(() => t.classList.add("show"), 10);
-    clearTimeout(t._timeout);
-    t._timeout = setTimeout(() => t.classList.remove("show"), 3000);
-  }
-
-  // ---- API ----
-  async function fetchJSON(url, options = {}) {
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(err || res.statusText);
-    }
-    return res.json();
-  }
-
-  // ---- Load & Render ----
-  async function loadProjects() {
-    cardGrid.innerHTML = `<div class="loading-placeholder">Loading projects...</div>`;
-    try {
-      const data = await fetchJSON(`${API_BASE}/`);
-      projectsData = data.data || [];
-      renderCards();
-      updateDashboard();
-    } catch (err) {
-      console.error(err);
-      showToast("Failed to load projects", true);
-      cardGrid.innerHTML = `<div class="loading-placeholder">Error loading projects</div>`;
-    }
-  }
-
-  // ---- Render Cards (tanpa milestone, dengan tombol Complete) ----
-  function renderCards() {
-    const search = currentSearch.toLowerCase().trim();
-    const status = currentFilter;
-    const filtered = projectsData.filter((project) => {
-      const matchSearch =
-        !search ||
-        project.name.toLowerCase().includes(search) ||
-        project.customer_name.toLowerCase().includes(search) ||
-        project.vehicle_brand.toLowerCase().includes(search) ||
-        project.vehicle_model.toLowerCase().includes(search);
-      const matchStatus = !status || project.status === status;
-      return matchSearch && matchStatus;
-    });
-
-    if (filtered.length === 0) {
-      cardGrid.innerHTML = `<div class="loading-placeholder">No projects found</div>`;
-      return;
-    }
-
-    cardGrid.innerHTML = filtered
-      .map((project) => {
-        const progress = project.progress || 0;
-        const isComplete = project.status === "completed";
-        return `
-          <div class="project-card-item" data-id="${project.id}">
-            <div class="card-header">
-              <h4>${escapeHtml(project.name)}</h4>
-              <span class="status-badge ${project.status}">${statusLabel(project.status)}</span>
-            </div>
-            <div class="card-body">
-              <div class="customer">👤 ${escapeHtml(project.customer_name)}</div>
-              <div class="vehicle">🏍️ ${escapeHtml(project.vehicle_brand)} ${escapeHtml(project.vehicle_model)}</div>
-            </div>
-            <div class="card-progress">
-              <div class="progress-bar">
-                <div class="fill" style="width:${progress}%;"></div>
-              </div>
-              <div class="progress-label">
-                <span>Progress</span>
-                <span>${progress}%</span>
-              </div>
-            </div>
-            <div class="card-actions">
-              <button class="btn-progress" data-action="update-progress" data-id="${project.id}">
-                <i class="ph ph-sliders-horizontal"></i> Progress
-              </button>
-              <button class="btn-details" data-action="view-details" data-id="${project.id}">
-                <i class="ph ph-eye"></i> Detail
-              </button>
-              ${progress === 100 && !isComplete ? `
-                <button class="btn-complete" data-action="complete" data-id="${project.id}">
-                  <i class="ph ph-check-circle"></i> Complete
-                </button>
-              ` : ''}
-              ${isComplete ? `
-                <span class="badge-completed">✅ Selesai</span>
-              ` : ''}
-            </div>
-          </div>
-        `;
-      })
-      .join("");
-
-    // Attach events
-    cardGrid.querySelectorAll('[data-action="update-progress"]').forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openProgressPopup(btn.dataset.id);
-      });
-    });
-    cardGrid.querySelectorAll('[data-action="view-details"]').forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openDrawer(btn.dataset.id);
-      });
-    });
-    cardGrid.querySelectorAll('[data-action="complete"]').forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        completeProject(btn.dataset.id);
-      });
-    });
-    // Klik card -> buka progress popup (opsional)
-    cardGrid.querySelectorAll(".project-card-item").forEach((card) => {
-      card.addEventListener("click", (e) => {
-        if (e.target.closest(".card-actions")) return;
-        const id = card.dataset.id;
-        if (id) openProgressPopup(id);
-      });
-    });
-  }
-
-  // ---- Milestones helper (untuk progress popup) ----
-  function getMilestones(status, progress) {
-    const allMilestones = [
-      { key: "inquiry", label: "Inquiry Approved" },
-      { key: "parts", label: "Parts Ordered" },
-      { key: "disassembly", label: "Disassembly" },
-      { key: "paint_prep", label: "Paint Preparation" },
-      { key: "painting", label: "Painting" },
-      { key: "assembly", label: "Assembly" },
-      { key: "qc", label: "Quality Check" },
-      { key: "delivery", label: "Ready for Delivery" },
-    ];
-
-    const statusMap = {
-      new: ["inquiry"],
-      quoted: ["inquiry"],
-      approved: ["inquiry"],
-      preparation: ["inquiry", "parts"],
-      painting: ["inquiry", "parts", "disassembly", "paint_prep"],
-      assembly: ["inquiry", "parts", "disassembly", "paint_prep", "painting"],
-      completed: allMilestones.map((m) => m.key),
+  // ─── Main Class ──────────────────────────────────────────────
+  class ProjectManager {
+    // ─── Private fields ──────────────────────────────────────
+    #state = {
+      projects: [],
+      currentFilter: "",
+      currentSearch: "",
+      currentProjectId: null,
+      isSubmitting: false,
+      isLoading: false,
     };
 
-    const completed = statusMap[status] || ["inquiry"];
-    return allMilestones.map((m, idx) => {
-      const isDone = completed.includes(m.key);
-      const isActive = !isDone && completed.length === idx;
-      return {
-        label: m.label,
-        status: isDone ? "done" : isActive ? "active" : "pending",
+    #dom = {};
+    #timers = { search: null };
+    #popup = null;
+
+    // ─── Constructor ──────────────────────────────────────────
+    constructor() {
+      this.#cacheDomRefs();
+      this.#ensureToastContainer();
+      this.#injectStyles();
+      this.#initTabs();
+      this.#initProgressPopup();
+      this.#bindEvents();
+      this.#init();
+    }
+
+    // ─── DOM Caching ──────────────────────────────────────────
+    #cacheDomRefs() {
+      const ids = [
+        "projectCardGrid",
+        "projectSearch",
+        "statusFilter",
+        "activeCount",
+        "prodCount",
+        "completedCount",
+        "revenueTotal",
+        "projectDrawer",
+        "closeDrawer",
+        "projectModal",
+        "modalTitle",
+        "modalSubtitle",
+        "projectForm",
+        "submitProjectBtn",
+        "closeModal",
+        "cancelModalBtn",
+        "newProjectBtn",
+        "editProjectId",
+        "progressPopup",
+        "progressPopupSlider",
+        "progressPopupValue",
+        "progressPopupNote",
+        "progressPopupMilestones",
+        "markCompleteCheckbox",
+        "closeProgressPopup",
+        "cancelProgressBtn",
+        "saveProgressBtn",
+        "progressPopupTitle",
+        "progressPopupSubtitle",
+        "drawerTitle",
+        "drawerCustomer",
+        "drawerPhone",
+        "drawerStatus",
+        "drawerProgressFill",
+        "drawerProgressText",
+        "drawerBrand",
+        "drawerModel",
+        "drawerPlate",
+        "drawerStartDate",
+        "drawerDelivery",
+        "drawerDuration",
+        "drawerTimelineStatus",
+        "drawerNotes",
+        "drawerMaterialsList",
+        "laborList",
+        "materialSelect",
+        "materialQty",
+        "consumeMaterialBtn",
+        "laborTypeSelect",
+        "laborHours",
+        "addLaborBtn",
+        "timelineMilestones",
+        "timelineNote",
+        "exportBtn",
+      ];
+      const refs = {};
+      ids.forEach((id) => {
+        refs[id] = document.getElementById(id);
+      });
+      // Tabs
+      refs.tabButtons = document.querySelectorAll(".tab-btn");
+      refs.tabPanels = {
+        overview: document.getElementById("tab-overview"),
+        material: document.getElementById("tab-material"),
+        labor: document.getElementById("tab-labor"),
+        timeline: document.getElementById("tab-timeline"),
       };
-    });
-  }
+      this.#dom = refs;
+    }
 
-  // ---- Dashboard ----
-  function updateDashboard() {
-    const active = projectsData.filter((p) => p.status !== "completed").length;
-    const inProd = projectsData.filter((p) =>
-      ["preparation", "painting", "assembly"].includes(p.status)
-    ).length;
-    const completed = projectsData.filter(
-      (p) => p.status === "completed"
-    ).length;
-    const revenue = projectsData.reduce(
-      (sum, p) => sum + (p.estimated_revenue || 0),
-      0
-    );
-    if (activeCount) activeCount.textContent = active;
-    if (prodCount) prodCount.textContent = inProd;
-    if (completedCount) completedCount.textContent = completed;
-    if (revenueTotal) revenueTotal.textContent = formatCurrency(revenue);
-  }
+    // ─── Style Injection ──────────────────────────────────────
+    #injectStyles() {
+      if (document.getElementById("project-styles")) return;
+      const style = document.createElement("style");
+      style.id = "project-styles";
+      style.textContent = `
+                .loading-placeholder { text-align: center; color: var(--gray-500, #6b7280); padding: 2rem 0; }
+                .project-card-item { background: var(--card-bg, #1a1a2e); border-radius: 12px; padding: 1rem; border: 1px solid var(--border-color, #2d2d44); cursor: pointer; transition: all 0.2s; }
+                .project-card-item:hover { transform: translateY(-2px); border-color: var(--accent, #ff7b2c); }
+                .card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem; }
+                .card-header h4 { margin: 0; font-size: 1rem; }
+                .card-body { font-size: 0.85rem; color: var(--text-muted, #94a3b8); }
+                .card-body .customer, .card-body .vehicle { margin: 0.2rem 0; }
+                .card-progress { margin-top: 0.75rem; }
+                .progress-bar { background: rgba(255,255,255,0.05); border-radius: 8px; height: 6px; overflow: hidden; }
+                .progress-bar .fill { height: 100%; background: var(--accent, #ff7b2c); transition: width 0.3s; }
+                .progress-label { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted, #94a3b8); margin-top: 0.2rem; }
+                .card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+                .card-actions button { flex: 1; min-width: 60px; padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; border: none; cursor: pointer; transition: background 0.2s; background: rgba(255,255,255,0.05); color: var(--text-primary, #f1f5f9); }
+                .card-actions button:hover { background: rgba(255,255,255,0.1); }
+                .btn-complete { background: #10b981 !important; color: #fff !important; }
+                .badge-completed { background: #10b981; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+                .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+                .status-badge.new { background: rgba(59,130,246,0.15); color: #3b82f6; }
+                .status-badge.quoted { background: rgba(245,158,11,0.15); color: #f59e0b; }
+                .status-badge.approved { background: rgba(16,185,129,0.15); color: #10b981; }
+                .status-badge.preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+                .status-badge.painting { background: rgba(236,72,153,0.15); color: #ec4899; }
+                .status-badge.assembly { background: rgba(14,165,233,0.15); color: #0ea5e9; }
+                .status-badge.completed { background: rgba(34,197,94,0.15); color: #22c55e; }
+                .milestone-item { padding: 4px 0; font-size: 0.85rem; }
+                .milestone-item.done { color: #10b981; }
+                .milestone-item.active { color: #f59e0b; font-weight: 600; }
+                .milestone-item.pending { color: var(--text-muted, #94a3b8); }
+                .btn-delete-item { background: none; border: none; color: #ef4444; cursor: pointer; padding: 0 4px; font-size: 1rem; }
+                .btn-delete-item:hover { transform: scale(1.2); }
+                #drawerMaterialsList > div, #laborList > div { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border-color, #2d2d44); }
+                .project-status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 500; }
+                .project-status-badge.completed { background: rgba(16,185,129,0.15); color: #10b981; }
+                .project-status-badge.no-project { background: rgba(107,114,128,0.15); color: #6b7280; }
+            `;
+      document.head.appendChild(style);
+    }
 
-  // ---- Inisialisasi Tab di Drawer ----
-  function initTabs() {
-    const tabs = document.querySelectorAll('.tab-btn');
-    const panels = {
-      overview: document.getElementById('tab-overview'),
-      material: document.getElementById('tab-material'),
-      labor: document.getElementById('tab-labor'),
-      timeline: document.getElementById('tab-timeline')
-    };
-    tabs.forEach(btn => {
-      btn.addEventListener('click', () => {
-        tabs.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const tabName = btn.dataset.tab;
-        Object.keys(panels).forEach(key => {
-          panels[key].classList.toggle('active', key === tabName);
+    // ─── Toast Container ──────────────────────────────────────
+    #ensureToastContainer() {
+      if (!document.getElementById("toastContainer")) {
+        const container = document.createElement("div");
+        container.id = "toastContainer";
+        container.style.cssText = `
+                    position: fixed;
+                    bottom: 24px;
+                    right: 24px;
+                    z-index: 99999;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    max-width: 400px;
+                `;
+        document.body.appendChild(container);
+      }
+    }
+
+    // ─── Tabs ──────────────────────────────────────────────────
+    #initTabs() {
+      const { tabButtons, tabPanels } = this.#dom;
+      if (!tabButtons || tabButtons.length === 0) return;
+      tabButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          tabButtons.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          const tab = btn.dataset.tab;
+          Object.keys(tabPanels).forEach((key) => {
+            const panel = tabPanels[key];
+            if (panel) panel.classList.toggle("active", key === tab);
+          });
         });
       });
-    });
-  }
-
-  // ---- Progress Popup ----
-  let progressPopup, progressPopupSlider, progressPopupValue, progressPopupNote;
-  let progressPopupMilestones, markCompleteCheckbox;
-  let currentProgressProjectId = null;
-  let currentProgressData = null;
-
-  function initializeProgressPopup() {
-    progressPopup = document.getElementById("progressPopup");
-    progressPopupSlider = document.getElementById("progressPopupSlider");
-    progressPopupValue = document.getElementById("progressPopupValue");
-    progressPopupNote = document.getElementById("progressPopupNote");
-    progressPopupMilestones = document.getElementById("progressPopupMilestones");
-    markCompleteCheckbox = document.getElementById("markCompleteCheckbox");
-
-    // Cek apakah semua elemen ditemukan
-    if (!progressPopup || !progressPopupSlider || !progressPopupValue || !progressPopupNote || !progressPopupMilestones || !markCompleteCheckbox) {
-      console.error("Progress popup elements not found!");
-      return;
     }
 
-    const closeBtn = document.getElementById("closeProgressPopup");
-    const cancelBtn = document.getElementById("cancelProgressBtn");
-    const saveBtn = document.getElementById("saveProgressBtn");
+    // ─── Progress Popup ──────────────────────────────────────
+    #initProgressPopup() {
+      this.#popup = {
+        slider: this.#dom.progressPopupSlider,
+        value: this.#dom.progressPopupValue,
+        note: this.#dom.progressPopupNote,
+        milestones: this.#dom.progressPopupMilestones,
+        markComplete: this.#dom.markCompleteCheckbox,
+      };
+    }
 
-    closeBtn?.addEventListener("click", closeProgressPopup);
-    cancelBtn?.addEventListener("click", closeProgressPopup);
-    progressPopup.addEventListener("click", (e) => {
-      if (e.target === progressPopup) closeProgressPopup();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeProgressPopup();
-    });
+    // ─── Event Binding ────────────────────────────────────────
+    #bindEvents() {
+      const {
+        projectSearch,
+        statusFilter,
+        newProjectBtn,
+        closeDrawer,
+        projectModal,
+        closeModal,
+        cancelModalBtn,
+        projectForm,
+        submitProjectBtn,
+        progressPopup,
+        closeProgressPopup,
+        cancelProgressBtn,
+        saveProgressBtn,
+        consumeMaterialBtn,
+        addLaborBtn,
+        exportBtn,
+        progressPopupSlider,
+        markCompleteCheckbox,
+      } = this.#dom;
 
-    progressPopupSlider?.addEventListener("input", function () {
-      const val = parseInt(this.value, 10);
-      progressPopupValue.textContent = val;
-      updateMilestoneHighlights(val);
-      if (val === 100 && currentProgressData?.status !== "completed") {
-        markCompleteCheckbox.style.display = "flex";
-        markCompleteCheckbox.checked = true;
-      } else {
-        markCompleteCheckbox.style.display = "none";
-        markCompleteCheckbox.checked = false;
+      // Search with debounce
+      projectSearch?.addEventListener("input", () => {
+        clearTimeout(this.#timers.search);
+        this.#timers.search = setTimeout(() => {
+          this.#state.currentSearch = projectSearch.value;
+          this.#renderCards();
+        }, 300);
+      });
+
+      // Status filter
+      statusFilter?.addEventListener("change", () => {
+        this.#state.currentFilter = statusFilter.value;
+        this.#renderCards();
+      });
+
+      // New project button
+      newProjectBtn?.addEventListener("click", () => this.#openModal());
+
+      // Drawer close
+      closeDrawer?.addEventListener("click", () => this.#closeDrawer());
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          if (this.#dom.projectDrawer?.classList.contains("active"))
+            this.#closeDrawer();
+          if (this.#dom.projectModal?.classList.contains("active"))
+            this.#closeModal();
+          if (this.#dom.progressPopup?.classList.contains("active"))
+            this.#closeProgressPopup();
+        }
+      });
+
+      // Modal close
+      closeModal?.addEventListener("click", () => this.#closeModal());
+      cancelModalBtn?.addEventListener("click", () => this.#closeModal());
+      projectModal?.addEventListener("click", (e) => {
+        if (e.target === projectModal) this.#closeModal();
+      });
+
+      // Modal form submit
+      projectForm?.addEventListener("submit", (e) => this.#handleFormSubmit(e));
+
+      // Progress popup close
+      closeProgressPopup?.addEventListener("click", () =>
+        this.#closeProgressPopup(),
+      );
+      cancelProgressBtn?.addEventListener("click", () =>
+        this.#closeProgressPopup(),
+      );
+      progressPopup?.addEventListener("click", (e) => {
+        if (e.target === progressPopup) this.#closeProgressPopup();
+      });
+
+      // Progress popup slider
+      progressPopupSlider?.addEventListener("input", (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (this.#dom.progressPopupValue)
+          this.#dom.progressPopupValue.textContent = val;
+        this.#updateMilestoneHighlights(val);
+        if (val === 100 && markCompleteCheckbox) {
+          markCompleteCheckbox.style.display = "flex";
+          markCompleteCheckbox.checked = true;
+        } else if (markCompleteCheckbox) {
+          markCompleteCheckbox.style.display = "none";
+          markCompleteCheckbox.checked = false;
+        }
+      });
+
+      // Save progress
+      saveProgressBtn?.addEventListener("click", () =>
+        this.#saveProgressPopup(),
+      );
+
+      // Consume material
+      consumeMaterialBtn?.addEventListener("click", (e) =>
+        this.#consumeMaterial(e),
+      );
+
+      // Add labor
+      addLaborBtn?.addEventListener("click", (e) => this.#addLabor(e));
+
+      // Export
+      exportBtn?.addEventListener("click", () =>
+        this.#showToast("Export feature coming soon"),
+      );
+
+      // Delete items via event delegation
+      document.addEventListener("click", (e) => {
+        const deleteBtn = e.target.closest(".btn-delete-item");
+        if (deleteBtn) {
+          const type = deleteBtn.dataset.type;
+          const id = deleteBtn.dataset.id;
+          const projectId =
+            deleteBtn.dataset.project || this.#state.currentProjectId;
+          if (!projectId)
+            return this.#showToast("Project ID not found", "error");
+          if (type === "labor") this.#deleteLabor(id, projectId);
+          else if (type === "material") this.#deleteMaterial(id, projectId);
+        }
+      });
+
+      // Progress slider in modal
+      const sliderForm = document.getElementById("progressSliderForm");
+      const display = document.getElementById("progressDisplay");
+      if (sliderForm && display) {
+        sliderForm.addEventListener("input", () => {
+          display.textContent = sliderForm.value;
+          sliderForm.style.background = `linear-gradient(90deg, var(--accent, #ff7b2c) ${sliderForm.value}%, rgba(255,255,255,0.08) ${sliderForm.value}%)`;
+        });
+        sliderForm.dispatchEvent(new Event("input"));
       }
-    });
+    }
 
-    saveBtn?.addEventListener("click", saveProgressPopup);
-  }
+    // ─── Initialization ──────────────────────────────────────
+    async #init() {
+      await this.#loadProjects();
+      await this.#loadLaborOptions(); // load labor options once
+      // Check URL param 'open'
+      const params = new URLSearchParams(window.location.search);
+      const openId = params.get("open");
+      if (openId) {
+        setTimeout(() => this.#openDrawer(openId), 500);
+        const url = new URL(window.location);
+        url.searchParams.delete("open");
+        window.history.replaceState({}, "", url);
+      }
+    }
 
-  // ---- Delete Labor ----
-  async function deleteLaborItem(laborId, projectId) {
-    if (!confirm("Hapus data labor ini?")) return;
-    try {
-      await fetchJSON(`/api/projects/${projectId}/labor/${laborId}`, {
-        method: "DELETE",
+    // ─── API Helpers ──────────────────────────────────────────
+    async #fetchJSON(url, options = {}) {
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
       });
-      showToast("Labor deleted");
-      openDrawer(projectId); // refresh drawer
-    } catch (err) {
-      showToast(err.message || "Gagal hapus labor", true);
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || res.statusText);
+      }
+      return res.json();
     }
-  }
 
-  // ---- Delete Material Usage ----
-  async function deleteMaterialItem(usageId, projectId) {
-    if (!confirm("Hapus pemakaian material ini?")) return;
-    try {
-      await fetchJSON(`/api/inventory/usage/${usageId}`, {
-        method: "DELETE",
+    // ─── Load Projects ────────────────────────────────────────
+    async #loadProjects() {
+      if (this.#state.isLoading) return;
+      this.#state.isLoading = true;
+      const grid = this.#dom.projectCardGrid;
+      if (grid)
+        grid.innerHTML = `<div class="loading-placeholder">Loading projects...</div>`;
+
+      try {
+        const data = await this.#fetchJSON(`${API_BASE}/`);
+        this.#state.projects = data.data || [];
+        this.#renderCards();
+        this.#updateDashboard();
+      } catch (err) {
+        console.error(err);
+        this.#showToast("Failed to load projects", "error");
+        if (grid)
+          grid.innerHTML = `<div class="loading-placeholder">Error loading projects</div>`;
+      } finally {
+        this.#state.isLoading = false;
+      }
+    }
+
+    // ─── Render Cards ─────────────────────────────────────────
+    #renderCards() {
+      const grid = this.#dom.projectCardGrid;
+      if (!grid) return;
+
+      const search = this.#state.currentSearch.toLowerCase().trim();
+      const status = this.#state.currentFilter;
+
+      const filtered = this.#state.projects.filter((proj) => {
+        const matchSearch =
+          !search ||
+          proj.name.toLowerCase().includes(search) ||
+          proj.customer_name.toLowerCase().includes(search) ||
+          proj.vehicle_brand.toLowerCase().includes(search) ||
+          proj.vehicle_model.toLowerCase().includes(search);
+        const matchStatus = !status || proj.status === status;
+        return matchSearch && matchStatus;
       });
-      showToast("Material usage deleted");
-      openDrawer(projectId);
-    } catch (err) {
-      showToast(err.message || "Gagal hapus material", true);
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `<div class="loading-placeholder">No projects found</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered
+        .map((proj) => {
+          const progress = proj.progress || 0;
+          const isComplete = proj.status === "completed";
+          return `
+                    <div class="project-card-item" data-id="${proj.id}">
+                        <div class="card-header">
+                            <h4>${this.#escapeHtml(proj.name)}</h4>
+                            <span class="status-badge ${proj.status}">${this.#statusLabel(proj.status)}</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="customer">👤 ${this.#escapeHtml(proj.customer_name)}</div>
+                            <div class="vehicle">🏍️ ${this.#escapeHtml(proj.vehicle_brand)} ${this.#escapeHtml(proj.vehicle_model)}</div>
+                        </div>
+                        <div class="card-progress">
+                            <div class="progress-bar"><div class="fill" style="width:${progress}%;"></div></div>
+                            <div class="progress-label"><span>Progress</span><span>${progress}%</span></div>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn-progress" data-action="update-progress" data-id="${proj.id}">
+                                <i class="ph ph-sliders-horizontal"></i> Progress
+                            </button>
+                            <button class="btn-details" data-action="view-details" data-id="${proj.id}">
+                                <i class="ph ph-eye"></i> Detail
+                            </button>
+                            ${
+                              progress === 100 && !isComplete
+                                ? `
+                                <button class="btn-complete" data-action="complete" data-id="${proj.id}">
+                                    <i class="ph ph-check-circle"></i> Complete
+                                </button>
+                            `
+                                : ""
+                            }
+                            ${isComplete ? `<span class="badge-completed">✅ Selesai</span>` : ""}
+                        </div>
+                    </div>
+                `;
+        })
+        .join("");
+
+      // Attach events on dynamic buttons
+      grid
+        .querySelectorAll('[data-action="update-progress"]')
+        .forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.#openProgressPopup(btn.dataset.id);
+          });
+        });
+      grid.querySelectorAll('[data-action="view-details"]').forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.#openDrawer(btn.dataset.id);
+        });
+      });
+      grid.querySelectorAll('[data-action="complete"]').forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.#completeProject(btn.dataset.id);
+        });
+      });
+      // Click card -> open progress popup
+      grid.querySelectorAll(".project-card-item").forEach((card) => {
+        card.addEventListener("click", (e) => {
+          if (e.target.closest(".card-actions")) return;
+          const id = card.dataset.id;
+          if (id) this.#openProgressPopup(id);
+        });
+      });
     }
-  }
 
-  function openProgressPopup(id) {
-    // Pastikan elemen sudah diinisialisasi
-    if (!progressPopupSlider) {
-      console.error("Progress popup not initialized");
-      return;
+    // ─── Dashboard ────────────────────────────────────────────
+    #updateDashboard() {
+      const projects = this.#state.projects;
+      const active = projects.filter((p) => p.status !== "completed").length;
+      const inProd = projects.filter((p) =>
+        ["preparation", "painting", "assembly"].includes(p.status),
+      ).length;
+      const completed = projects.filter((p) => p.status === "completed").length;
+      const revenue = projects.reduce(
+        (sum, p) => sum + (p.estimated_revenue || 0),
+        0,
+      );
+
+      this.#setText("activeCount", active);
+      this.#setText("prodCount", inProd);
+      this.#setText("completedCount", completed);
+      this.#setText("revenueTotal", this.#formatCurrency(revenue));
     }
 
-    const proj = projectsData.find((p) => p.id === id);
-    if (!proj) return;
-    currentProgressProjectId = id;
-    currentProgressData = proj;
+    // ─── Drawer ───────────────────────────────────────────────
+    async #openDrawer(id) {
+      const drawer = this.#dom.projectDrawer;
+      if (!drawer) return;
+      this.#state.currentProjectId = id;
+      drawer.classList.add("active");
 
-    const titleEl = document.getElementById("progressPopupTitle");
-    const subtitleEl = document.getElementById("progressPopupSubtitle");
-    if (titleEl) titleEl.textContent = `Update Progress: ${proj.name}`;
-    if (subtitleEl)
-      subtitleEl.textContent = `${proj.customer_name} • ${proj.vehicle_brand} ${proj.vehicle_model}`;
+      // Reset placeholders
+      this.#resetDrawerFields();
 
-    const progress = proj.progress || 0;
-    progressPopupSlider.value = progress;
-    progressPopupValue.textContent = progress;
-    progressPopupNote.value = proj.notes || "";
+      try {
+        const data = await this.#fetchJSON(`${API_BASE}/${id}`);
+        const project = data.data;
+        this.#populateDrawer(project);
+        // Load material & labor lists
+        await this.#loadMaterialUsageList(id);
+        await this.#loadLaborList(id);
+        // Load material dropdown and labor options (refresh)
+        await this.#loadMaterialsDropdown();
+        await this.#loadLaborOptions(); // refresh options
+      } catch (err) {
+        console.error(err);
+        this.#showToast("Could not load project details", "error");
+        this.#closeDrawer();
+      }
+    }
 
-    const milestones = getMilestones(proj.status, progress);
-    progressPopupMilestones.innerHTML = milestones
-      .map(
-        (m) => `
-      <div class="milestone-item ${m.status}">
-        ${m.status === "done" ? "✅" : m.status === "active" ? "⏳" : "⬜"}
-        ${escapeHtml(m.label)}
-      </div>
-    `
+    #closeDrawer() {
+      const drawer = this.#dom.projectDrawer;
+      if (drawer) drawer.classList.remove("active");
+      this.#state.currentProjectId = null;
+    }
+
+    #resetDrawerFields() {
+      const fields = [
+        "drawerTitle",
+        "drawerCustomer",
+        "drawerPhone",
+        "drawerStatus",
+        "drawerProgressFill",
+        "drawerProgressText",
+        "drawerBrand",
+        "drawerModel",
+        "drawerPlate",
+        "drawerStartDate",
+        "drawerDelivery",
+        "drawerDuration",
+        "drawerTimelineStatus",
+        "drawerNotes",
+      ];
+      fields.forEach((id) => {
+        const el = this.#dom[id];
+        if (el) {
+          if (id === "drawerStatus")
+            el.innerHTML = '<span class="status-badge">-</span>';
+          else if (id === "drawerProgressFill") el.style.width = "0%";
+          else if (id === "drawerProgressText") el.textContent = "0%";
+          else if (id === "drawerTitle") el.textContent = "Loading...";
+          else el.textContent = "-";
+        }
+      });
+      if (this.#dom.drawerMaterialsList)
+        this.#dom.drawerMaterialsList.innerHTML =
+          '<p style="color:var(--text-muted);">Loading...</p>';
+      if (this.#dom.laborList)
+        this.#dom.laborList.innerHTML =
+          '<p style="color:var(--text-muted);">Loading...</p>';
+      if (this.#dom.timelineMilestones)
+        this.#dom.timelineMilestones.innerHTML = "";
+    }
+
+    #populateDrawer(project) {
+      const setText = (id, val) => {
+        const el = this.#dom[id];
+        if (el) el.textContent = val ?? "-";
+      };
+      const setHTML = (id, html) => {
+        const el = this.#dom[id];
+        if (el) el.innerHTML = html ?? "-";
+      };
+
+      setText("drawerTitle", project.name);
+      setText("drawerCustomer", project.customer_name);
+      setText("drawerPhone", project.phone_number);
+      setHTML(
+        "drawerStatus",
+        `<span class="status-badge ${project.status || ""}">${this.#statusLabel(project.status)}</span>`,
+      );
+
+      const progress = project.progress || 0;
+      const fill = this.#dom.drawerProgressFill;
+      if (fill) fill.style.width = progress + "%";
+      setText("drawerProgressText", progress + "%");
+      setText("drawerBrand", project.vehicle_brand);
+      setText("drawerModel", project.vehicle_model);
+      setText("drawerPlate", project.license_plate);
+
+      // Timeline
+      const startDate = project.start_date
+        ? new Date(project.start_date)
+        : null;
+      const targetDate = project.target_delivery
+        ? new Date(project.target_delivery)
+        : null;
+      const now = new Date();
+
+      setText(
+        "drawerStartDate",
+        startDate ? startDate.toLocaleDateString() : "-",
+      );
+      setText(
+        "drawerDelivery",
+        targetDate ? targetDate.toLocaleDateString() : "-",
+      );
+
+      let durationText = "-";
+      let timelineStatusText = "-";
+      if (startDate && targetDate) {
+        const days = Math.ceil(
+          (targetDate - startDate) / (1000 * 60 * 60 * 24),
+        );
+        durationText = `${days} days`;
+        const daysRemaining = Math.ceil(
+          (targetDate - now) / (1000 * 60 * 60 * 24),
+        );
+        if (now > targetDate)
+          timelineStatusText = `⚠️ Overdue by ${Math.abs(daysRemaining)} days`;
+        else if (daysRemaining <= 0) timelineStatusText = "🎯 Due today!";
+        else if (daysRemaining <= 3)
+          timelineStatusText = `⏰ ${daysRemaining} days remaining (urgent)`;
+        else timelineStatusText = `✅ ${daysRemaining} days remaining`;
+      } else if (startDate && !targetDate) {
+        const daysPassed = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
+        durationText = "No target set";
+        timelineStatusText = `Started ${daysPassed} days ago`;
+      } else {
+        durationText = "Dates not set";
+      }
+      setText("drawerDuration", durationText);
+      setText("drawerTimelineStatus", timelineStatusText);
+
+      // Notes
+      setText("drawerNotes", project.notes);
+      if (this.#dom.timelineNote)
+        this.#dom.timelineNote.textContent = project.notes || "-";
+
+      // Milestones
+      this.#updateTimelineMilestones(progress);
+    }
+
+    #updateTimelineMilestones(progress) {
+      const container = this.#dom.timelineMilestones;
+      if (!container) return;
+      let html = "";
+      MILESTONE_STAGES.forEach((stage, index) => {
+        let status = "pending";
+        if (progress >= stage.threshold) status = "done";
+        else if (
+          index === 0 ||
+          progress >= (MILESTONE_STAGES[index - 1]?.threshold || 0)
+        )
+          status = "active";
+        const icon =
+          status === "done" ? "✅" : status === "active" ? "⏳" : "⬜";
+        html += `<div class="milestone-item ${status}">${icon} ${stage.label}</div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    // ─── Material Usage ──────────────────────────────────────
+    async #loadMaterialsDropdown() {
+      try {
+        const data = await this.#fetchJSON("/api/inventory/");
+        const select = this.#dom.materialSelect;
+        if (!select) return;
+        select.innerHTML = '<option value="">Select Material</option>';
+        if (data.data) {
+          data.data.forEach((item) => {
+            const opt = document.createElement("option");
+            opt.value = item.id;
+            opt.textContent = `${item.name} (${item.current_stock} ${item.unit})`;
+            select.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to load materials dropdown:", err);
+      }
+    }
+
+    async #loadMaterialUsageList(projectId) {
+      const container = this.#dom.drawerMaterialsList;
+      if (!container) return;
+      try {
+        const data = await this.#fetchJSON(
+          `/api/inventory/usage/project/${projectId}`,
+        );
+        const items = data.data || [];
+        if (items.length === 0) {
+          container.innerHTML =
+            '<p style="color:var(--text-muted);">No materials consumed yet.</p>';
+          return;
+        }
+        container.innerHTML = items
+          .map(
+            (item) => `
+                    <div>
+                        <span>${this.#escapeHtml(item.item_name || "Unknown")}</span>
+                        <span>${item.quantity} ${this.#escapeHtml(item.unit || "")}</span>
+                        <span>${this.#formatCurrency(item.total_cost || item.quantity * item.cost_price)}</span>
+                        <button class="btn-delete-item" data-type="material" data-id="${item.id}" data-project="${projectId}" title="Hapus pemakaian material ini">×</button>
+                    </div>
+                `,
+          )
+          .join("");
+      } catch (err) {
+        container.innerHTML =
+          '<p style="color:var(--text-muted);">No materials consumed yet.</p>';
+      }
+    }
+
+    async #consumeMaterial(e) {
+      e.preventDefault();
+      const projectId = this.#state.currentProjectId;
+      if (!projectId) return this.#showToast("No project selected", "error");
+      const select = this.#dom.materialSelect;
+      const qtyInput = this.#dom.materialQty;
+      if (!select || !qtyInput)
+        return this.#showToast("Material form not ready", "error");
+
+      const itemId = select.value;
+      const qty = parseInt(qtyInput.value, 10);
+      if (!itemId) return this.#showToast("Select a material", "error");
+      if (!qty || qty < 1)
+        return this.#showToast("Enter valid quantity", "error");
+
+      try {
+        await this.#fetchJSON("/api/inventory/usage", {
+          method: "POST",
+          body: JSON.stringify({
+            project_id: projectId,
+            item_id: itemId,
+            quantity: qty,
+          }),
+        });
+        this.#showToast("Material consumed");
+        this.#openDrawer(projectId);
+      } catch (err) {
+        this.#showToast(err.message || "Failed to consume material", "error");
+      }
+    }
+
+    async #deleteMaterial(usageId, projectId) {
+      if (!confirm("Hapus pemakaian material ini?")) return;
+      try {
+        await this.#fetchJSON(`/api/inventory/usage/${usageId}`, {
+          method: "DELETE",
+        });
+        this.#showToast("Material usage deleted");
+        this.#openDrawer(projectId);
+      } catch (err) {
+        this.#showToast(err.message || "Gagal hapus material", "error");
+      }
+    }
+
+    // ─── Labor ────────────────────────────────────────────────
+    // ─── Labor ────────────────────────────────────────────────
+    async #loadLaborOptions() {
+      try {
+        const select = this.#dom.laborTypeSelect;
+        if (!select) {
+          console.warn("laborTypeSelect not found");
+          return;
+        }
+
+        // Coba ambil dari API dengan filter category=labor
+        let url = "/api/price-list/?category=labor&active_only=true";
+        let res = await fetch(url);
+        let data = await res.json();
+
+        // Jika tidak ada data, fallback ke semua price list
+        if (!data.data || data.data.length === 0) {
+          res = await fetch("/api/price-list/?active_only=true");
+          data = await res.json();
+        }
+
+        select.innerHTML = '<option value="">Pilih Labor</option>';
+
+        if (data.data && data.data.length > 0) {
+          // Filter manual: cari yang category-nya 'labor' atau nama mengandung 'labor'
+          const laborItems = data.data.filter(
+            (item) =>
+              item.category?.toLowerCase() === "labor" ||
+              item.name?.toLowerCase().includes("labor"),
+          );
+
+          // Gunakan hasil filter, atau semua item jika tidak ada yang cocok
+          const items = laborItems.length > 0 ? laborItems : data.data;
+
+          items.forEach((item) => {
+            const opt = document.createElement("option");
+            opt.value = item.name || item.id;
+            const price = parseFloat(item.price) || 0;
+            const unit = item.unit || "jam";
+            opt.textContent = `${item.name} (${this.#formatCurrency(price)} / ${unit})`;
+            select.appendChild(opt);
+          });
+
+          // Jika items kosong, beri tahu user
+          if (items.length === 0) {
+            select.innerHTML = '<option value="">Tidak ada data labor</option>';
+          }
+        } else {
+          select.innerHTML = '<option value="">Tidak ada data labor</option>';
+        }
+      } catch (err) {
+        console.warn("Gagal load labor options:", err);
+        const select = this.#dom.laborTypeSelect;
+        if (select) {
+          select.innerHTML = '<option value="">Gagal load data</option>';
+        }
+      }
+    }
+
+    async #loadLaborList(projectId) {
+      const container = this.#dom.laborList;
+      if (!container) return;
+      try {
+        const data = await this.#fetchJSON(`/api/projects/${projectId}/labor`);
+        const items = data.data || [];
+        if (items.length === 0) {
+          container.innerHTML =
+            '<p style="color:var(--text-muted);">No labor recorded.</p>';
+          return;
+        }
+        container.innerHTML = items
+          .map(
+            (item) => `
+                    <div>
+                        <span>${this.#escapeHtml(item.labor_type)}</span>
+                        <span>${item.hours} jam @ ${this.#formatCurrency(item.rate_per_hour)}</span>
+                        <span>${this.#formatCurrency(item.total_cost)}</span>
+                        <button class="btn-delete-item" data-type="labor" data-id="${item.id}" data-project="${projectId}" title="Hapus data labor ini">×</button>
+                    </div>
+                `,
+          )
+          .join("");
+      } catch (err) {
+        container.innerHTML =
+          '<p style="color:var(--text-muted);">No labor recorded.</p>';
+      }
+    }
+
+    async #addLabor(e) {
+      e.preventDefault();
+      const projectId = this.#state.currentProjectId;
+      if (!projectId) return this.#showToast("No project selected", "error");
+      const select = this.#dom.laborTypeSelect;
+      const hoursInput = this.#dom.laborHours;
+      const laborType = select?.value;
+      const hours = parseFloat(hoursInput?.value);
+      if (!laborType) return this.#showToast("Pilih jenis labor", "error");
+      if (!hours || hours < 0.5)
+        return this.#showToast(
+          "Masukkan jam kerja yang valid (min 0.5)",
+          "error",
+        );
+
+      try {
+        await this.#fetchJSON(`/api/projects/${projectId}/labor`, {
+          method: "POST",
+          body: JSON.stringify({ labor_type: laborType, hours }),
+        });
+        this.#showToast("Labor added");
+        this.#openDrawer(projectId);
+      } catch (err) {
+        this.#showToast(err.message || "Gagal menambah labor", "error");
+      }
+    }
+
+    async #deleteLabor(laborId, projectId) {
+      if (!confirm("Hapus data labor ini?")) return;
+      try {
+        await this.#fetchJSON(`/api/projects/${projectId}/labor/${laborId}`, {
+          method: "DELETE",
+        });
+        this.#showToast("Labor deleted");
+        this.#openDrawer(projectId);
+      } catch (err) {
+        this.#showToast(err.message || "Gagal hapus labor", "error");
+      }
+    }
+
+    // ─── Progress Popup ──────────────────────────────────────
+    #openProgressPopup(id) {
+      const popup = this.#dom.progressPopup;
+      if (!popup) return;
+      const proj = this.#state.projects.find((p) => p.id === id);
+      if (!proj) return;
+
+      // Set title
+      if (this.#dom.progressPopupTitle)
+        this.#dom.progressPopupTitle.textContent = `Update Progress: ${proj.name}`;
+      if (this.#dom.progressPopupSubtitle) {
+        this.#dom.progressPopupSubtitle.textContent = `${proj.customer_name} • ${proj.vehicle_brand} ${proj.vehicle_model}`;
+      }
+
+      const slider = this.#dom.progressPopupSlider;
+      const valueDisplay = this.#dom.progressPopupValue;
+      const note = this.#dom.progressPopupNote;
+      const milestones = this.#dom.progressPopupMilestones;
+      const markComplete = this.#dom.markCompleteCheckbox;
+
+      const progress = proj.progress || 0;
+      if (slider) slider.value = progress;
+      if (valueDisplay) valueDisplay.textContent = progress;
+      if (note) note.value = proj.notes || "";
+
+      // Milestones
+      const milestoneItems = this.#getMilestones(proj.status, progress);
+      if (milestones) {
+        milestones.innerHTML = milestoneItems
+          .map(
+            (m) =>
+              `<div class="milestone-item ${m.status}">${m.status === "done" ? "✅" : m.status === "active" ? "⏳" : "⬜"} ${this.#escapeHtml(m.label)}</div>`,
+          )
+          .join("");
+      }
+      this.#updateMilestoneHighlights(progress);
+
+      // Mark complete checkbox
+      const isCompleted = proj.status === "completed";
+      if (markComplete) {
+        if (isCompleted) {
+          markComplete.style.display = "flex";
+          markComplete.checked = true;
+          markComplete.disabled = true;
+        } else if (progress === 100) {
+          markComplete.style.display = "flex";
+          markComplete.checked = true;
+          markComplete.disabled = false;
+        } else {
+          markComplete.style.display = "none";
+          markComplete.checked = false;
+          markComplete.disabled = false;
+        }
+      }
+
+      // Store current project id for save
+      this.#state.currentProjectId = id;
+      popup.classList.add("active");
+      document.body.style.overflow = "hidden";
+    }
+
+    #closeProgressPopup() {
+      const popup = this.#dom.progressPopup;
+      if (popup) popup.classList.remove("active");
+      document.body.style.overflow = "";
+      this.#state.currentProjectId = null;
+    }
+
+    #updateMilestoneHighlights(progress) {
+      const container = this.#dom.progressPopupMilestones;
+      if (!container) return;
+      const items = container.querySelectorAll(".milestone-item");
+      const total = items.length;
+      const doneCount = Math.floor((progress / 100) * total);
+      items.forEach((item, index) => {
+        const label = item.textContent.replace(/[✅⏳⬜]\s*/, "");
+        if (index < doneCount) {
+          item.className = "milestone-item done";
+          item.innerHTML = "✅ " + label;
+        } else if (index === doneCount) {
+          item.className = "milestone-item active";
+          item.innerHTML = "⏳ " + label;
+        } else {
+          item.className = "milestone-item pending";
+          item.innerHTML = "⬜ " + label;
+        }
+      });
+    }
+
+    #getMilestones(status, progress) {
+      const allStages = [
+        { key: "inquiry", label: "Inquiry Approved" },
+        { key: "parts", label: "Parts Ordered" },
+        { key: "disassembly", label: "Disassembly" },
+        { key: "paint_prep", label: "Paint Preparation" },
+        { key: "painting", label: "Painting" },
+        { key: "assembly", label: "Assembly" },
+        { key: "qc", label: "Quality Check" },
+        { key: "delivery", label: "Ready for Delivery" },
+      ];
+      const statusMap = {
+        new: ["inquiry"],
+        quoted: ["inquiry"],
+        approved: ["inquiry"],
+        preparation: ["inquiry", "parts"],
+        painting: ["inquiry", "parts", "disassembly", "paint_prep"],
+        assembly: ["inquiry", "parts", "disassembly", "paint_prep", "painting"],
+        completed: allStages.map((s) => s.key),
+      };
+      const completedKeys = statusMap[status] || ["inquiry"];
+      return allStages.map((stage, idx) => {
+        const isDone = completedKeys.includes(stage.key);
+        const isActive = !isDone && completedKeys.length === idx;
+        return {
+          label: stage.label,
+          status: isDone ? "done" : isActive ? "active" : "pending",
+        };
+      });
+    }
+
+    async #saveProgressPopup() {
+      const projectId = this.#state.currentProjectId;
+      if (!projectId) return;
+      const progress = parseInt(this.#dom.progressPopupSlider?.value || 0, 10);
+      const note = this.#dom.progressPopupNote?.value.trim() || "";
+      const markComplete = this.#dom.markCompleteCheckbox?.checked || false;
+
+      const payload = { progress };
+      if (note) payload.notes = note;
+      if (markComplete && progress === 100) payload.status = "completed";
+
+      try {
+        await this.#fetchJSON(`${API_BASE}/${projectId}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+        this.#showToast("Progress updated successfully");
+        this.#closeProgressPopup();
+        this.#loadProjects();
+        if (
+          this.#dom.projectDrawer?.classList.contains("active") &&
+          this.#state.currentProjectId === projectId
+        ) {
+          this.#openDrawer(projectId);
+        }
+      } catch (err) {
+        this.#showToast("Failed to update progress", "error");
+      }
+    }
+
+    // ─── Complete Project ─────────────────────────────────────
+    async #completeProject(id) {
+      if (
+        !confirm(
+          "✅ Tandai project ini sebagai selesai?\n\nProject akan diarsipkan dan tidak bisa diubah lagi.",
+        )
       )
-      .join("");
-    updateMilestoneHighlights(progress);
-
-    const isCompleted = proj.status === "completed";
-    if (isCompleted) {
-      markCompleteCheckbox.style.display = "flex";
-      markCompleteCheckbox.checked = true;
-      markCompleteCheckbox.disabled = true;
-    } else if (progress === 100) {
-      markCompleteCheckbox.style.display = "flex";
-      markCompleteCheckbox.checked = true;
-      markCompleteCheckbox.disabled = false;
-    } else {
-      markCompleteCheckbox.style.display = "none";
-      markCompleteCheckbox.checked = false;
-      markCompleteCheckbox.disabled = false;
-    }
-
-    progressPopup.classList.add("active");
-    document.body.style.overflow = "hidden";
-  }
-
-  function closeProgressPopup() {
-    progressPopup?.classList.remove("active");
-    document.body.style.overflow = "";
-    currentProgressProjectId = null;
-    currentProgressData = null;
-  }
-
-  function updateMilestoneHighlights(progress) {
-    const items = progressPopupMilestones.querySelectorAll(".milestone-item");
-    const total = items.length;
-    const doneCount = Math.floor((progress / 100) * total);
-    items.forEach((item, index) => {
-      const label = item.textContent.replace(/[✅⏳⬜]\s*/, "");
-      if (index < doneCount) {
-        item.className = "milestone-item done";
-        item.innerHTML = "✅ " + label;
-      } else if (index === doneCount) {
-        item.className = "milestone-item active";
-        item.innerHTML = "⏳ " + label;
-      } else {
-        item.className = "milestone-item pending";
-        item.innerHTML = "⬜ " + label;
+        return;
+      try {
+        await this.#fetchJSON(`${API_BASE}/${id}/complete`, { method: "POST" });
+        this.#showToast("🎉 Project completed successfully!");
+        this.#loadProjects();
+      } catch (err) {
+        this.#showToast(err.message || "Failed to complete project", "error");
       }
-    });
-  }
-
-  async function saveProgressPopup() {
-    if (!currentProgressProjectId) return;
-    const progress = parseInt(progressPopupSlider.value, 10);
-    const note = progressPopupNote.value.trim();
-    const markComplete = markCompleteCheckbox.checked;
-
-    const payload = { progress };
-    if (note !== (currentProgressData?.notes || "")) {
-      payload.notes = note;
-    }
-    if (markComplete && progress === 100) {
-      payload.status = "completed";
     }
 
-    try {
-      await fetchJSON(`${API_BASE}/${currentProgressProjectId}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      });
-      showToast("Progress updated successfully");
-      closeProgressPopup();
-      loadProjects();
-    } catch (err) {
-      console.error(err);
-      showToast("Failed to update progress", true);
-    }
-  }
-
-  // ---- Drawer ----
-  let drawer = document.getElementById("projectDrawer");
-  let closeDrawerBtn = document.getElementById("closeDrawer");
-
-  function initializeDrawer() {
-    if (!drawer) return;
-    closeDrawerBtn?.addEventListener("click", closeDrawer);
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeDrawer();
-    });
-  }
-
-  // ---------- MAIN openDrawer ----------
-  async function openDrawer(id) {
-    if (!drawer) return;
-    currentProjectId = id;
-    drawer.classList.add("active");
-
-    // Reset loading placeholders
-    const placeholderFields = [
-      "drawerTitle",
-      "drawerCustomer",
-      "drawerPhone",
-      "drawerStatus",
-      "drawerProgressFill",
-      "drawerProgressText",
-      "drawerBrand",
-      "drawerModel",
-      "drawerPlate",
-      "drawerStartDate",
-      "drawerDelivery",
-      "drawerDuration",
-      "drawerTimelineStatus",
-      "drawerNotes",
-    ];
-    placeholderFields.forEach((fieldId) => {
-      const el = document.getElementById(fieldId);
-      if (el) {
-        if (fieldId === "drawerStatus")
-          el.innerHTML = '<span class="status-badge">-</span>';
-        else if (fieldId === "drawerProgressFill") el.style.width = "0%";
-        else if (fieldId === "drawerProgressText") el.textContent = "0%";
-        else if (fieldId === "drawerTitle") el.textContent = "Loading...";
-        else el.textContent = "-";
-      }
-    });
-
-    try {
-      const data = await fetchJSON(`${API_BASE}/${id}`);
-      const p = data.data;
-      populateDrawer(p);
-    } catch (err) {
-      console.error(err);
-      showToast("Could not load project details", true);
-      closeDrawer();
-    }
-  }
-
-  // ---- populateDrawer (dengan tab) ----
-  function populateDrawer(p) {
-    // Jika p tidak valid, keluar
-    if (!p || typeof p !== 'object') {
-      console.error('Invalid project data in populateDrawer');
-      return;
-    }
-
-    const setText = (id, value) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = value ?? '-';
-    };
-    const setHTML = (id, html) => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = html ?? '-';
-    };
-
-    // Overview
-    setText('drawerCustomer', p.customer_name);
-    setText('drawerPhone', p.phone_number);
-    setText('drawerBrand', p.vehicle_brand);
-    setText('drawerModel', p.vehicle_model);
-    setText('drawerPlate', p.license_plate);
-    setHTML('drawerStatus', `<span class="status-badge ${p.status || ''}">${statusLabel(p.status)}</span>`);
-
-    const progress = p.progress || 0;
-    const fillEl = document.getElementById('drawerProgressFill');
-    if (fillEl) fillEl.style.width = progress + '%';
-    setText('drawerProgressText', progress + '%');
-
-    // Timeline
-    const startDate = p.start_date ? new Date(p.start_date) : null;
-    const targetDate = p.target_delivery ? new Date(p.target_delivery) : null;
-    const now = new Date();
-
-    setText('drawerStartDate', startDate ? startDate.toLocaleDateString() : '-');
-    setText('drawerDelivery', targetDate ? targetDate.toLocaleDateString() : '-');
-
-    let durationText = '-';
-    let timelineStatusText = '-';
-    if (startDate && targetDate) {
-      const days = Math.ceil((targetDate - startDate) / (1000 * 60 * 60 * 24));
-      durationText = `${days} days`;
-      const daysRemaining = Math.ceil((targetDate - now) / (1000 * 60 * 60 * 24));
-      if (now > targetDate) {
-        timelineStatusText = `⚠️ Overdue by ${Math.abs(daysRemaining)} days`;
-      } else if (daysRemaining <= 0) {
-        timelineStatusText = '🎯 Due today!';
-      } else if (daysRemaining <= 3) {
-        timelineStatusText = `⏰ ${daysRemaining} days remaining (urgent)`;
-      } else {
-        timelineStatusText = `✅ ${daysRemaining} days remaining`;
-      }
-    } else if (startDate && !targetDate) {
-      const daysPassed = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
-      durationText = 'No target set';
-      timelineStatusText = `Started ${daysPassed} days ago`;
-    } else {
-      durationText = 'Dates not set';
-    }
-    setText('drawerDuration', durationText);
-    setText('drawerTimelineStatus', timelineStatusText);
-    updateTimelineMilestones(progress);
-
-    const timelineNote = document.getElementById('timelineNote');
-    if (timelineNote) {
-      timelineNote.textContent = p.notes || '-';
-    }
-
-    // Pastikan p.id ada sebelum memanggil fungsi
-    if (p.id) {
-      loadMaterialsForProject(p.id);
-      loadMaterialUsageList(p.id);
-      loadLaborList(p.id);
-    } else {
-      console.warn('Project ID not found, skipping material/labor load');
-    }
-  }
-
-  // ---- Material usage ----
-  async function loadMaterialsForProject(projectId) {
-    try {
-      const data = await fetchJSON("/api/inventory/");
-      const select = document.getElementById("materialSelect");
-      if (!select) return;
-      select.innerHTML = '<option value="">Select Material</option>';
-      if (data.data) {
-        data.data.forEach((item) => {
-          const opt = document.createElement("option");
-          opt.value = item.id;
-          opt.textContent = `${item.name} (${item.current_stock} ${item.unit})`;
-          select.appendChild(opt);
+    // ─── Modal (Create / Edit) ──────────────────────────────
+    #openModal(editData = null) {
+      const modal = this.#dom.projectModal;
+      if (!modal) return;
+      const isEdit = !!editData;
+      if (isEdit) {
+        this.#dom.modalTitle.textContent = "Edit Project";
+        this.#dom.modalSubtitle.textContent = "Update project details";
+        this.#dom.submitProjectBtn.textContent = "Update Project";
+        this.#dom.editProjectId.value = editData.id;
+        // Populate fields
+        const fieldMap = {
+          projectName: "name",
+          customerName: "customer_name",
+          phoneNumber: "phone_number",
+          projectStatus: "status",
+          progressSliderForm: "progress",
+          vehicleBrand: "vehicle_brand",
+          vehicleModel: "vehicle_model",
+          licensePlate: "license_plate",
+          estimatedCost: "estimated_cost",
+          estimatedRevenue: "estimated_revenue",
+          actualCost: "actual_cost",
+          actualRevenue: "actual_revenue",
+          startDate: "start_date",
+          targetDelivery: "target_delivery",
+          projectNotes: "notes",
+        };
+        Object.keys(fieldMap).forEach((elId) => {
+          const el = document.getElementById(elId);
+          const key = fieldMap[elId];
+          if (el && editData[key] !== undefined) {
+            el.value = editData[key];
+          }
         });
-      }
-    } catch (err) {
-      console.warn("Failed to load materials for dropdown", err);
-    }
-  }
-
-  async function loadMaterialUsageList(projectId) {
-    const container = document.getElementById('drawerMaterialsList');
-    if (!container || !projectId) return;
-    try {
-      const response = await fetch(`/api/inventory/usage/project/${projectId}`);
-      if (!response.ok) throw new Error('Not found');
-      const data = await response.json();
-      if (data.success && data.data && data.data.length > 0) {
-        container.innerHTML = data.data
-          .map(
-            (item) => `
-              <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-color);padding:0.5rem 0;">
-                <span>${escapeHtml(item.item_name || 'Unknown')}</span>
-                <span>${item.quantity} ${escapeHtml(item.unit || '')}</span>
-                <span>${formatCurrency(item.total_cost || item.quantity * item.cost_price)}</span>
-                <button class="btn-delete-item" data-type="material" data-id="${item.id}" data-project="${projectId}" title="Hapus pemakaian material ini">×</button>
-              </div>
-            `
-          )
-          .join('');
+        // Trigger progress display
+        const slider = document.getElementById("progressSliderForm");
+        const display = document.getElementById("progressDisplay");
+        if (slider && display) {
+          display.textContent = slider.value;
+        }
       } else {
-        container.innerHTML = '<p style="color:var(--text-muted);">No materials consumed yet.</p>';
+        this.#dom.modalTitle.textContent = "Create New Project";
+        this.#dom.modalSubtitle.textContent =
+          "Register workshop project and production schedule";
+        this.#dom.submitProjectBtn.textContent = "Create Project";
+        this.#dom.projectForm.reset();
+        this.#dom.editProjectId.value = "";
+        const display = document.getElementById("progressDisplay");
+        const slider = document.getElementById("progressSliderForm");
+        if (slider) slider.value = 0;
+        if (display) display.textContent = "0";
       }
-    } catch (err) {
-      container.innerHTML = '<p style="color:var(--text-muted);">No materials consumed yet.</p>';
-    }
-  }
-
-  // ---- Labor ----
-  async function loadLaborList(projectId) {
-    const container = document.getElementById('laborList');
-    if (!container) return;
-    try {
-      const response = await fetch(`/api/projects/${projectId}/labor`);
-      if (!response.ok) throw new Error('Not found');
-      const data = await response.json();
-      if (data.data && data.data.length > 0) {
-        container.innerHTML = data.data
-          .map(
-            (item) => `
-              <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-color);padding:0.5rem 0;">
-                <span>${escapeHtml(item.labor_type)}</span>
-                <span>${item.hours} jam @ ${formatCurrency(item.rate_per_hour)}</span>
-                <span>${formatCurrency(item.total_cost)}</span>
-                <button class="btn-delete-item" data-type="labor" data-id="${item.id}" data-project="${projectId}" title="Hapus data labor ini">×</button>
-              </div>
-            `
-          )
-          .join('');
-      } else {
-        container.innerHTML = '<p style="color:var(--text-muted);">No labor recorded.</p>';
-      }
-    } catch (err) {
-      container.innerHTML = '<p style="color:var(--text-muted);">No labor recorded.</p>';
-    }
-  }
-
-  // ---- Consume material button ----
-  document.addEventListener("click", async (e) => {
-    const btn = e.target.closest("#consumeMaterialBtn");
-    if (!btn) return;
-    e.stopPropagation();
-    const projectId = currentProjectId;
-    if (!projectId) {
-      showToast("No project selected", true);
-      return;
-    }
-    const select = document.getElementById("materialSelect");
-    const qtyInput = document.getElementById("materialQty");
-    if (!select || !qtyInput) {
-      showToast("Material form not ready", true);
-      return;
-    }
-    const itemId = select.value;
-    const qty = parseInt(qtyInput.value, 10);
-    if (!itemId) {
-      showToast("Select a material", true);
-      return;
-    }
-    if (!qty || qty < 1) {
-      showToast("Enter valid quantity", true);
-      return;
-    }
-    try {
-      await fetchJSON("/api/inventory/usage", {
-        method: "POST",
-        body: JSON.stringify({
-          project_id: projectId,
-          item_id: itemId,
-          quantity: qty,
-        }),
-      });
-      showToast("Material consumed");
-      openDrawer(projectId); // refresh drawer
-    } catch (err) {
-      showToast(err.message || "Failed to consume material", true);
-    }
-  });
-
-  // Event delegation untuk tombol delete di drawer
-  document.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".btn-delete-item");
-    if (!btn) return;
-    const type = btn.dataset.type;
-    const id = btn.dataset.id;
-    const projectId = btn.dataset.project || currentProjectId;
-    if (!projectId) {
-      showToast("Project ID not found", true);
-      return;
-    }
-    if (type === "labor") {
-      await deleteLaborItem(id, projectId);
-    } else if (type === "material") {
-      await deleteMaterialItem(id, projectId);
-    }
-  });
-
-  // ---- Complete Project ----
-  async function completeProject(id) {
-    if (!confirm("✅ Tandai project ini sebagai selesai?\n\nProject akan diarsipkan dan tidak bisa diubah lagi.")) return;
-    try {
-      await fetchJSON(`${API_BASE}/${id}/complete`, {
-        method: "POST",
-      });
-      showToast("🎉 Project completed successfully!");
-      loadProjects(); // refresh daftar
-    } catch (err) {
-      console.error(err);
-      showToast(err.message || "Failed to complete project", true);
-    }
-  }
-
-  // ---- Add Labor button ----
-  document.addEventListener("click", async (e) => {
-    const btn = e.target.closest("#addLaborBtn");
-    if (!btn) return;
-
-    const projectId = currentProjectId;
-    if (!projectId) {
-      showToast("Tidak ada project yang dipilih", true);
-      return;
-    }
-
-    const select = document.getElementById("laborTypeSelect");
-    const hoursInput = document.getElementById("laborHours");
-    const laborType = select?.value;
-    const hours = parseFloat(hoursInput?.value);
-
-    if (!laborType) {
-      showToast("Pilih jenis labor", true);
-      return;
-    }
-    if (!hours || hours < 0.5) {
-      showToast("Masukkan jam kerja yang valid (min 0.5)", true);
-      return;
-    }
-
-    try {
-      await fetchJSON(`/api/projects/${projectId}/labor`, {
-        method: "POST",
-        body: JSON.stringify({ labor_type: laborType, hours: hours }),
-      });
-      showToast("Labor added");
-      openDrawer(projectId);
-    } catch (err) {
-      showToast(err.message || "Gagal menambah labor", true);
-    }
-  });
-
-  function closeDrawer() {
-    if (drawer) drawer.classList.remove("active");
-    currentProjectId = null;
-  }
-
-  // ---- Modal (Create / Edit) ----
-  let modal, modalTitle, modalSubtitle, form, submitBtn;
-  let editingProjectId = null;
-
-  function initializeModal() {
-    modal = document.getElementById("projectModal");
-    if (!modal) return;
-    modalTitle = document.getElementById("modalTitle");
-    modalSubtitle = document.getElementById("modalSubtitle");
-    form = document.getElementById("projectForm");
-    submitBtn = document.getElementById("submitProjectBtn");
-    const openBtn = document.getElementById("newProjectBtn");
-    const closeBtn = document.getElementById("closeModal");
-    const cancelBtn = document.getElementById("cancelModalBtn");
-
-    openBtn?.addEventListener("click", () => {
-      editingProjectId = null;
-      if (modalTitle) modalTitle.textContent = "Create New Project";
-      if (modalSubtitle)
-        modalSubtitle.textContent = "Register workshop project and production schedule";
-      if (submitBtn) submitBtn.textContent = "Create Project";
-      form?.reset();
-      const editIdField = document.getElementById("editProjectId");
-      if (editIdField) editIdField.value = "";
       modal.classList.add("active");
       document.body.style.overflow = "hidden";
-    });
+    }
 
-    closeBtn?.addEventListener("click", closeModal);
-    cancelBtn?.addEventListener("click", closeModal);
-    modal.addEventListener("click", (e) => {
-      if (e.target === modal) closeModal();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeModal();
-    });
+    #closeModal() {
+      const modal = this.#dom.projectModal;
+      if (modal) modal.classList.remove("active");
+      document.body.style.overflow = "";
+    }
 
-    form?.addEventListener("submit", handleFormSubmit);
-  }
+    async #handleFormSubmit(e) {
+      e.preventDefault();
+      if (this.#state.isSubmitting) return;
+      this.#state.isSubmitting = true;
 
-  function closeModal() {
-    modal?.classList.remove("active");
-    document.body.style.overflow = "";
-    editingProjectId = null;
-  }
-
-  async function openEditModal(id) {
-    try {
-      const data = await fetchJSON(`${API_BASE}/${id}`);
-      const p = data.data;
-      editingProjectId = id;
-      if (modalTitle) modalTitle.textContent = "Edit Project";
-      if (modalSubtitle) modalSubtitle.textContent = "Update project details";
-      if (submitBtn) submitBtn.textContent = "Update Project";
-
-      const fields = {
-        editProjectId: id,
-        projectName: p.name || "",
-        customerName: p.customer_name || "",
-        phoneNumber: p.phone_number || "",
-        projectStatus: p.status || "new",
-        progressSliderForm: p.progress || 0,
-        progressDisplay: p.progress || 0,
-        vehicleBrand: p.vehicle_brand || "",
-        vehicleModel: p.vehicle_model || "",
-        licensePlate: p.license_plate || "",
-        estimatedCost: p.estimated_cost || 0,
-        estimatedRevenue: p.estimated_revenue || 0,
-        actualCost: p.actual_cost || 0,
-        actualRevenue: p.actual_revenue || 0,
-        startDate: p.start_date || "",
-        targetDelivery: p.target_delivery || "",
-        projectNotes: p.notes || "",
+      const getVal = (id) => document.getElementById(id)?.value || "";
+      const editId = this.#dom.editProjectId.value;
+      const payload = {
+        name: getVal("projectName").trim(),
+        customer_name: getVal("customerName").trim(),
+        phone_number: getVal("phoneNumber").trim(),
+        status: getVal("projectStatus"),
+        progress: parseInt(getVal("progressSliderForm"), 10) || 0,
+        vehicle_brand: getVal("vehicleBrand").trim(),
+        vehicle_model: getVal("vehicleModel").trim(),
+        license_plate: getVal("licensePlate").trim(),
+        estimated_cost: parseFloat(getVal("estimatedCost")) || 0,
+        estimated_revenue: parseFloat(getVal("estimatedRevenue")) || 0,
+        actual_cost: parseFloat(getVal("actualCost")) || 0,
+        actual_revenue: parseFloat(getVal("actualRevenue")) || 0,
+        start_date: getVal("startDate") || null,
+        target_delivery: getVal("targetDelivery") || null,
+        notes: getVal("projectNotes").trim(),
       };
 
-      Object.keys(fields).forEach((key) => {
-        const el = document.getElementById(key);
-        if (el) el.value = fields[key];
+      try {
+        let url = `${API_BASE}/`;
+        let method = "POST";
+        if (editId) {
+          url = `${API_BASE}/${editId}`;
+          method = "PATCH";
+        }
+        await this.#fetchJSON(url, { method, body: JSON.stringify(payload) });
+        this.#showToast(editId ? "Project updated" : "Project created");
+        this.#closeModal();
+        this.#loadProjects();
+      } catch (err) {
+        this.#showToast(
+          err.message || (editId ? "Update failed" : "Create failed"),
+          "error",
+        );
+      } finally {
+        this.#state.isSubmitting = false;
+      }
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────
+    #formatCurrency(amount) {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0,
+      }).format(amount || 0);
+    }
+
+    #escapeHtml(str) {
+      if (!str) return "";
+      return String(str).replace(/[&<>]/g, (m) => {
+        if (m === "&") return "&amp;";
+        if (m === "<") return "&lt;";
+        if (m === ">") return "&gt;";
+        return m;
       });
-
-      modal.classList.add("active");
-      document.body.style.overflow = "hidden";
-    } catch (err) {
-      console.error(err);
-      showToast("Could not load project for editing", true);
     }
-  }
 
-  async function handleFormSubmit(e) {
-    e.preventDefault();
-    const getVal = (id) => document.getElementById(id)?.value || "";
-    const payload = {
-      name: getVal("projectName").trim(),
-      customer_name: getVal("customerName").trim(),
-      phone_number: getVal("phoneNumber").trim(),
-      status: getVal("projectStatus"),
-      progress: parseInt(getVal("progressSliderForm"), 10) || 0,
-      vehicle_brand: getVal("vehicleBrand").trim(),
-      vehicle_model: getVal("vehicleModel").trim(),
-      license_plate: getVal("licensePlate").trim(),
-      estimated_cost: parseFloat(getVal("estimatedCost")) || 0,
-      estimated_revenue: parseFloat(getVal("estimatedRevenue")) || 0,
-      actual_cost: parseFloat(getVal("actualCost")) || 0,
-      actual_revenue: parseFloat(getVal("actualRevenue")) || 0,
-      start_date: getVal("startDate") || null,
-      target_delivery: getVal("targetDelivery") || null,
-      notes: getVal("projectNotes").trim(),
-    };
+    #statusLabel(status) {
+      return STATUS_LABELS[status] || status;
+    }
 
-    try {
-      let url = `${API_BASE}/`;
-      let method = "POST";
-      if (editingProjectId) {
-        url = `${API_BASE}/${editingProjectId}`;
-        method = "PATCH";
+    #setText(id, value) {
+      const el = this.#dom[id];
+      if (el) el.textContent = value;
+    }
+
+    #showToast(message, type = "success") {
+      if (typeof window.showToast === "function") {
+        window.showToast(message, type);
+        return;
       }
-      await fetchJSON(url, { method, body: JSON.stringify(payload) });
-      showToast(editingProjectId ? "Project updated" : "Project created");
-      form?.reset();
-      closeModal();
-      loadProjects();
-    } catch (err) {
-      console.error(err);
-      showToast(editingProjectId ? "Update failed" : "Create failed", true);
+      const container = document.getElementById("toastContainer");
+      if (!container) return;
+      const toast = document.createElement("div");
+      toast.className = `toast ${type}`;
+      toast.style.cssText = `
+                padding: 12px 18px;
+                border-radius: 12px;
+                background: ${type === "error" ? "#7f1d1d" : "#111827"};
+                color: #fff;
+                border: 1px solid rgba(255,255,255,0.08);
+                box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+                transform: translateX(100%);
+                opacity: 0;
+                transition: all 0.3s ease;
+            `;
+      toast.textContent = message;
+      container.appendChild(toast);
+      requestAnimationFrame(() => {
+        toast.style.transform = "translateX(0)";
+        toast.style.opacity = "1";
+      });
+      setTimeout(() => {
+        toast.style.transform = "translateX(100%)";
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
     }
   }
 
-  // ---- Load labor options from price list ----
-  async function loadLaborOptions() {
-    try {
-      const res = await fetch('/api/price-list/?category=labor&active_only=true');
-      const data = await res.json();
-      const select = document.getElementById('laborTypeSelect');
-      if (!select) return;
-      select.innerHTML = '<option value="">Pilih Labor</option>';
-      if (data.data) {
-        data.data.forEach(item => {
-          const opt = document.createElement('option');
-          opt.value = item.name;
-          opt.textContent = `${item.name} (${formatCurrency(item.price)} / ${item.unit || 'jam'})`;
-          select.appendChild(opt);
-        });
-      }
-    } catch (err) {
-      console.warn("Gagal load labor options", err);
-    }
-  }
-
-  // ---- Progress slider in modal ----
-  function initializeProgressSlider() {
-    const slider = document.getElementById("progressSliderForm");
-    const display = document.getElementById("progressDisplay");
-    if (!slider) return;
-    slider.addEventListener("input", () => {
-      const val = slider.value;
-      if (display) display.textContent = val;
-      slider.style.background = `linear-gradient(90deg, var(--accent) ${val}%, rgba(255,255,255,0.08) ${val}%)`;
-    });
-    slider.dispatchEvent(new Event("input"));
-  }
-
-  // ---- Update Milestones di Timeline ----
-  function updateTimelineMilestones(progress) {
-    const container = document.getElementById('timelineMilestones');
-    if (!container) return;
-    const stages = [
-      { key: 'disassembly', label: 'Disassembly', threshold: 20 },
-      { key: 'paint_prep', label: 'Paint Prep', threshold: 40 },
-      { key: 'painting', label: 'Painting', threshold: 60 },
-      { key: 'assembly', label: 'Assembly', threshold: 80 },
-      { key: 'qc', label: 'Quality Check', threshold: 95 },
-      { key: 'delivery', label: 'Ready for Delivery', threshold: 100 }
-    ];
-    let html = '';
-    stages.forEach((stage, index) => {
-      let status = 'pending';
-      if (progress >= stage.threshold) status = 'done';
-      else if (index === 0 || progress >= (stages[index-1]?.threshold || 0)) status = 'active';
-      const icon = status === 'done' ? '✅' : status === 'active' ? '⏳' : '⬜';
-      html += `<div class="milestone-item ${status}">${icon} ${stage.label}</div>`;
-    });
-    container.innerHTML = html;
-  }
-
-  // ---- Search & Filter ----
-  function initializeSearch() {
-    searchInput?.addEventListener("input", () => {
-      currentSearch = searchInput.value;
-      renderCards();
-    });
-    statusFilter?.addEventListener("change", () => {
-      currentFilter = statusFilter.value;
-      renderCards();
-    });
-  }
-
-  // ---- Export placeholder ----
-  document.getElementById("exportBtn")?.addEventListener("click", () => {
-    showToast("Export feature coming soon");
+  // ─── Instantiate ─────────────────────────────────────────────
+  document.addEventListener("DOMContentLoaded", () => {
+    new ProjectManager();
   });
-
-  function getQueryParam(param) {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(param);
-  }
-
-  // ---- Init ----
-  async function init() {
-    initializeDrawer();
-    initializeModal();
-    initializeSearch();
-    initializeProgressSlider();
-    initializeProgressPopup();
-    loadLaborOptions();
-    await loadProjects(); // ← tunggu sampai data termuat
-    initTabs();
-
-    // Cek parameter 'open' di URL (dari inquiry drawer)
-    const openProjectId = getQueryParam('open');
-    if (openProjectId) {
-      // Langsung buka drawer, data sudah ada
-      openDrawer(openProjectId);
-      const url = new URL(window.location);
-      url.searchParams.delete('open');
-      window.history.replaceState({}, '', url);
-    }
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
 })();

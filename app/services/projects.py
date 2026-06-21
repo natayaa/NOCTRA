@@ -22,13 +22,12 @@ class ProjectService:
     # CRUD Operations
     # ----------------------------------------------------------------------
 
-    async def create(self, db: AsyncSession, payload: dict) -> Project:
-        """Create a new project and auto-create its WorkshopJob."""
+    async def create(self, db: AsyncSession, payload: dict):
         project = Project(**payload)
         db.add(project)
         await db.flush()
 
-        # Auto-create WorkshopJob for this project
+        # Auto-create WorkshopJob
         job = WorkshopJob(
             project_id=project.id,
             unit_name=project.name,

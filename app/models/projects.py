@@ -1,9 +1,11 @@
 from sqlalchemy import String, Numeric, ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from decimal import Decimal
+from datetime import datetime
+
 from database.base import Base, UUIDMixin, TimestampMixin, UUID
 from schemas.constants import ProjectStatus, InquiryStatus
-from datetime import datetime
+
 
 
 class Project(Base, UUIDMixin, TimestampMixin):
@@ -39,6 +41,7 @@ class Project(Base, UUIDMixin, TimestampMixin):
     workshop_job = relationship("WorkshopJob", back_populates="project", uselist=False)
     labor_items = relationship("ProjectLabor", back_populates="project", cascade="all, delete-orphan")
     material_usages = relationship("JobMaterialUsage", back_populates="project", cascade="all, delete-orphan")
+
 
 class ProjectTask(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "tb_project_tasks"

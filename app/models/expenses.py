@@ -6,6 +6,7 @@ from datetime import date
 from uuid import UUID
 
 from database.base import Base, UUIDMixin, TimestampMixin
+from models.projects import Project
 
 
 class Expense(Base, UUIDMixin, TimestampMixin):
@@ -22,7 +23,7 @@ class Expense(Base, UUIDMixin, TimestampMixin):
     expense_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
 
     # relationships
-    project = relationship("Project", back_populates="expenses")  # jika Project punya relasi ini
+    project = relationship("Project")  # jika Project punya relasi ini
 
     def __repr__(self):
         return f"<Expense {self.description[:20]} - {self.amount}>" 

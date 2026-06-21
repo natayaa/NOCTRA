@@ -5,13 +5,11 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, extract, desc
+from sqlalchemy import select, func, and_, extract, desc, select
+from sqlalchemy.orm import selectinload
 
 from models.projects import Project
-from models.customer_inquiry import CustomerInquiry
 from models.expenses import Expense
-from models.inventory_items import InventoryItems
-from models.inventory_material_usage import JobMaterialUsage
 
 from schemas.expenses import ExpenseCreate, ExpenseUpdate
 from schemas.budgeting import (
@@ -29,10 +27,6 @@ class BudgetingService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-
-    # -------------------------------------------------------------------------
-    # Helper: Period Range
-    # -------------------------------------------------------------------------
 
     def _get_period_range(self, period: str) -> tuple[date, date]:
         """Return start and end date for a given period."""
@@ -94,7 +88,8 @@ class BudgetingService:
             .where(Project.status == 'completed')
         ) or Decimal(1)  # avoid division by zero
 
-        material_ratio = float((material_expenses / total_revenue) * 100) if total_revenue else 0
+        material_ratio = float(
+            (material_expenses / total_revenue) * 100) if total_revenue else 0
 
         # Average project profit
         avg_profit = await self.db.scalar(
@@ -187,7 +182,8 @@ class BudgetingService:
         data = []
         for row in rows:
             month = row.month.strftime('%b %Y')
-            data.append(MonthlyExpensePoint(month=month, amount=row.total or Decimal(0)))
+            data.append(MonthlyExpensePoint(
+                month=month, amount=row.total or Decimal(0)))
 
         return data
 
@@ -244,8 +240,10 @@ class BudgetingService:
         exp_result = await self.db.execute(exp_stmt)
 
         # Merge into dict
-        rev_dict = {row.month.strftime('%b %Y'): row.revenue for row in rev_result}
-        exp_dict = {row.month.strftime('%b %Y'): row.expenses for row in exp_result}
+        rev_dict = {row.month.strftime(
+            '%b %Y'): row.revenue for row in rev_result}
+        exp_dict = {row.month.strftime(
+            '%b %Y'): row.expenses for row in exp_result}
 
         all_months = sorted(set(rev_dict.keys()) | set(exp_dict.keys()))
         data = []
@@ -300,7 +298,8 @@ class BudgetingService:
         offset: int = 0
     ) -> tuple[List[Expense], int]:
         """List expenses with filters and pagination."""
-        stmt = select(Expense)
+        stmt = select(Expense).options(selectinload(Expense.project)).order_by(
+            desc(Expense.expense_date)).offset(offset).limit(limit)
         count_stmt = select(func.count()).select_from(Expense)
 
         filters = []
@@ -319,7 +318,8 @@ class BudgetingService:
             stmt = stmt.where(and_(*filters))
             count_stmt = count_stmt.where(and_(*filters))
 
-        stmt = stmt.order_by(desc(Expense.expense_date)).offset(offset).limit(limit)
+        stmt = stmt.order_by(desc(Expense.expense_date)
+                             ).offset(offset).limit(limit)
 
         result = await self.db.execute(stmt)
         expenses = result.scalars().all()

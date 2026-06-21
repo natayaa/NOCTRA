@@ -1,610 +1,891 @@
-/* =========================================================
-   inquiries.js – Table view with full CRUD + Drawer
-   (Fixed: added Project Status column, proper actions,
-    disable Convert when needed, sync with projects)
-   ========================================================= */
-(function() {
-  'use strict';
+/**
+ * NOCTRA Inquiries Dashboard
+ * Full CRUD + Drawer, integrated with backend APIs
+ *
+ * Refactored to be modular, maintainable, and performant.
+ * All logic is encapsulated in a single class.
+ */
+(function () {
+  "use strict";
 
-  const API_BASE = '/api/customer/inquiry';
-  const API_PROJECTS = '/api/projects';
+  // ─── Constants ──────────────────────────────────────────────
+  const STATUS_MAP = {
+    new: "New",
+    quoted: "Quoted",
+    approved: "Approved",
+    rejected: "Rejected",
+    converted: "Converted",
+    completed: "Completed",
+  };
 
-  let inquiriesData = [];
-  let currentFilter = '';
-  let currentSearch = '';
-  let currentInquiryId = null;
+  const PROJECT_STATUS_MAP = {
+    new: "New",
+    quoted: "Quoted",
+    approved: "Approved",
+    preparation: "Preparation",
+    painting: "Painting",
+    assembly: "Assembly",
+    completed: "Completed",
+  };
 
-  // DOM refs
-  const tbody = document.getElementById('inquiriesBody');
-  const searchInput = document.getElementById('searchInquiry');
-  const statusFilter = document.getElementById('statusFilter');
-  const totalSpan = document.getElementById('totalCount');
-  const newSpan = document.getElementById('newCount');
-  const quotedSpan = document.getElementById('quotedCount');
-  const convertedSpan = document.getElementById('convertedCount');
+  const API_BASE = "/api/customer/inquiry";
+  const API_PROJECTS = "/api/projects";
 
-  // Helpers
-  function formatCurrency(amount) {
-    if (!amount && amount !== 0) return '—';
-    return 'Rp ' + Number(amount).toLocaleString('id-ID');
-  }
-
-  function escapeHtml(str = '') {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-  }
-
-  function statusLabel(status) {
-    const map = {
-      new: 'New',
-      quoted: 'Quoted',
-      approved: 'Approved',
-      rejected: 'Rejected',
-      converted: 'Converted',
-      completed: 'Completed'
+  // ─── Main Class ──────────────────────────────────────────────
+  class InquiryManager {
+    // ─── Private fields ──────────────────────────────────────
+    #state = {
+      inquiries: [],
+      currentFilter: "",
+      currentSearch: "",
+      currentInquiryId: null,
     };
-    return map[status?.toLowerCase()] || status;
-  }
 
-  function projectStatusLabel(status) {
-    const map = {
-      new: 'New',
-      quoted: 'Quoted',
-      approved: 'Approved',
-      preparation: 'Preparation',
-      painting: 'Painting',
-      assembly: 'Assembly',
-      completed: 'Completed'
+    #dom = {};
+    #modals = {
+      quote: null,
+      reject: null,
+      drawer: null,
     };
-    return map[status?.toLowerCase()] || status || '—';
-  }
+    #timeouts = {
+      notes: null,
+      search: null,
+    };
+    #isLoading = false;
 
-  function statusBadgeClass(status) {
-    const s = status?.toLowerCase() || 'new';
-    return s === 'completed' ? 'completed' : s;
-  }
-
-  function showToast(msg, isError = false) {
-    let t = document.querySelector('.app-toast');
-    if (!t) {
-      t = document.createElement('div');
-      t.className = 'app-toast';
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    t.className = 'app-toast' + (isError ? ' error' : '');
-    setTimeout(() => t.classList.add('show'), 10);
-    clearTimeout(t._timeout);
-    t._timeout = setTimeout(() => t.classList.remove('show'), 3000);
-  }
-
-  // API call
-  async function fetchJSON(url, options = {}) {
-    const res = await fetch(url, {
-      ...options,
-      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(err || res.statusText);
-    }
-    return res.json();
-  }
-
-  // Load inquiries
-  async function loadInquiries() {
-    tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Loading inquiries...</td></tr>`;
-    try {
-      const data = await fetchJSON(`${API_BASE}/`);
-      inquiriesData = data.data || [];
-      renderTable();
-      updateDashboard();
-    } catch (err) {
-      console.error(err);
-      showToast('Failed to load inquiries', true);
-      tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Error loading inquiries</td></tr>`;
-    }
-  }
-
-  function renderTable() {
-    const search = currentSearch.toLowerCase().trim();
-    const status = currentFilter;
-
-    const filtered = inquiriesData.filter(inq => {
-      const matchSearch = !search ||
-        inq.customer_name.toLowerCase().includes(search) ||
-        inq.customer_phone_number.includes(search) ||
-        inq.vehicle_brand.toLowerCase().includes(search) ||
-        inq.vehicle_model.toLowerCase().includes(search);
-      const matchStatus = !status || inq.status.toLowerCase() === status;
-      return matchSearch && matchStatus;
-    });
-
-    if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">No inquiries found</td></tr>`;
-      return;
+    // ─── Constructor ──────────────────────────────────────────
+    constructor() {
+      this.#cacheDomRefs();
+      this.#initializeModals();
+      this.#bindEvents();
+      this.#loadInquiries();
     }
 
-    tbody.innerHTML = filtered.map(inq => {
-      const statusLow = (inq.status || '').toLowerCase();
-      const canConvert = !(statusLow === 'converted' || statusLow === 'rejected' || statusLow === 'completed');
-      const projectStatus = inq.project ? projectStatusLabel(inq.project.status) : '—';
-      return `
-      <tr data-id="${inq.id}">
-        <td data-label="Customer">
-          <strong>${escapeHtml(inq.customer_name)}</strong><br>
-          <small>${escapeHtml(inq.customer_phone_number)}</small>
-        </td>
-        <td data-label="Vehicle">${escapeHtml(inq.vehicle_brand)} ${escapeHtml(inq.vehicle_model)}</td>
-        <td data-label="Project Type">${escapeHtml(inq.project_type || '—')}</td>
-        <td data-label="Status"><span class="status-badge ${statusBadgeClass(inq.status)}">${statusLabel(inq.status)}</span></td>
-        <td data-label="Project Status">
-          ${inq.project ? `<span class="project-status-badge ${inq.project.status}">${projectStatus}</span>` : '—'}
-        </td>
-        <td data-label="Created">${new Date(inq.created_at).toLocaleDateString()}</td>
-        <td data-label="Actions" style="text-align:center;">
-          <div class="actions">
-            <button class="action-btn view" data-action="view" title="View Details"><i class="ph ph-eye"></i></button>
-            <button class="action-btn quote" data-action="quote" title="Send Quote"><i class="ph ph-file-text"></i></button>
-            <button class="action-btn approve" data-action="approve" title="Approve"><i class="ph ph-check"></i></button>
-            <button class="action-btn reject" data-action="reject" title="Reject"><i class="ph ph-x"></i></button>
-            ${canConvert ? `<button class="action-btn convert" data-action="convert" title="Convert to Project"><i class="ph ph-arrow-right"></i></button>` : ''}
-          </div>
-        </td>
-      </tr>
-    `}).join('');
-
-    // Attach events to action buttons
-    tbody.querySelectorAll('.action-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const tr = btn.closest('tr');
-        const id = tr.dataset.id;
-        const action = btn.dataset.action;
-        if (action === 'view') openDrawer(id);
-        else if (action === 'quote') openQuoteModal(id);
-        else if (action === 'approve') approveInquiry(id);
-        else if (action === 'reject') openRejectModal(id);
-        else if (action === 'convert') convertInquiry(id);
+    // ─── DOM Caching ──────────────────────────────────────────
+    #cacheDomRefs() {
+      const ids = [
+        "inquiriesBody",
+        "searchInquiry",
+        "statusFilter",
+        "totalCount",
+        "newCount",
+        "quotedCount",
+        "convertedCount",
+        "inquiryDrawer",
+        "closeDrawer",
+        "drawerCustomerName",
+        "drawerStatusBadge",
+        "drawerName",
+        "drawerPhone",
+        "drawerEmail",
+        "drawerBrand",
+        "drawerModel",
+        "drawerPlate",
+        "drawerCondition",
+        "drawerType",
+        "drawerBudget",
+        "drawerTarget",
+        "drawerDescription",
+        "drawerReference",
+        "drawerPhotosSection",
+        "drawerPhotos",
+        "drawerTimeline",
+        "drawerNotes",
+        "noteCounter",
+        "drawerApproveBtn",
+        "drawerQuoteBtn",
+        "drawerRejectBtn",
+        "drawerConvertBtn",
+        "drawerWhatsappBtn",
+        "drawerViewProjectBtn",
+        "drawerFinancialSection",
+        "drawerEstCost",
+        "drawerActualCost",
+        "drawerEstRevenue",
+        "drawerActualRevenue",
+        "drawerProfit",
+        "drawerMargin",
+        "drawerProjectStatus",
+        "quoteModal",
+        "quoteForm",
+        "quoteCost",
+        "quoteRevenue",
+        "closeQuoteModal",
+        "cancelQuoteBtn",
+        "rejectModal",
+        "rejectForm",
+        "rejectReason",
+        "closeRejectModal",
+        "cancelRejectBtn",
+        "exportInquiriesBtn",
+      ];
+      const refs = {};
+      ids.forEach((id) => {
+        refs[id] = document.getElementById(id);
       });
-    });
-
-    // Click on row = view
-    tbody.querySelectorAll('tr').forEach(tr => {
-      tr.addEventListener('click', () => {
-        const id = tr.dataset.id;
-        if (id) openDrawer(id);
-      });
-    });
-  }
-
-  function updateDashboard() {
-    const total = inquiriesData.length;
-    const newCount = inquiriesData.filter(i => i.status?.toLowerCase() === 'new').length;
-    const quoted = inquiriesData.filter(i => i.status?.toLowerCase() === 'quoted').length;
-    const converted = inquiriesData.filter(i => i.status?.toLowerCase() === 'converted').length;
-    if (totalSpan) totalSpan.textContent = total;
-    if (newSpan) newSpan.textContent = newCount;
-    if (quotedSpan) quotedSpan.textContent = quoted;
-    if (convertedSpan) convertedSpan.textContent = converted;
-  }
-
-  // ============================================================
-  // DRAWER
-  // ============================================================
-  let drawer = document.getElementById('inquiryDrawer');
-  let closeDrawerBtn = document.getElementById('closeDrawer');
-
-  function initializeDrawer() {
-    if (!drawer) return;
-    closeDrawerBtn?.addEventListener('click', closeDrawer);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
-  }
-
-  async function openDrawer(id) {
-    if (!drawer) return;
-    currentInquiryId = id;
-    drawer.classList.add('active');
-
-    // Reset loading placeholders
-    document.getElementById('drawerCustomerName').textContent = 'Loading...';
-    document.getElementById('drawerStatusBadge').textContent = '...';
-    ['drawerName','drawerPhone','drawerEmail','drawerBrand','drawerModel','drawerPlate','drawerCondition','drawerType','drawerBudget','drawerTarget','drawerDescription','drawerReference','drawerProjectStatus'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = '—';
-    });
-    document.getElementById('drawerPhotosSection').style.display = 'none';
-    document.getElementById('drawerTimeline').innerHTML = '<div class="timeline-item"><span>—</span><p>Loading...</p></div>';
-    document.getElementById('drawerNotes').value = '';
-
-    try {
-      const data = await fetchJSON(`${API_BASE}/${id}`);
-      const inq = data.data;
-      populateDrawer(inq);
-    } catch (err) {
-      console.error(err);
-      showToast('Could not load inquiry details', true);
-      closeDrawer();
-    }
-  }
-
-  function populateDrawer(inq) {
-    // Customer
-    document.getElementById('drawerCustomerName').textContent = inq.customer_name || '—';
-    document.getElementById('drawerStatusBadge').textContent = statusLabel(inq.status);
-    document.getElementById('drawerStatusBadge').className = `status-badge ${statusBadgeClass(inq.status)}`;
-    document.getElementById('drawerName').textContent = inq.customer_name || '—';
-    document.getElementById('drawerPhone').textContent = inq.customer_phone_number || '—';
-    document.getElementById('drawerEmail').textContent = inq.customer_email || '—';
-
-    // Vehicle & Project
-    document.getElementById('drawerBrand').textContent = inq.vehicle_brand || '—';
-    document.getElementById('drawerModel').textContent = inq.vehicle_model || '—';
-    document.getElementById('drawerPlate').textContent = inq.vehicle_license_plate || '—';
-    document.getElementById('drawerCondition').textContent = inq.vehicle_condition || '—';
-    document.getElementById('drawerType').textContent = inq.project_type || '—';
-    document.getElementById('drawerBudget').textContent = formatCurrency(inq.estimated_budget);
-    document.getElementById('drawerTarget').textContent = inq.project_target || '—';
-
-    // Project Status (tambahan)
-    const projectStatusEl = document.getElementById('drawerProjectStatus');
-    if (inq.project && inq.project.status) {
-      projectStatusEl.textContent = projectStatusLabel(inq.project.status);
-    } else {
-      projectStatusEl.textContent = '—';
+      this.#dom = refs;
     }
 
-    // Description
-    document.getElementById('drawerDescription').textContent = inq.project_description || 'No description provided.';
-    const refLink = document.getElementById('drawerReference');
-    if (inq.reference_link) {
-      refLink.href = inq.reference_link;
-      refLink.style.display = 'inline';
-    } else {
-      refLink.style.display = 'none';
-    }
-
-    // Photos
-    const photoSection = document.getElementById('drawerPhotosSection');
-    const photoGrid = document.getElementById('drawerPhotos');
-    if (inq.photos && inq.photos.length > 0) {
-      photoSection.style.display = 'block';
-      photoGrid.innerHTML = inq.photos.map(p => `
-        <img src="${escapeHtml(p.file_path)}" alt="Photo" loading="lazy" />
-      `).join('');
-    } else {
-      photoSection.style.display = 'none';
-    }
-
-    // Financial Summary (dari project jika ada)
-    const financialSection = document.getElementById('drawerFinancialSection');
-    const estCost = document.getElementById('drawerEstCost');
-    const actualCost = document.getElementById('drawerActualCost');
-    const estRevenue = document.getElementById('drawerEstRevenue');
-    const actualRevenue = document.getElementById('drawerActualRevenue');
-    const profitEl = document.getElementById('drawerProfit');
-    const marginEl = document.getElementById('drawerMargin');
-
-    if (inq.project && inq.project.id) {
-      financialSection.style.display = 'block';
-      const p = inq.project;
-      const estCostVal = p.estimated_cost || 0;
-      const actualCostVal = p.actual_cost || 0;
-      const estRevenueVal = p.estimated_revenue || 0;
-      const actualRevenueVal = p.actual_revenue || 0;
-      const profit = actualRevenueVal - actualCostVal;
-      const margin = actualRevenueVal > 0 ? ((profit / actualRevenueVal) * 100).toFixed(0) : 0;
-
-      estCost.textContent = formatCurrency(estCostVal);
-      actualCost.textContent = formatCurrency(actualCostVal);
-      estRevenue.textContent = formatCurrency(estRevenueVal);
-      actualRevenue.textContent = formatCurrency(actualRevenueVal);
-      profitEl.textContent = formatCurrency(profit);
-      marginEl.textContent = margin + '%';
-    } else {
-      financialSection.style.display = 'none';
-    }
-
-    // Timeline
-    const timeline = document.getElementById('drawerTimeline');
-    if (inq.activities && inq.activities.length > 0) {
-      timeline.innerHTML = inq.activities.map(act => `
-        <div class="timeline-item">
-          <span>${new Date(act.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-          <p>${escapeHtml(act.activity)}</p>
-        </div>
-      `).join('');
-    } else {
-      timeline.innerHTML = `<div class="timeline-item"><span>—</span><p>No activity yet</p></div>`;
-    }
-
-    // Notes
-    const notes = document.getElementById('drawerNotes');
-    notes.value = inq.note || '';
-    document.getElementById('noteCounter').textContent = notes.value.length;
-
-    // Action buttons state
-    const statusLow = (inq.status || '').toLowerCase();
-    const isConverted = statusLow === 'converted';
-    const isRejected = statusLow === 'rejected';
-    const isCompleted = statusLow === 'completed';
-
-    document.getElementById('drawerApproveBtn').disabled = !(statusLow === 'new' || statusLow === 'quoted');
-    document.getElementById('drawerQuoteBtn').disabled = !(statusLow === 'new' || statusLow === 'quoted');
-    document.getElementById('drawerRejectBtn').disabled = isRejected || isConverted || isCompleted;
-    document.getElementById('drawerConvertBtn').disabled = isConverted || isRejected || isCompleted;
-
-    const viewProjectBtn = document.getElementById('drawerViewProjectBtn');
-    if (inq.project && inq.project.id) {
-      viewProjectBtn.href = `/management/projects?open=${inq.project.id}`;
-      viewProjectBtn.style.display = 'inline-flex';
-    } else {
-      viewProjectBtn.style.display = 'none';
-    }
-  }
-
-  function closeDrawer() {
-    if (drawer) drawer.classList.remove('active');
-    currentInquiryId = null;
-  }
-
-  // ============================================================
-  // ACTIONS
-  // ============================================================
-
-  async function approveInquiry(id) {
-    if (!id && currentInquiryId) id = currentInquiryId;
-    if (!id) return;
-    try {
-      await fetchJSON(`${API_BASE}/${id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'approved' })
-      });
-      showToast('Inquiry approved');
-      loadInquiries();
-      if (drawer.classList.contains('active')) {
-        await openDrawer(id);
+    // ─── Modal Initialization ────────────────────────────────
+    #initializeModals() {
+      // Drawer
+      const { inquiryDrawer, closeDrawer } = this.#dom;
+      if (inquiryDrawer) {
+        this.#modals.drawer = inquiryDrawer;
+        closeDrawer?.addEventListener("click", () => this.#closeDrawer());
+        document.addEventListener("keydown", (e) => {
+          if (
+            e.key === "Escape" &&
+            inquiryDrawer.classList.contains("active")
+          ) {
+            this.#closeDrawer();
+          }
+        });
       }
-    } catch (err) {
-      console.error(err);
-      showToast('Failed to approve', true);
-    }
-  }
 
-  // --- Quote Modal ---
-  let quoteModal, quoteForm, quoteCost, quoteRevenue, quoteInquiryId;
-
-  function initializeQuoteModal() {
-    quoteModal = document.getElementById('quoteModal');
-    quoteForm = document.getElementById('quoteForm');
-    quoteCost = document.getElementById('quoteCost');
-    quoteRevenue = document.getElementById('quoteRevenue');
-    const closeBtn = document.getElementById('closeQuoteModal');
-    const cancelBtn = document.getElementById('cancelQuoteBtn');
-
-    closeBtn?.addEventListener('click', closeQuoteModal);
-    cancelBtn?.addEventListener('click', closeQuoteModal);
-    quoteModal?.addEventListener('click', (e) => { if (e.target === quoteModal) closeQuoteModal(); });
-    quoteForm?.addEventListener('submit', handleQuoteSubmit);
-  }
-
-  function openQuoteModal(id) {
-    quoteInquiryId = id;
-    quoteCost.value = '';
-    quoteRevenue.value = '';
-    quoteModal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeQuoteModal() {
-    quoteModal.classList.remove('active');
-    document.body.style.overflow = '';
-    quoteInquiryId = null;
-  }
-
-  async function handleQuoteSubmit(e) {
-    e.preventDefault();
-    const cost = parseFloat(quoteCost.value);
-    const revenue = parseFloat(quoteRevenue.value);
-    if (isNaN(cost) || isNaN(revenue) || cost < 0 || revenue < 0) {
-      showToast('Please enter valid numbers', true);
-      return;
-    }
-    try {
-      await fetchJSON(`${API_BASE}/${quoteInquiryId}/quote`, {
-        method: 'POST',
-        body: JSON.stringify({ estimated_cost: cost, estimated_revenue: revenue })
-      });
-      showToast('Quotation sent');
-      closeQuoteModal();
-      loadInquiries();
-      if (drawer.classList.contains('active')) {
-        await openDrawer(quoteInquiryId);
+      // Quote Modal
+      const quoteModal = this.#dom.quoteModal;
+      if (quoteModal) {
+        this.#modals.quote = quoteModal;
+        const closeBtn = this.#dom.closeQuoteModal;
+        const cancelBtn = this.#dom.cancelQuoteBtn;
+        const close = () => this.#closeQuoteModal();
+        closeBtn?.addEventListener("click", close);
+        cancelBtn?.addEventListener("click", close);
+        quoteModal.addEventListener("click", (e) => {
+          if (e.target === quoteModal) close();
+        });
+        this.#dom.quoteForm?.addEventListener("submit", (e) =>
+          this.#handleQuoteSubmit(e),
+        );
       }
-    } catch (err) {
-      console.error(err);
-      showToast('Failed to send quote', true);
-    }
-  }
 
-  // --- Reject Modal ---
-  let rejectModal, rejectForm, rejectReason, rejectInquiryId;
-
-  function initializeRejectModal() {
-    rejectModal = document.getElementById('rejectModal');
-    rejectForm = document.getElementById('rejectForm');
-    rejectReason = document.getElementById('rejectReason');
-    const closeBtn = document.getElementById('closeRejectModal');
-    const cancelBtn = document.getElementById('cancelRejectBtn');
-
-    closeBtn?.addEventListener('click', closeRejectModal);
-    cancelBtn?.addEventListener('click', closeRejectModal);
-    rejectModal?.addEventListener('click', (e) => { if (e.target === rejectModal) closeRejectModal(); });
-    rejectForm?.addEventListener('submit', handleRejectSubmit);
-  }
-
-  function openRejectModal(id) {
-    rejectInquiryId = id;
-    rejectReason.value = '';
-    rejectModal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeRejectModal() {
-    rejectModal.classList.remove('active');
-    document.body.style.overflow = '';
-    rejectInquiryId = null;
-  }
-
-  async function handleRejectSubmit(e) {
-    e.preventDefault();
-    const reason = rejectReason.value.trim();
-    try {
-      await fetchJSON(`${API_BASE}/${rejectInquiryId}/reject`, {
-        method: 'POST',
-        body: JSON.stringify({ reason })
-      });
-      showToast('Inquiry rejected');
-      closeRejectModal();
-      loadInquiries();
-      if (drawer.classList.contains('active')) {
-        await openDrawer(rejectInquiryId);
+      // Reject Modal
+      const rejectModal = this.#dom.rejectModal;
+      if (rejectModal) {
+        this.#modals.reject = rejectModal;
+        const closeBtn = this.#dom.closeRejectModal;
+        const cancelBtn = this.#dom.cancelRejectBtn;
+        const close = () => this.#closeRejectModal();
+        closeBtn?.addEventListener("click", close);
+        cancelBtn?.addEventListener("click", close);
+        rejectModal.addEventListener("click", (e) => {
+          if (e.target === rejectModal) close();
+        });
+        this.#dom.rejectForm?.addEventListener("submit", (e) =>
+          this.#handleRejectSubmit(e),
+        );
       }
-    } catch (err) {
-      console.error(err);
-      showToast('Failed to reject', true);
     }
-  }
 
-  // --- Convert to Project ---
-  async function convertInquiry(id) {
-    if (!id && currentInquiryId) id = currentInquiryId;
-    if (!id) return;
+    // ─── Event Bindings ──────────────────────────────────────
+    #bindEvents() {
+      const { searchInquiry, statusFilter, exportInquiriesBtn } = this.#dom;
 
-    // Cek status inquiry dari data lokal
-    const inquiry = inquiriesData.find(i => i.id === id);
-    if (inquiry) {
-      const statusLow = (inquiry.status || '').toLowerCase();
-      if (statusLow === 'converted' || statusLow === 'rejected' || statusLow === 'completed') {
-        showToast('Inquiry cannot be converted', true);
+      // Search with debounce
+      searchInquiry?.addEventListener("input", (e) => {
+        clearTimeout(this.#timeouts.search);
+        this.#timeouts.search = setTimeout(() => {
+          this.#state.currentSearch = e.target.value;
+          this.#renderTable();
+        }, 300);
+      });
+
+      // Status filter
+      statusFilter?.addEventListener("change", (e) => {
+        this.#state.currentFilter = e.target.value;
+        this.#renderTable();
+      });
+
+      // Export button
+      exportInquiriesBtn?.addEventListener("click", () => {
+        this.#showToast("Export feature coming soon");
+      });
+
+      // Drawer action buttons (delegation)
+      const drawerActions = [
+        "drawerApproveBtn",
+        "drawerQuoteBtn",
+        "drawerRejectBtn",
+        "drawerConvertBtn",
+        "drawerWhatsappBtn",
+      ];
+      drawerActions.forEach((btnId) => {
+        const btn = this.#dom[btnId];
+        if (btn) {
+          btn.addEventListener("click", () => {
+            const id = this.#state.currentInquiryId;
+            if (!id) return;
+            switch (btnId) {
+              case "drawerApproveBtn":
+                this.#approveInquiry(id);
+                break;
+              case "drawerQuoteBtn":
+                this.#openQuoteModal(id);
+                break;
+              case "drawerRejectBtn":
+                this.#openRejectModal(id);
+                break;
+              case "drawerConvertBtn":
+                this.#convertInquiry(id);
+                break;
+              case "drawerWhatsappBtn":
+                this.#openWhatsApp(id);
+                break;
+            }
+          });
+        }
+      });
+
+      // Notes auto-save
+      const notes = this.#dom.drawerNotes;
+      if (notes) {
+        notes.addEventListener("input", () => {
+          const counter = this.#dom.noteCounter;
+          if (counter) counter.textContent = notes.value.length;
+          clearTimeout(this.#timeouts.notes);
+          this.#timeouts.notes = setTimeout(() => {
+            this.#saveNotes(notes.value);
+          }, 800);
+        });
+      }
+
+      // View project button is a link, no extra binding needed.
+    }
+
+    // ─── Data Loading ─────────────────────────────────────────
+    async #loadInquiries() {
+      if (this.#isLoading) return;
+      this.#isLoading = true;
+      const tbody = this.#dom.inquiriesBody;
+      if (tbody)
+        tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Loading inquiries...</td></tr>`;
+
+      try {
+        const data = await this.#fetchJSON(`${API_BASE}/`);
+        this.#state.inquiries = data.data || [];
+        this.#renderTable();
+        this.#updateStats();
+      } catch (err) {
+        console.error("Inquiries load error:", err);
+        this.#showToast("Failed to load inquiries", true);
+        if (tbody)
+          tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Error loading inquiries</td></tr>`;
+      } finally {
+        this.#isLoading = false;
+      }
+
+      // Di #loadInquiries, setelah data load, cek jika ada inquiry yang project-nya baru complete
+      const newlyCompleted = this.#state.inquiries.filter(
+        (i) => i.project && i.project.status === "completed" && !i._notified,
+      );
+      if (newlyCompleted.length) {
+        newlyCompleted.forEach((i) => {
+          this.#showToast(
+            `🎉 Project for ${i.customer_name} has been completed!`,
+          );
+          i._notified = true; // prevent repeat toast
+        });
+      }
+    }
+
+    // ─── Fetch Helper ─────────────────────────────────────────
+    async #fetchJSON(url, options = {}) {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || response.statusText);
+      }
+      return response.json();
+    }
+
+    // ─── Rendering ────────────────────────────────────────────
+    #renderTable() {
+      const tbody = this.#dom.inquiriesBody;
+      if (!tbody) return;
+
+      const search = this.#state.currentSearch.toLowerCase().trim();
+      const status = this.#state.currentFilter;
+
+      const filtered = this.#state.inquiries.filter((inq) => {
+        const matchSearch =
+          !search ||
+          inq.customer_name?.toLowerCase().includes(search) ||
+          inq.customer_phone_number?.includes(search) ||
+          inq.vehicle_brand?.toLowerCase().includes(search) ||
+          inq.vehicle_model?.toLowerCase().includes(search);
+        const matchStatus = !status || inq.status?.toLowerCase() === status;
+        return matchSearch && matchStatus;
+      });
+
+      // Di dalam filter
+      if (status === "has_project" && !inq.project) return false;
+      if (status === "no_project" && inq.project) return false;
+      if (
+        status === "project_completed" &&
+        (!inq.project || inq.project.status !== "completed")
+      )
+        return false;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">No inquiries found</td></tr>`;
         return;
       }
+
+      tbody.innerHTML = filtered
+        .map((inq) => {
+          const statusLow = (inq.status || "").toLowerCase();
+          const canConvert = !["converted", "rejected", "completed"].includes(
+            statusLow,
+          );
+          const projectStatus = inq.project
+            ? this.#getProjectStatusLabel(inq.project.status)
+            : "—";
+          return `
+                    <tr data-id="${inq.id}">
+                        <td data-label="Customer">
+                            <strong>${this.#escapeHtml(inq.customer_name)}</strong><br>
+                            <small>${this.#escapeHtml(inq.customer_phone_number)}</small>
+                        </td>
+                        <td data-label="Vehicle">${this.#escapeHtml(inq.vehicle_brand)} ${this.#escapeHtml(inq.vehicle_model)}</td>
+                        <td data-label="Project Type">${this.#escapeHtml(inq.project_type || "—")}</td>
+                        <td data-label="Status"><span class="status-badge ${this.#getStatusBadgeClass(inq.status)}">${this.#getStatusLabel(inq.status)}</span></td>
+                        <td data-label="Project Status">
+                            ${inq.project ? `<span class="project-status-badge ${inq.project.status}">${projectStatus}</span>` : "—"}
+                        </td>
+                        <td data-label="Created">${new Date(inq.created_at).toLocaleDateString()}</td>
+                        <td data-label="Actions" style="text-align:center;">
+                            <div class="actions">
+                                <button class="action-btn view" data-action="view" title="View Details"><i class="ph ph-eye"></i></button>
+                                <button class="action-btn quote" data-action="quote" title="Send Quote"><i class="ph ph-file-text"></i></button>
+                                <button class="action-btn approve" data-action="approve" title="Approve"><i class="ph ph-check"></i></button>
+                                <button class="action-btn reject" data-action="reject" title="Reject"><i class="ph ph-x"></i></button>
+                                ${canConvert ? `<button class="action-btn convert" data-action="convert" title="Convert to Project"><i class="ph ph-arrow-right"></i></button>` : ""}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+        })
+        .join("");
+
+      // Attach events to action buttons (delegation would be better, but keeping inline for simplicity)
+      tbody.querySelectorAll(".action-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const tr = btn.closest("tr");
+          const id = tr?.dataset.id;
+          if (!id) return;
+          const action = btn.dataset.action;
+          switch (action) {
+            case "view":
+              this.#openDrawer(id);
+              break;
+            case "quote":
+              this.#openQuoteModal(id);
+              break;
+            case "approve":
+              this.#approveInquiry(id);
+              break;
+            case "reject":
+              this.#openRejectModal(id);
+              break;
+            case "convert":
+              this.#convertInquiry(id);
+              break;
+          }
+        });
+      });
+
+      // Click on row = view
+      tbody.querySelectorAll("tr").forEach((tr) => {
+        tr.addEventListener("click", () => {
+          const id = tr.dataset.id;
+          if (id) this.#openDrawer(id);
+        });
+      });
     }
 
-    if (!confirm('Convert this inquiry to a project?')) return;
-    try {
-      const res = await fetchJSON(`${API_BASE}/${id}/convert`, { method: 'POST' });
-      showToast('Inquiry converted to project!');
-      loadInquiries();
-      if (drawer.classList.contains('active')) {
-        await openDrawer(id);
+    #updateStats() {
+      const total = this.#state.inquiries.length;
+      const newCount = this.#state.inquiries.filter(
+        (i) => i.status?.toLowerCase() === "new",
+      ).length;
+      const quoted = this.#state.inquiries.filter(
+        (i) => i.status?.toLowerCase() === "quoted",
+      ).length;
+      const converted = this.#state.inquiries.filter(
+        (i) => i.status?.toLowerCase() === "converted",
+      ).length;
+
+      this.#setText("totalCount", total);
+      this.#setText("newCount", newCount);
+      this.#setText("quotedCount", quoted);
+      this.#setText("convertedCount", converted);
+
+      const completedProjects = this.#state.inquiries.filter(
+        (i) => i.project && i.project.status === "completed",
+      ).length;
+      this.#setText("completedProjectsCount", completedProjects);
+    }
+
+    // ─── Drawer ──────────────────────────────────────────────
+    async #openDrawer(id) {
+      const drawer = this.#modals.drawer;
+      if (!drawer) return;
+      this.#state.currentInquiryId = id;
+      drawer.classList.add("active");
+
+      // Reset UI placeholders
+      this.#resetDrawerFields();
+
+      try {
+        const data = await this.#fetchJSON(`${API_BASE}/${id}`);
+        const inq = data.data;
+        await this.#populateDrawer(inq);
+      } catch (err) {
+        console.error("Drawer load error:", err);
+        this.#showToast("Could not load inquiry details", true);
+        this.#closeDrawer();
       }
-    } catch (err) {
-      console.error(err);
-      showToast('Conversion failed', true);
     }
-  }
 
-  // --- WhatsApp ---
-  function openWhatsApp(id) {
-    if (!id && currentInquiryId) id = currentInquiryId;
-    if (!id) return;
-    const inquiry = inquiriesData.find(i => i.id === id);
-    if (inquiry && inquiry.customer_phone_number) {
-      let phone = inquiry.customer_phone_number.replace(/\D/g, '');
-      if (!phone.startsWith('62') && phone.startsWith('0')) phone = '62' + phone.slice(1);
-      if (!phone.startsWith('62')) phone = '62' + phone;
-      window.open(`https://wa.me/${phone}`, '_blank');
-    } else {
-      showToast('No phone number available', true);
+    #closeDrawer() {
+      const drawer = this.#modals.drawer;
+      if (drawer) drawer.classList.remove("active");
+      this.#state.currentInquiryId = null;
     }
-  }
 
-  // --- Notes auto-save in drawer ---
-  let notesTimeout;
+    #getProjectStatusInfo(inquiry) {
+      if (!inquiry.project) return { label: "No Project", class: "no-project" };
+      const status = inquiry.project.status;
+      if (status === "completed") {
+        return { label: "✅ Project Completed", class: "completed" };
+      }
+      return { label: this.#getProjectStatusLabel(status), class: status };
+    }
 
-  function initializeNotes() {
-    const notes = document.getElementById('drawerNotes');
-    const counter = document.getElementById('noteCounter');
-    if (!notes) return;
+    #resetDrawerFields() {
+      const placeholders = [
+        "drawerCustomerName",
+        "drawerStatusBadge",
+        "drawerName",
+        "drawerPhone",
+        "drawerEmail",
+        "drawerBrand",
+        "drawerModel",
+        "drawerPlate",
+        "drawerCondition",
+        "drawerType",
+        "drawerBudget",
+        "drawerTarget",
+        "drawerDescription",
+        "drawerReference",
+        "drawerProjectStatus",
+        "drawerEstCost",
+        "drawerActualCost",
+        "drawerEstRevenue",
+        "drawerActualRevenue",
+        "drawerProfit",
+        "drawerMargin",
+      ];
+      placeholders.forEach((id) => {
+        const el = this.#dom[id];
+        if (el) el.textContent = "—";
+      });
+      if (this.#dom.drawerReference)
+        this.#dom.drawerReference.style.display = "none";
+      if (this.#dom.drawerPhotosSection)
+        this.#dom.drawerPhotosSection.style.display = "none";
+      if (this.#dom.drawerFinancialSection)
+        this.#dom.drawerFinancialSection.style.display = "none";
+      if (this.#dom.drawerTimeline)
+        this.#dom.drawerTimeline.innerHTML =
+          '<div class="timeline-item"><span>—</span><p>Loading...</p></div>';
+      if (this.#dom.drawerNotes) this.#dom.drawerNotes.value = "";
+      if (this.#dom.noteCounter) this.#dom.noteCounter.textContent = "0";
+    }
 
-    notes.addEventListener('input', () => {
-      counter.textContent = notes.value.length;
-      clearTimeout(notesTimeout);
-      notesTimeout = setTimeout(async () => {
-        if (!currentInquiryId) return;
+    async #populateDrawer(inq) {
+      // Basic info
+      this.#setText("drawerCustomerName", inq.customer_name || "—");
+      const statusBadge = this.#dom.drawerStatusBadge;
+      if (statusBadge) {
+        statusBadge.textContent = this.#getStatusLabel(inq.status);
+        statusBadge.className = `status-badge ${this.#getStatusBadgeClass(inq.status)}`;
+      }
+      this.#setText("drawerName", inq.customer_name || "—");
+      this.#setText("drawerPhone", inq.customer_phone_number || "—");
+      this.#setText("drawerEmail", inq.customer_email || "—");
+      this.#setText("drawerBrand", inq.vehicle_brand || "—");
+      this.#setText("drawerModel", inq.vehicle_model || "—");
+      this.#setText("drawerPlate", inq.vehicle_license_plate || "—");
+      this.#setText("drawerCondition", inq.vehicle_condition || "—");
+      this.#setText("drawerType", inq.project_type || "—");
+      this.#setText("drawerBudget", this.#formatCurrency(inq.estimated_budget));
+      this.#setText("drawerTarget", inq.project_target || "—");
+      this.#setText(
+        "drawerDescription",
+        inq.project_description || "No description provided.",
+      );
+
+      // Project Status
+      this.#setText(
+        "drawerProjectStatus",
+        inq.project ? this.#getProjectStatusLabel(inq.project.status) : "—",
+      );
+
+      // Di dalam #populateDrawer, setelah setText drawerProjectStatus:
+      const projectInfo = this.#getProjectStatusInfo(inq);
+      const projectStatusEl = this.#dom.drawerProjectStatus;
+      if (projectStatusEl) {
+        projectStatusEl.textContent = projectInfo.label;
+        projectStatusEl.className = `project-status-badge ${projectInfo.class}`;
+      }
+
+      // Jika project completed, disable semua tombol aksi
+      if (projectInfo.class === "completed") {
+        const btns = [
+          "drawerApproveBtn",
+          "drawerQuoteBtn",
+          "drawerRejectBtn",
+          "drawerConvertBtn",
+        ];
+        btns.forEach((id) => {
+          const btn = this.#dom[id];
+          if (btn) btn.disabled = true;
+        });
+        // Tampilkan pesan "Project already completed" jika perlu
+      }
+
+      // Reference link
+      const refLink = this.#dom.drawerReference;
+      if (inq.reference_link) {
+        refLink.href = inq.reference_link;
+        refLink.style.display = "inline";
+      } else {
+        refLink.style.display = "none";
+      }
+
+      // Photos
+      const photoSection = this.#dom.drawerPhotosSection;
+      const photoGrid = this.#dom.drawerPhotos;
+      if (inq.photos && inq.photos.length > 0) {
+        photoSection.style.display = "block";
+        photoGrid.innerHTML = inq.photos
+          .map(
+            (p) =>
+              `<img src="${this.#escapeHtml(p.file_path)}" alt="Photo" loading="lazy" />`,
+          )
+          .join("");
+      } else {
+        photoSection.style.display = "none";
+      }
+
+      // Financial Summary (if project exists)
+      const financialSection = this.#dom.drawerFinancialSection;
+      if (inq.project && inq.project.id) {
         try {
-          await fetchJSON(`${API_BASE}/${currentInquiryId}/notes`, {
-            method: 'PATCH',
-            body: JSON.stringify({ note: notes.value })
-          });
+          const projectData = await this.#fetchJSON(
+            `/api/projects/${inq.project.id}`,
+          );
+          const p = projectData.data;
+          const estCost = p.estimated_cost || 0;
+          const actualCost = p.actual_cost || 0;
+          const estRevenue = p.estimated_revenue || 0;
+          const actualRevenue = p.actual_revenue || 0;
+          const profit = actualRevenue - actualCost;
+          const margin =
+            actualRevenue > 0 ? ((profit / actualRevenue) * 100).toFixed(0) : 0;
+
+          this.#setText("drawerEstCost", this.#formatCurrency(estCost));
+          this.#setText("drawerActualCost", this.#formatCurrency(actualCost));
+          this.#setText("drawerEstRevenue", this.#formatCurrency(estRevenue));
+          this.#setText(
+            "drawerActualRevenue",
+            this.#formatCurrency(actualRevenue),
+          );
+          this.#setText("drawerProfit", this.#formatCurrency(profit));
+          this.#setText("drawerMargin", margin + "%");
+          financialSection.style.display = "block";
         } catch (err) {
-          console.warn('Failed to save notes', err);
+          console.warn("Failed to load project financials", err);
+          financialSection.style.display = "none";
         }
-      }, 800);
-    });
+      } else {
+        financialSection.style.display = "none";
+      }
+
+      // Timeline
+      const timeline = this.#dom.drawerTimeline;
+      if (inq.activities && inq.activities.length > 0) {
+        timeline.innerHTML = inq.activities
+          .map(
+            (act) =>
+              `<div class="timeline-item">
+                        <span>${new Date(act.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        <p>${this.#escapeHtml(act.activity)}</p>
+                    </div>`,
+          )
+          .join("");
+      } else {
+        timeline.innerHTML = `<div class="timeline-item"><span>—</span><p>No activity yet</p></div>`;
+      }
+
+      // Notes
+      const notes = this.#dom.drawerNotes;
+      if (notes) {
+        notes.value = inq.note || "";
+        if (this.#dom.noteCounter)
+          this.#dom.noteCounter.textContent = notes.value.length;
+      }
+
+      // Action buttons state
+      const statusLow = (inq.status || "").toLowerCase();
+      const isConverted = statusLow === "converted";
+      const isRejected = statusLow === "rejected";
+      const isCompleted = statusLow === "completed";
+
+      const approveBtn = this.#dom.drawerApproveBtn;
+      const quoteBtn = this.#dom.drawerQuoteBtn;
+      const rejectBtn = this.#dom.drawerRejectBtn;
+      const convertBtn = this.#dom.drawerConvertBtn;
+      const viewProjectBtn = this.#dom.drawerViewProjectBtn;
+
+      if (approveBtn)
+        approveBtn.disabled = !(statusLow === "new" || statusLow === "quoted");
+      if (quoteBtn)
+        quoteBtn.disabled = !(statusLow === "new" || statusLow === "quoted");
+      if (rejectBtn)
+        rejectBtn.disabled = isRejected || isConverted || isCompleted;
+      if (convertBtn)
+        convertBtn.disabled = isConverted || isRejected || isCompleted;
+
+      if (viewProjectBtn) {
+        if (inq.project && inq.project.id) {
+          viewProjectBtn.href = `/management/projects?open=${inq.project.id}`;
+          viewProjectBtn.style.display = "inline-flex";
+        } else {
+          viewProjectBtn.style.display = "none";
+        }
+      }
+    }
+
+    // ─── CRUD Actions ─────────────────────────────────────────
+    async #approveInquiry(id) {
+      try {
+        await this.#fetchJSON(`${API_BASE}/${id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: "approved" }),
+        });
+        this.#showToast("Inquiry approved");
+        await this.#refreshAfterAction(id);
+      } catch (err) {
+        this.#showToast("Failed to approve: " + err.message, true);
+      }
+    }
+
+    async #handleQuoteSubmit(e) {
+      e.preventDefault();
+      const cost = parseFloat(this.#dom.quoteCost?.value);
+      const revenue = parseFloat(this.#dom.quoteRevenue?.value);
+      if (isNaN(cost) || isNaN(revenue) || cost < 0 || revenue < 0) {
+        this.#showToast("Please enter valid numbers", true);
+        return;
+      }
+      const id = this.#state.currentInquiryId;
+      try {
+        await this.#fetchJSON(`${API_BASE}/${id}/quote`, {
+          method: "POST",
+          body: JSON.stringify({
+            estimated_cost: cost,
+            estimated_revenue: revenue,
+          }),
+        });
+        this.#showToast("Quotation sent");
+        this.#closeQuoteModal();
+        await this.#refreshAfterAction(id);
+      } catch (err) {
+        this.#showToast("Failed to send quote: " + err.message, true);
+      }
+    }
+
+    async #handleRejectSubmit(e) {
+      e.preventDefault();
+      const reason = this.#dom.rejectReason?.value.trim();
+      const id = this.#state.currentInquiryId;
+      try {
+        await this.#fetchJSON(`${API_BASE}/${id}/reject`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        });
+        this.#showToast("Inquiry rejected");
+        this.#closeRejectModal();
+        await this.#refreshAfterAction(id);
+      } catch (err) {
+        this.#showToast("Failed to reject: " + err.message, true);
+      }
+    }
+
+    async #convertInquiry(id) {
+      const inquiry = this.#state.inquiries.find((i) => i.id === id);
+      if (inquiry) {
+        const statusLow = (inquiry.status || "").toLowerCase();
+        if (["converted", "rejected", "completed"].includes(statusLow)) {
+          this.#showToast("Inquiry cannot be converted", true);
+          return;
+        }
+      }
+      if (!confirm("Convert this inquiry to a project?")) return;
+      try {
+        await this.#fetchJSON(`${API_BASE}/${id}/convert`, { method: "POST" });
+        this.#showToast("Inquiry converted to project!");
+        await this.#refreshAfterAction(id);
+      } catch (err) {
+        this.#showToast("Conversion failed: " + err.message, true);
+      }
+    }
+
+    #openWhatsApp(id) {
+      const inquiry = this.#state.inquiries.find((i) => i.id === id);
+      if (inquiry && inquiry.customer_phone_number) {
+        let phone = inquiry.customer_phone_number.replace(/\D/g, "");
+        if (!phone.startsWith("62") && phone.startsWith("0"))
+          phone = "62" + phone.slice(1);
+        if (!phone.startsWith("62")) phone = "62" + phone;
+        window.open(`https://wa.me/${phone}`, "_blank");
+      } else {
+        this.#showToast("No phone number available", true);
+      }
+    }
+
+    async #saveNotes(value) {
+      const id = this.#state.currentInquiryId;
+      if (!id) return;
+      try {
+        await this.#fetchJSON(`${API_BASE}/${id}/notes`, {
+          method: "PATCH",
+          body: JSON.stringify({ note: value }),
+        });
+      } catch (err) {
+        console.warn("Failed to save notes:", err);
+      }
+    }
+
+    // ─── Modal Controls ──────────────────────────────────────
+    #openQuoteModal(id) {
+      this.#state.currentInquiryId = id;
+      const modal = this.#modals.quote;
+      if (modal) {
+        modal.classList.add("active");
+        document.body.style.overflow = "hidden";
+        if (this.#dom.quoteCost) this.#dom.quoteCost.value = "";
+        if (this.#dom.quoteRevenue) this.#dom.quoteRevenue.value = "";
+      }
+    }
+
+    #closeQuoteModal() {
+      const modal = this.#modals.quote;
+      if (modal) {
+        modal.classList.remove("active");
+        document.body.style.overflow = "";
+      }
+      this.#state.currentInquiryId = null;
+    }
+
+    #openRejectModal(id) {
+      this.#state.currentInquiryId = id;
+      const modal = this.#modals.reject;
+      if (modal) {
+        modal.classList.add("active");
+        document.body.style.overflow = "hidden";
+        if (this.#dom.rejectReason) this.#dom.rejectReason.value = "";
+      }
+    }
+
+    #closeRejectModal() {
+      const modal = this.#modals.reject;
+      if (modal) {
+        modal.classList.remove("active");
+        document.body.style.overflow = "";
+      }
+      this.#state.currentInquiryId = null;
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────
+    #formatCurrency(amount) {
+      if (!amount && amount !== 0) return "—";
+      return "Rp " + Number(amount).toLocaleString("id-ID");
+    }
+
+    #escapeHtml(str = "") {
+      if (!str) return "";
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    #getStatusLabel(status) {
+      return STATUS_MAP[status?.toLowerCase()] || status || "—";
+    }
+
+    #getProjectStatusLabel(status) {
+      return PROJECT_STATUS_MAP[status?.toLowerCase()] || status || "—";
+    }
+
+    #getStatusBadgeClass(status) {
+      const s = status?.toLowerCase() || "new";
+      return s === "completed" ? "completed" : s;
+    }
+
+    #setText(elementId, value) {
+      const el = this.#dom[elementId];
+      if (el) el.textContent = value;
+    }
+
+    #showToast(message, isError = false) {
+      if (typeof window.showToast === "function") {
+        window.showToast(message, isError ? "error" : "success");
+      } else {
+        // Fallback simple toast
+        const toast =
+          document.querySelector(".app-toast") ||
+          (() => {
+            const el = document.createElement("div");
+            el.className = "app-toast";
+            document.body.appendChild(el);
+            return el;
+          })();
+        toast.textContent = message;
+        toast.className = "app-toast" + (isError ? " error" : "");
+        clearTimeout(toast._timeout);
+        requestAnimationFrame(() => toast.classList.add("show"));
+        toast._timeout = setTimeout(() => toast.classList.remove("show"), 3000);
+      }
+    }
+
+    async #refreshAfterAction(id) {
+      await this.#loadInquiries();
+      // If drawer is open for the same inquiry, refresh it
+      if (
+        this.#modals.drawer?.classList.contains("active") &&
+        this.#state.currentInquiryId === id
+      ) {
+        await this.#openDrawer(id);
+      }
+    }
   }
 
-  // ============================================================
-  // Search & Filter
-  // ============================================================
-  function initializeSearch() {
-    searchInput?.addEventListener('input', () => {
-      currentSearch = searchInput.value;
-      renderTable();
-    });
-    statusFilter?.addEventListener('change', () => {
-      currentFilter = statusFilter.value;
-      renderTable();
-    });
-  }
-
-  // ============================================================
-  // Export (placeholder)
-  // ============================================================
-  document.getElementById('exportInquiriesBtn')?.addEventListener('click', () => {
-    showToast('Export feature coming soon');
+  // ─── Instantiate ─────────────────────────────────────────────
+  document.addEventListener("DOMContentLoaded", () => {
+    new InquiryManager();
   });
-
-  // ============================================================
-  // Event bindings for drawer action buttons
-  // ============================================================
-  function bindDrawerActions() {
-    document.getElementById('drawerApproveBtn')?.addEventListener('click', () => {
-      if (currentInquiryId) approveInquiry(currentInquiryId);
-    });
-    document.getElementById('drawerQuoteBtn')?.addEventListener('click', () => {
-      if (currentInquiryId) openQuoteModal(currentInquiryId);
-    });
-    document.getElementById('drawerRejectBtn')?.addEventListener('click', () => {
-      if (currentInquiryId) openRejectModal(currentInquiryId);
-    });
-    document.getElementById('drawerWhatsappBtn')?.addEventListener('click', () => {
-      if (currentInquiryId) openWhatsApp(currentInquiryId);
-    });
-    document.getElementById('drawerConvertBtn')?.addEventListener('click', () => {
-      if (currentInquiryId) convertInquiry(currentInquiryId);
-    });
-  }
-
-  // ============================================================
-  // Init
-  // ============================================================
-  function init() {
-    initializeDrawer();
-    initializeQuoteModal();
-    initializeRejectModal();
-    initializeNotes();
-    initializeSearch();
-    bindDrawerActions();
-    loadInquiries();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-
 })();
