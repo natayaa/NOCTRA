@@ -3,8 +3,10 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.orm import selectinload
 
 from models.projects import Project
-from models.inventory_material_usage import JobMaterialUsage
-from models.inventory_workshop_jobs import WorkshopJob
+from models.inventory import (
+    InventoryMaterialUsage,
+    ProjectWorkshopTask
+)
 from models.customer_inquiry import CustomerInquiry
 
 
@@ -27,8 +29,8 @@ class ProjectRepository:
                 selectinload(Project.expenses),
                 selectinload(Project.labor_items),
                 selectinload(Project.workshop_job)
-                    .selectinload(WorkshopJob.material_usages)
-                    .selectinload(JobMaterialUsage.item)
+                    .selectinload(ProjectWorkshopTask.material_usages)
+                    .selectinload(InventoryMaterialUsage.item)
             )
         )
         return result.scalar_one_or_none()

@@ -62,7 +62,6 @@
       <option value="rejected">Rejected</option>
       <option value="converted">Converted</option>
       <option value="completed">Completed</option>
-      <!-- Tambahkan opsi di select#statusFilter -->
       <option value="has_project">Has Project</option>
       <option value="no_project">No Project</option>
       <option value="project_completed">Project Completed</option>
@@ -89,7 +88,7 @@
         </tr>
       </thead>
       <tbody id="inquiriesBody">
-        <tr><td colspan="6" class="loading-placeholder">Loading inquiries...</td></tr>
+        <tr><td colspan="7" class="loading-placeholder">Loading inquiries...</td></tr>
       </tbody>
     </table>
   </div>
@@ -118,7 +117,7 @@
 
     <!-- Vehicle & Project -->
     <section class="detail-card">
-      <h3>Vehicle & Project</h3>
+      <h3>Vehicle &amp; Project</h3>
       <div class="detail-grid">
         <div class="detail-item"><label>Brand</label><p id="drawerBrand">-</p></div>
         <div class="detail-item"><label>Model</label><p id="drawerModel">-</p></div>
@@ -126,18 +125,19 @@
         <div class="detail-item"><label>Condition</label><p id="drawerCondition">-</p></div>
         <div class="detail-item"><label>Project Type</label><p id="drawerType">-</p></div>
         <div class="detail-item"><label>Estimated Budget</label><p id="drawerBudget">-</p></div>
-        <div class="detail-item"><label>Target</label><p id="drawerTarget">-</p></div>
+        <div class="detail-item"><label>Target (from Inquiry)</label><p id="drawerTarget">-</p></div>
         <div class="detail-item"><label>Project Status</label><p id="drawerProjectStatus">-</p></div>
+        <div class="detail-item"><label>Project Start Date</label><p id="projectStartDateDisplay">-</p></div>
+        <div class="detail-item"><label>Project Target Delivery</label><p id="projectTargetDeliveryDisplay">-</p></div>
       </div>
     </section>
-    
 
     <!-- Description & Reference -->
     <section class="detail-card">
       <h3>Requirements</h3>
       <div class="request-box" id="drawerDescription">No description provided.</div>
       <div style="margin-top: 12px;">
-        <a href="#" id="drawerReference" target="_blank" >🔗 View Reference Link</a>
+        <a href="#" id="drawerReference" target="_blank">🔗 View Reference Link</a>
       </div>
     </section>
 
@@ -148,7 +148,7 @@
     </section>
 
     <!-- Financial Summary -->
-    <section class="detail-card" id="drawerFinancialSection" >
+    <section class="detail-card" id="drawerFinancialSection">
       <h3>Financial Summary</h3>
       <div class="detail-grid">
         <div class="detail-item"><label>Estimated Cost</label><p id="drawerEstCost">-</p></div>
@@ -177,6 +177,29 @@
       </div>
     </section>
 
+    <!-- Before & After -->
+    <section class="detail-card" id="drawerBeforeAfterSection">
+      <h3>Before & After</h3>
+      <div class="before-after-grid">
+        <div class="ba-column">
+          <h4>Before</h4>
+          <div class="carousel-container" id="drawerBeforeCarousel">
+            <div class="carousel-track" id="beforeTrack"></div>
+            <button class="carousel-btn prev" data-carousel="before">‹</button>
+            <button class="carousel-btn next" data-carousel="before">›</button>
+          </div>
+        </div>
+        <div class="ba-column">
+          <h4>After</h4>
+          <div class="carousel-container" id="drawerAfterCarousel">
+            <div class="carousel-track" id="afterTrack"></div>
+            <button class="carousel-btn prev" data-carousel="after">‹</button>
+            <button class="carousel-btn next" data-carousel="after">›</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Actions -->
     <section class="detail-card">
       <h3>Actions</h3>
@@ -191,6 +214,33 @@
     </section>
   </div>
 </aside>
+
+<!-- MODAL: Convert to Project -->
+<div class="modal-overlay" id="convertModal">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <div>
+        <h2>Convert to Project</h2>
+        <p>Set project start date and target delivery</p>
+      </div>
+      <button id="closeConvertModal">×</button>
+    </div>
+    <form id="convertForm">
+      <div class="form-group">
+        <label for="convertStartDate">Start Date</label>
+        <input type="date" id="convertStartDate" />
+      </div>
+      <div class="form-group">
+        <label for="convertTargetDelivery">Target Delivery</label>
+        <input type="date" id="convertTargetDelivery" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="cancelConvertBtn">Cancel</button>
+        <button type="submit" class="btn-primary">Convert</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- MODAL: Send Quotation -->
 <div class="modal-overlay" id="quoteModal">
@@ -242,7 +292,7 @@
   </div>
 </div>
 
-<!-- TOAST container (used by JS) -->
+<!-- TOAST container -->
 <div id="toastContainer"></div>
 
 {% endblock %}

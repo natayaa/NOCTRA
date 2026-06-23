@@ -531,19 +531,20 @@
       this.#state.currentProjectId = id;
       drawer.classList.add("active");
 
-      // Reset placeholders
       this.#resetDrawerFields();
 
       try {
         const data = await this.#fetchJSON(`${API_BASE}/${id}`);
         const project = data.data;
         this.#populateDrawer(project);
-        // Load material & labor lists
-        await this.#loadMaterialUsageList(id);
-        await this.#loadLaborList(id);
-        // Load material dropdown and labor options (refresh)
-        await this.#loadMaterialsDropdown();
-        await this.#loadLaborOptions(); // refresh options
+
+        // Load semua data secara paralel
+        await Promise.all([
+          this.#loadMaterialUsageList(id),
+          this.#loadLaborList(id),
+          this.#loadMaterialsDropdown(),
+          this.#loadLaborOptions(),
+        ]);
       } catch (err) {
         console.error(err);
         this.#showToast("Could not load project details", "error");
@@ -768,8 +769,13 @@
             quantity: qty,
           }),
         });
-        this.#showToast("Material consumed");
-        this.#openDrawer(projectId);
+        this.#showToast("Material consumed ✅");
+
+        // Refresh dropdown & history tanpa menutup drawer
+        await this.#loadMaterialsDropdown();
+        await this.#loadMaterialUsageList(projectId);
+        // Reset input
+        qtyInput.value = "";
       } catch (err) {
         this.#showToast(err.message || "Failed to consume material", "error");
       }
@@ -896,8 +902,9 @@
           method: "POST",
           body: JSON.stringify({ labor_type: laborType, hours }),
         });
-        this.#showToast("Labor added");
-        this.#openDrawer(projectId);
+        this.#showToast("Labor added ✅");
+        await this.#loadLaborList(projectId);
+        hoursInput.value = "";
       } catch (err) {
         this.#showToast(err.message || "Gagal menambah labor", "error");
       }

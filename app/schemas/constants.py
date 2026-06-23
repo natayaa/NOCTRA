@@ -9,11 +9,14 @@ class InquiryStatus(str, Enum):
     CONVERTED = "converted"
     COMPLETED = "completed"   # baru
 
+# constants.py
 class ProjectStatus(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    CANCELLED = "canceled"
     TODO = "todo"
     IN_PROGRESS = "in_progress"
     REVIEW = "review"
     DONE = "done"
+    PREPARATION = "preparation"
+    PAINTING = "painting"

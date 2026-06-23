@@ -6,14 +6,14 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from models.inventory_items import InventoryItems
+from app.models.inventory import InventoryItems
 from models.inventory_workshop_jobs import WorkshopJob
 from models.inventory_material_usage import JobMaterialUsage
 from models.inventory_stock_movement import StockMovement
 from models.price_list import PriceListItem
 from models.projects import Project
 
-from repositories.inventory_items import InventoryRepository
+from app.repositories.inventory_repository import InventoryRepository
 from repositories.inventory_stock import StockMovementRepository  # asumsi ada
 
 
@@ -26,7 +26,7 @@ class InventoryService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.item_repo = InventoryRepository(db)
-        self.stock_repo = StockMovementRepository()
+        self.stock_repo = StockMovementRepository(db)
 
     # -------------------------------------------------------------------------
     # Material Consumption (Core)
@@ -68,7 +68,7 @@ class InventoryService:
         job = await self._get_or_create_workshop_job(project)
 
         # 4. Determine unit price (from price list or item cost)
-        unit_price = await self._get_material_unit_price(item.name)
+        unit_price = await self._get_material_unit_price(item)
         total_cost = Decimal(quantity) * unit_price
 
         # 5. Deduct stock
@@ -76,6 +76,7 @@ class InventoryService:
 
         # 6. Record material usage
         usage = JobMaterialUsage(
+            project_id=project.id,
             job_id=job.id,
             item_id=item.id,
             quantity=quantity,
@@ -115,7 +116,7 @@ class InventoryService:
             await self.db.flush()
         return job
 
-    async def _get_material_unit_price(self, material_name: str) -> Decimal:
+    async def _get_material_unit_price(self,  item: InventoryItems) -> Decimal:
         """
         Fetch the current unit price for a material from the price list.
         Falls back to the item's cost price if not found in price list.
@@ -124,7 +125,7 @@ class InventoryService:
         stmt = (
             select(PriceListItem)
             .where(
-                PriceListItem.name == material_name,
+                PriceListItem.name == item.name,
                 PriceListItem.category == "material",
                 PriceListItem.is_active == True,
             )
@@ -135,12 +136,89 @@ class InventoryService:
         price_item = result.scalar_one_or_none()
         if price_item:
             return price_item.price
+        else:
+        # fallback ke cost_price dari inventory item
+            return Decimal(str(item.cost_price))
 
-        # If not in price list, get cost price from inventory
+        """# If not in price list, get cost price from inventory
         item = await self.item_repo.get_by_name(material_name)  # perlu method get_by_name
         if not item:
             raise ValueError(f"Material '{material_name}' not found in inventory")
-        return item.cost_price
+        return item.cost_price"""
+    
+    
+    async def use_item_for_job(
+        self,
+        project_id: str,
+        item_id: str,
+        quantity: int,
+        note: str = None,
+        job_id: str = None
+    ) -> JobMaterialUsage:
+        
+        if quantity <= 0:
+            raise ValueError("Quantity must be greater than 0")
+    
+        # Cek stok (bandingkan Decimal)
+        if item.current_stock < quantity:
+            raise ValueError(f"Insufficient stock. Available: {item.current_stock} {item.unit}")
+        
+        # Kurangi stok
+        item.current_stock -= quantity
+        
+        # Hitung total cost
+        total_cost = quantity * Decimal(str(item.cost_price))
+        
+        # Validasi UUID
+        try:
+            project_uuid = UUID(project_id)
+            item_uuid = UUID(item_id)
+        except ValueError:
+            raise ValueError("Invalid UUID format")
+
+        # Cek item
+        item = await self.item_repo.get(str(item_uuid))
+        if not item:
+            raise ValueError(f"Item with ID '{item_id}' not found")
+        if item.current_stock < quantity:
+            raise ValueError(
+                f"Insufficient stock for '{item.name}'. "
+                f"Available: {item.current_stock} {item.unit}"
+            )
+
+        # Kurangi stock
+        item.current_stock -= quantity
+
+        # Catat stock movement
+        movement = StockMovement(
+            item_id=item_uuid,
+            type="out",
+            quantity=quantity,
+            reference_type="project",
+            reference_id=project_uuid,
+            note=note or f"Used for project {project_id}"
+        )
+        self.db.add(movement)
+
+        # Buat material usage
+        usage = JobMaterialUsage(
+            project_id=project_uuid,
+            item_id=item_uuid,
+            quantity=quantity,
+            note=note,
+            job_id=job_id  # optional
+        )
+        self.db.add(usage)
+
+        # Update project actual_cost
+        project = await self.db.get(Project, project_uuid)
+        if project:
+            unit_price = await self._get_material_unit_price(item)
+            total_cost = Decimal(quantity) * unit_price
+            project.actual_cost = (project.actual_cost or Decimal(0)) + total_cost
+
+        await self.db.flush()
+        return usage
 
     # -------------------------------------------------------------------------
     # Labor Management

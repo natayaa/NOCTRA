@@ -17,18 +17,16 @@ class ProjectResponse(BaseModel):
     inquiry: Optional[CustomerInquirySummary] = None
     name: str
     customer_name: str
-    phone_number: Optional[str] = None           # ✅ tambahkan
     vehicle_brand: str
     vehicle_model: str
-    license_plate: Optional[str] = None          # ✅ tambahkan
     status: str
     progress: int
     estimated_cost: Optional[Decimal] = None
     actual_cost: Optional[Decimal] = None
     estimated_revenue: Optional[Decimal] = None
     actual_revenue: Optional[Decimal] = None
-    start_date: Optional[date] = None            # ✅ tambahkan
-    target_delivery: Optional[date] = None       # ✅ tambahkan
+    project_start_date: Optional[datetime] = None            # ✅ tambahkan
+    project_target_delivery: Optional[datetime] = None       # ✅ tambahkan
     notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -50,6 +48,8 @@ class ProjectMinimalResponse(BaseModel):
     actual_cost: Optional[Decimal] = None
     estimated_revenue: Optional[Decimal] = None
     actual_revenue: Optional[Decimal] = None
+    project_start_date: Optional[datetime]
+    project_target_delivery: Optional[datetime]
 
     model_config = {"from_attributes": True}
 
@@ -66,10 +66,8 @@ class ProjectCreate(BaseModel):
     vehicle_model: str
     estimated_cost: Decimal = Decimal(0)
     estimated_revenue: Decimal = Decimal(0)
-    phone_number: Optional[str] = None
-    license_plate: Optional[str] = None
-    start_date: Optional[date] = None
-    target_delivery: Optional[date] = None
+    project_start_date: Optional[datetime] = None
+    project_target_delivery: Optional[datetime] = None
     notes: Optional[str] = None
 
 
@@ -86,8 +84,8 @@ class ProjectUpdate(BaseModel):
     estimated_revenue: Optional[Decimal] = None
     actual_cost: Optional[Decimal] = None
     actual_revenue: Optional[Decimal] = None
-    start_date: Optional[date] = None
-    target_delivery: Optional[date] = None
+    project_start_date: Optional[date] = None
+    project_target_delivery: Optional[date] = None
     notes: Optional[str] = None
 
 

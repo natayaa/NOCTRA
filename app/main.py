@@ -1,10 +1,11 @@
-import uvicorn, asyncio, json, uuid
+import uvicorn
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 # Configuration
@@ -22,6 +23,8 @@ from routes.api.v1.price_list import price_list
 from routes.api.v1.analytics import analytics
 from routes.api.v1.budgeting import budgeting
 
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,6 +45,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 app.mount("/static", StaticFiles(directory="templates/static/includes"), name="static")
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR.absolute())), name="uploads")
 templates = Jinja2Templates(directory="templates/static")
 
 app.include_router(pages)

@@ -1,24 +1,17 @@
 from uuid import UUID
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.customer_inquiry import CustomerInquiry
 from models.projects import Project
-from repositories.base import BaseRepository  # assumes you have this
-from schemas.constants import InquiryStatus
+from repositories.base import BaseRepository
 
 class InquiryRepo(BaseRepository[CustomerInquiry]):
     def __init__(self, db: AsyncSession):
         super().__init__(db=db, model=CustomerInquiry)
 
-    async def list_all(
-        self,
-        status: str | None = None,
-        search: str | None = None,
-        limit: int = 100,
-        offset: int = 0
-    ) -> list[CustomerInquiry]:
+    async def list_all(self, status: str | None = None, search: str | None = None, limit: int = 100, offset: int = 0) -> list[CustomerInquiry]:
         stmt = (
             select(CustomerInquiry)
             .options(selectinload(CustomerInquiry.project))   # ← WAJIB
@@ -47,7 +40,7 @@ class InquiryRepo(BaseRepository[CustomerInquiry]):
                 selectinload(CustomerInquiry.photos),
                 selectinload(CustomerInquiry.activities),
                 selectinload(CustomerInquiry.workshop_notes),
-                selectinload(CustomerInquiry.project),   # ← TAMBAHKAN INI
+                selectinload(CustomerInquiry.project).joinedload(Project.inquiry),   # ← TAMBAHKAN INI
             )
         )
         res = await self.db.execute(stmt)

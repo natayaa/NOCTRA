@@ -13,6 +13,10 @@ class InquiryStatus(str, Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     CONVERTED = "converted"
+    
+class ConvertToProjectRequest(BaseModel):
+    project_start_date: Optional[datetime] = None
+    project_target_delivery: Optional[datetime] = None
 
 # ---------- Nested response schemas ----------
 class InquiryPhotoResponse(BaseModel):
@@ -89,17 +93,14 @@ class CustomerInquiryResponse(BaseModel):
     # Timestamps
     created_at: datetime
     updated_at: datetime
+    
 
     # Relationships
-    photos: List[InquiryPhotoResponse] = Field(default_factory=list)
+    photos: Optional[List[InquiryPhotoResponse]] = Field(None)
     activities: List[InquiryActivityResponse] = Field(default_factory=list)
     project: Optional[ProjectMinimalResponse] = None
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        populate_by_name=True,
-        json_encoders={datetime: lambda v: v.isoformat()}
-    )
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     @property
     def display_status(self) -> str:
@@ -146,3 +147,7 @@ class CustomerInquirySummary(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)   # ← WAJIB
     
+class CustomerInquiryPhotoSummary(BaseModel):
+    id: UUID
+    file_path: str
+    created_at: datetime

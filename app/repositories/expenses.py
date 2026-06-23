@@ -15,7 +15,6 @@ class ExpenseRepository:
     Repository for Expense model.
     Handles all database operations related to expenses.
     """
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -91,11 +90,7 @@ class ExpenseRepository:
 
         return expenses, total
 
-    async def get_total_by_period(
-        self,
-        period_start: date,
-        period_end: date
-    ) -> Decimal:
+    async def get_total_by_period(self, period_start: date, period_end: date) -> Decimal:
         """Get total expenses in a period."""
         stmt = select(func.sum(Expense.amount)).where(
             Expense.expense_date >= period_start,
@@ -104,11 +99,7 @@ class ExpenseRepository:
         result = await self.db.execute(stmt)
         return result.scalar() or Decimal(0)
 
-    async def get_total_by_category(
-        self,
-        period_start: date,
-        period_end: date
-    ) -> List[tuple]:
+    async def get_total_by_category(self, period_start: date, period_end: date) -> List[tuple]:
         """Get total expenses grouped by category."""
         stmt = select(
             Expense.category,
@@ -120,11 +111,7 @@ class ExpenseRepository:
         result = await self.db.execute(stmt)
         return result.all()
 
-    async def get_monthly_totals(
-        self,
-        period_start: date,
-        period_end: date
-    ) -> List[tuple]:
+    async def get_monthly_totals(self, period_start: date, period_end: date) -> List[tuple]:
         """Get total expenses per month."""
         stmt = select(
             func.date_trunc('month', Expense.expense_date).label('month'),
@@ -136,12 +123,7 @@ class ExpenseRepository:
         result = await self.db.execute(stmt)
         return result.all()
 
-    async def get_by_project(
-        self,
-        project_id: UUID,
-        limit: int = 100,
-        offset: int = 0
-    ) -> List[Expense]:
+    async def get_by_project(self, project_id: UUID, limit: int = 100, offset: int = 0) -> List[Expense]:
         """Get expenses by project ID."""
         stmt = select(Expense).where(
             Expense.project_id == project_id
@@ -149,11 +131,7 @@ class ExpenseRepository:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def count_by_category(
-        self,
-        period_start: date,
-        period_end: date
-    ) -> dict:
+    async def count_by_category(self, period_start: date, period_end: date) -> dict:
         """Count expenses per category (for dashboard)."""
         rows = await self.get_total_by_category(period_start, period_end)
         return {row.category: row.total for row in rows}

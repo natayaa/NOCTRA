@@ -1,6 +1,6 @@
 from uuid import UUID, uuid4
 from decimal import Decimal
-from fastapi import APIRouter, Query, HTTPException, File, UploadFile
+from fastapi import APIRouter, Query, HTTPException, File, UploadFile, Body
 from fastapi.responses import JSONResponse
 from typing import List
 
@@ -18,6 +18,7 @@ from schemas.customer_inquiry import (
     InquirySendQuotation,
     NoteUpdate,
     InquiryStatus,
+    ConvertToProjectRequest
 )
 from schemas.projects import ProjectCreate
 
@@ -102,14 +103,18 @@ async def update_notes(inquiry_id: UUID, req: NoteUpdate, db: SessionDep):
 
 
 @customer_inquiry.post("/{inquiry_id}/convert", response_class=JSONResponse)
-async def convert_to_project(inquiry_id: UUID, db: SessionDep):
+async def convert_to_project(
+    inquiry_id: UUID,
+    db: SessionDep,
+    payload: ConvertToProjectRequest = Body(default_factory=dict),
+):
     service = get_inquiry_service(db)
     inquiry = await service.get_inquiry(inquiry_id)
     if not inquiry:
         raise HTTPException(status_code=404, detail="Inquiry not found")
 
     if inquiry.status == InquiryStatus.CONVERTED:
-        raise HTTPException(status_code=400, detail="Inquiry already converted to a project")
+        raise HTTPException(status_code=400, detail="Inquiry already converted")
 
     # Prepare project data
     project_data = ProjectCreate(
@@ -120,11 +125,12 @@ async def convert_to_project(inquiry_id: UUID, db: SessionDep):
         vehicle_model=inquiry.vehicle_model,
         estimated_cost=Decimal(inquiry.estimated_budget or 0),
         estimated_revenue=Decimal(0),
+        project_start_date=payload.project_start_date,   # tambahkan
+        project_target_delivery=payload.project_target_delivery,  # tambahkan
     )
     project_service = ProjectService()
     project = await project_service.create(db, project_data.model_dump())
 
-    # Update inquiry status and add activity
     inquiry.status = InquiryStatus.CONVERTED
     await service.repo.add_activity(inquiry_id, f"Converted to project: {project.name}")
     await db.commit()

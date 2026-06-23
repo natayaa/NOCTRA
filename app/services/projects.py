@@ -4,8 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from models.projects import Project, ProjectLabor, ProjectExpense
-from models.inventory_workshop_jobs import WorkshopJob
-from models.inventory_material_usage import JobMaterialUsage
+from models.inventory import ProjectWorkshopTask, InventoryMaterialUsage
 from models.price_list import PriceListItem
 from repositories.projects import ProjectRepository
 from repositories.customer_inquiry import InquiryRepo
@@ -28,7 +27,7 @@ class ProjectService:
         await db.flush()
 
         # Auto-create WorkshopJob
-        job = WorkshopJob(
+        job = ProjectWorkshopTask(
             project_id=project.id,
             unit_name=project.name,
             status="active",
@@ -56,45 +55,49 @@ class ProjectService:
     # ----------------------------------------------------------------------
 
     async def get_project_financials(self, db: AsyncSession, project_id: str) -> dict | None:
-        """
-        Calculate detailed financial summary for a project.
-
-        Returns:
-            dict with keys: estimated_cost, actual_cost, estimated_revenue,
-            actual_revenue, material_cost, labor_cost, expenses, profit, margin.
-        """
         project = await self.repo.get(db, project_id)
         if not project:
             return None
 
-        # Material cost from workshop_job
         material_cost = Decimal(0)
+        material_usages = []
         if project.workshop_job:
             for usage in project.workshop_job.material_usages:
                 if usage.item:
-                    material_cost += usage.quantity * usage.item.cost_price
+                    total = usage.quantity * usage.item.cost_price
+                    material_cost += total
+                    material_usages.append({
+                        "item_name": usage.item.name,
+                        "quantity": usage.quantity,
+                        "cost": total,
+                    })
 
-        # Labor cost from ProjectLabor
         labor_cost = Decimal(0)
+        labor_items = []
         for labor in project.labor_items:
             labor_cost += labor.total_cost
+            labor_items.append({
+                "type": labor.labor_type,
+                "hours": str(labor.hours),
+                "rate": str(labor.rate_per_hour),
+                "total": str(labor.total_cost),
+            })
 
-        # Additional expenses
         expenses = Decimal(0)
         for exp in project.expenses:
             expenses += exp.amount
 
         actual_cost = material_cost + labor_cost + expenses
-
-        # Revenue values
         actual_revenue = project.actual_revenue or Decimal(0)
         estimated_revenue = project.estimated_revenue or Decimal(0)
+        estimated_cost = project.estimated_cost or Decimal(0)
 
         profit = actual_revenue - actual_cost
         margin = (profit / actual_revenue * 100) if actual_revenue else Decimal(0)
 
         return {
-            "estimated_cost": project.estimated_cost or Decimal(0),
+            "project": project,
+            "estimated_cost": estimated_cost,
             "actual_cost": actual_cost,
             "estimated_revenue": estimated_revenue,
             "actual_revenue": actual_revenue,
@@ -103,6 +106,8 @@ class ProjectService:
             "expenses": expenses,
             "profit": profit,
             "margin": round(margin, 2),
+            "material_usages": material_usages,   # ✅ tambahkan
+            "labor_items": labor_items,           # ✅ tambahkan
         }
 
     # ----------------------------------------------------------------------

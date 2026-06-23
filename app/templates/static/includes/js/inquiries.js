@@ -46,12 +46,14 @@
       quote: null,
       reject: null,
       drawer: null,
+      convert: null,
     };
     #timeouts = {
       notes: null,
       search: null,
     };
     #isLoading = false;
+    #notifiedProjects = new Set();
 
     // ─── Constructor ──────────────────────────────────────────
     constructor() {
@@ -118,6 +120,16 @@
         "closeRejectModal",
         "cancelRejectBtn",
         "exportInquiriesBtn",
+        "convertModal",
+        "convertForm",
+        "convertStartDate",
+        "convertTargetDelivery",
+        "closeConvertModal",
+        "cancelConvertBtn",
+        // Before After
+        "drawerBeforeAfterSection",
+        "beforeTrack",
+        "afterTrack",
       ];
       const refs = {};
       ids.forEach((id) => {
@@ -128,7 +140,6 @@
 
     // ─── Modal Initialization ────────────────────────────────
     #initializeModals() {
-      // Drawer
       const { inquiryDrawer, closeDrawer } = this.#dom;
       if (inquiryDrawer) {
         this.#modals.drawer = inquiryDrawer;
@@ -141,41 +152,78 @@
             this.#closeDrawer();
           }
         });
-      }
 
-      // Quote Modal
-      const quoteModal = this.#dom.quoteModal;
-      if (quoteModal) {
-        this.#modals.quote = quoteModal;
-        const closeBtn = this.#dom.closeQuoteModal;
-        const cancelBtn = this.#dom.cancelQuoteBtn;
-        const close = () => this.#closeQuoteModal();
-        closeBtn?.addEventListener("click", close);
-        cancelBtn?.addEventListener("click", close);
-        quoteModal.addEventListener("click", (e) => {
-          if (e.target === quoteModal) close();
-        });
-        this.#dom.quoteForm?.addEventListener("submit", (e) =>
-          this.#handleQuoteSubmit(e),
-        );
-      }
+        // Convert Modal
+        const convertModal = this.#dom.convertModal;
+        if (convertModal) {
+          this.#modals.convert = convertModal;
+          const close = () => this.#closeConvertModal();
+          this.#dom.closeConvertModal?.addEventListener("click", close);
+          this.#dom.cancelConvertBtn?.addEventListener("click", close);
+          convertModal.addEventListener("click", (e) => {
+            if (e.target === convertModal) close();
+          });
+          this.#dom.convertForm?.addEventListener("submit", (e) =>
+            this.#handleConvertSubmit(e),
+          );
+        }
 
-      // Reject Modal
-      const rejectModal = this.#dom.rejectModal;
-      if (rejectModal) {
-        this.#modals.reject = rejectModal;
-        const closeBtn = this.#dom.closeRejectModal;
-        const cancelBtn = this.#dom.cancelRejectBtn;
-        const close = () => this.#closeRejectModal();
-        closeBtn?.addEventListener("click", close);
-        cancelBtn?.addEventListener("click", close);
-        rejectModal.addEventListener("click", (e) => {
-          if (e.target === rejectModal) close();
-        });
-        this.#dom.rejectForm?.addEventListener("submit", (e) =>
-          this.#handleRejectSubmit(e),
-        );
+        // Quote Modal
+        const quoteModal = this.#dom.quoteModal;
+        if (quoteModal) {
+          this.#modals.quote = quoteModal;
+          const closeBtn = this.#dom.closeQuoteModal;
+          const cancelBtn = this.#dom.cancelQuoteBtn;
+          const close = () => this.#closeQuoteModal();
+          closeBtn?.addEventListener("click", close);
+          cancelBtn?.addEventListener("click", close);
+          quoteModal.addEventListener("click", (e) => {
+            if (e.target === quoteModal) close();
+          });
+          this.#dom.quoteForm?.addEventListener("submit", (e) =>
+            this.#handleQuoteSubmit(e),
+          );
+        }
+
+        // Reject Modal
+        const rejectModal = this.#dom.rejectModal;
+        if (rejectModal) {
+          this.#modals.reject = rejectModal;
+          const closeBtn = this.#dom.closeRejectModal;
+          const cancelBtn = this.#dom.cancelRejectBtn;
+          const close = () => this.#closeRejectModal();
+          closeBtn?.addEventListener("click", close);
+          cancelBtn?.addEventListener("click", close);
+          rejectModal.addEventListener("click", (e) => {
+            if (e.target === rejectModal) close();
+          });
+          this.#dom.rejectForm?.addEventListener("submit", (e) =>
+            this.#handleRejectSubmit(e),
+          );
+        }
       }
+    }
+
+    // ─── Convert Modal Methods ────────────────────────────────
+    #openConvertModal(id) {
+      this.#state.currentInquiryId = id;
+      const modal = this.#modals.convert;
+      if (modal) {
+        modal.classList.add("active");
+        document.body.style.overflow = "hidden";
+        if (this.#dom.convertStartDate) this.#dom.convertStartDate.value = "";
+        if (this.#dom.convertTargetDelivery)
+          this.#dom.convertTargetDelivery.value = "";
+      }
+    }
+
+    #closeConvertModal() {
+      const modal = this.#modals.convert;
+      if (modal) {
+        modal.classList.remove("active");
+        document.body.style.overflow = "";
+      }
+      this.#state.currentInquiryId = null;
     }
 
     // ─── Event Bindings ──────────────────────────────────────
@@ -202,7 +250,7 @@
         this.#showToast("Export feature coming soon");
       });
 
-      // Drawer action buttons (delegation)
+      // Drawer action buttons
       const drawerActions = [
         "drawerApproveBtn",
         "drawerQuoteBtn",
@@ -249,8 +297,6 @@
           }, 800);
         });
       }
-
-      // View project button is a link, no extra binding needed.
     }
 
     // ─── Data Loading ─────────────────────────────────────────
@@ -266,6 +312,7 @@
         this.#state.inquiries = data.data || [];
         this.#renderTable();
         this.#updateStats();
+        this.#checkCompletedProjects();
       } catch (err) {
         console.error("Inquiries load error:", err);
         this.#showToast("Failed to load inquiries", true);
@@ -274,19 +321,21 @@
       } finally {
         this.#isLoading = false;
       }
+    }
 
-      // Di #loadInquiries, setelah data load, cek jika ada inquiry yang project-nya baru complete
-      const newlyCompleted = this.#state.inquiries.filter(
-        (i) => i.project && i.project.status === "completed" && !i._notified,
-      );
-      if (newlyCompleted.length) {
-        newlyCompleted.forEach((i) => {
+    #checkCompletedProjects() {
+      this.#state.inquiries.forEach((inq) => {
+        if (
+          inq.project &&
+          inq.project.status === "completed" &&
+          !this.#notifiedProjects.has(inq.project.id)
+        ) {
           this.#showToast(
-            `🎉 Project for ${i.customer_name} has been completed!`,
+            `🎉 Project for ${inq.customer_name} has been completed!`,
           );
-          i._notified = true; // prevent repeat toast
-        });
-      }
+          this.#notifiedProjects.add(inq.project.id);
+        }
+      });
     }
 
     // ─── Fetch Helper ─────────────────────────────────────────
@@ -321,17 +370,13 @@
           inq.vehicle_brand?.toLowerCase().includes(search) ||
           inq.vehicle_model?.toLowerCase().includes(search);
         const matchStatus = !status || inq.status?.toLowerCase() === status;
-        return matchSearch && matchStatus;
+        let extraMatch = true;
+        if (status === "has_project") extraMatch = !!inq.project;
+        else if (status === "no_project") extraMatch = !inq.project;
+        else if (status === "project_completed")
+          extraMatch = inq.project && inq.project.status === "completed";
+        return matchSearch && matchStatus && extraMatch;
       });
-
-      // Di dalam filter
-      if (status === "has_project" && !inq.project) return false;
-      if (status === "no_project" && inq.project) return false;
-      if (
-        status === "project_completed" &&
-        (!inq.project || inq.project.status !== "completed")
-      )
-        return false;
 
       if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">No inquiries found</td></tr>`;
@@ -348,33 +393,32 @@
             ? this.#getProjectStatusLabel(inq.project.status)
             : "—";
           return `
-                    <tr data-id="${inq.id}">
-                        <td data-label="Customer">
-                            <strong>${this.#escapeHtml(inq.customer_name)}</strong><br>
-                            <small>${this.#escapeHtml(inq.customer_phone_number)}</small>
-                        </td>
-                        <td data-label="Vehicle">${this.#escapeHtml(inq.vehicle_brand)} ${this.#escapeHtml(inq.vehicle_model)}</td>
-                        <td data-label="Project Type">${this.#escapeHtml(inq.project_type || "—")}</td>
-                        <td data-label="Status"><span class="status-badge ${this.#getStatusBadgeClass(inq.status)}">${this.#getStatusLabel(inq.status)}</span></td>
-                        <td data-label="Project Status">
-                            ${inq.project ? `<span class="project-status-badge ${inq.project.status}">${projectStatus}</span>` : "—"}
-                        </td>
-                        <td data-label="Created">${new Date(inq.created_at).toLocaleDateString()}</td>
-                        <td data-label="Actions" style="text-align:center;">
-                            <div class="actions">
-                                <button class="action-btn view" data-action="view" title="View Details"><i class="ph ph-eye"></i></button>
-                                <button class="action-btn quote" data-action="quote" title="Send Quote"><i class="ph ph-file-text"></i></button>
-                                <button class="action-btn approve" data-action="approve" title="Approve"><i class="ph ph-check"></i></button>
-                                <button class="action-btn reject" data-action="reject" title="Reject"><i class="ph ph-x"></i></button>
-                                ${canConvert ? `<button class="action-btn convert" data-action="convert" title="Convert to Project"><i class="ph ph-arrow-right"></i></button>` : ""}
-                            </div>
-                        </td>
-                    </tr>
-                `;
+            <tr data-id="${inq.id}">
+              <td data-label="Customer">
+                <strong>${this.#escapeHtml(inq.customer_name)}</strong><br>
+                <small>${this.#escapeHtml(inq.customer_phone_number)}</small>
+              </td>
+              <td data-label="Vehicle">${this.#escapeHtml(inq.vehicle_brand)} ${this.#escapeHtml(inq.vehicle_model)}</td>
+              <td data-label="Project Type">${this.#escapeHtml(inq.project_type || "—")}</td>
+              <td data-label="Status"><span class="status-badge ${this.#getStatusBadgeClass(inq.status)}">${this.#getStatusLabel(inq.status)}</span></td>
+              <td data-label="Project Status">
+                ${inq.project ? `<span class="project-status-badge ${inq.project.status}">${projectStatus}</span>` : "—"}
+              </td>
+              <td data-label="Created">${new Date(inq.created_at).toLocaleDateString()}</td>
+              <td data-label="Actions" style="text-align:center;">
+                <div class="actions">
+                  <button class="action-btn view" data-action="view" title="View Details"><i class="ph ph-eye"></i></button>
+                  <button class="action-btn quote" data-action="quote" title="Send Quote"><i class="ph ph-file-text"></i></button>
+                  <button class="action-btn approve" data-action="approve" title="Approve"><i class="ph ph-check"></i></button>
+                  <button class="action-btn reject" data-action="reject" title="Reject"><i class="ph ph-x"></i></button>
+                  ${canConvert ? `<button class="action-btn convert" data-action="convert" title="Convert to Project"><i class="ph ph-arrow-right"></i></button>` : ""}
+                </div>
+              </td>
+            </tr>
+          `;
         })
         .join("");
 
-      // Attach events to action buttons (delegation would be better, but keeping inline for simplicity)
       tbody.querySelectorAll(".action-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -402,7 +446,6 @@
         });
       });
 
-      // Click on row = view
       tbody.querySelectorAll("tr").forEach((tr) => {
         tr.addEventListener("click", () => {
           const id = tr.dataset.id;
@@ -427,11 +470,6 @@
       this.#setText("newCount", newCount);
       this.#setText("quotedCount", quoted);
       this.#setText("convertedCount", converted);
-
-      const completedProjects = this.#state.inquiries.filter(
-        (i) => i.project && i.project.status === "completed",
-      ).length;
-      this.#setText("completedProjectsCount", completedProjects);
     }
 
     // ─── Drawer ──────────────────────────────────────────────
@@ -441,7 +479,6 @@
       this.#state.currentInquiryId = id;
       drawer.classList.add("active");
 
-      // Reset UI placeholders
       this.#resetDrawerFields();
 
       try {
@@ -459,15 +496,6 @@
       const drawer = this.#modals.drawer;
       if (drawer) drawer.classList.remove("active");
       this.#state.currentInquiryId = null;
-    }
-
-    #getProjectStatusInfo(inquiry) {
-      if (!inquiry.project) return { label: "No Project", class: "no-project" };
-      const status = inquiry.project.status;
-      if (status === "completed") {
-        return { label: "✅ Project Completed", class: "completed" };
-      }
-      return { label: this.#getProjectStatusLabel(status), class: status };
     }
 
     #resetDrawerFields() {
@@ -509,6 +537,9 @@
           '<div class="timeline-item"><span>—</span><p>Loading...</p></div>';
       if (this.#dom.drawerNotes) this.#dom.drawerNotes.value = "";
       if (this.#dom.noteCounter) this.#dom.noteCounter.textContent = "0";
+      // Before After
+      if (this.#dom.drawerBeforeAfterSection)
+        this.#dom.drawerBeforeAfterSection.style.display = "none";
     }
 
     async #populateDrawer(inq) {
@@ -535,12 +566,6 @@
       );
 
       // Project Status
-      this.#setText(
-        "drawerProjectStatus",
-        inq.project ? this.#getProjectStatusLabel(inq.project.status) : "—",
-      );
-
-      // Di dalam #populateDrawer, setelah setText drawerProjectStatus:
       const projectInfo = this.#getProjectStatusInfo(inq);
       const projectStatusEl = this.#dom.drawerProjectStatus;
       if (projectStatusEl) {
@@ -548,19 +573,17 @@
         projectStatusEl.className = `project-status-badge ${projectInfo.class}`;
       }
 
-      // Jika project completed, disable semua tombol aksi
+      // Disable actions if project completed
       if (projectInfo.class === "completed") {
-        const btns = [
+        [
           "drawerApproveBtn",
           "drawerQuoteBtn",
           "drawerRejectBtn",
           "drawerConvertBtn",
-        ];
-        btns.forEach((id) => {
+        ].forEach((id) => {
           const btn = this.#dom[id];
           if (btn) btn.disabled = true;
         });
-        // Tampilkan pesan "Project already completed" jika perlu
       }
 
       // Reference link
@@ -575,6 +598,12 @@
       // Photos
       const photoSection = this.#dom.drawerPhotosSection;
       const photoGrid = this.#dom.drawerPhotos;
+      const allPhotos = inq.photos || [];
+      console.log("Photos loaded:", allPhotos); // tambahkan log
+      const beforePhotos = allPhotos.filter((_, i) => i % 2 === 0);
+      const afterPhotos = allPhotos.filter((_, i) => i % 2 === 1);
+      this.#renderCarousel("beforeTrack", beforePhotos);
+      this.#renderCarousel("afterTrack", afterPhotos);
       if (inq.photos && inq.photos.length > 0) {
         photoSection.style.display = "block";
         photoGrid.innerHTML = inq.photos
@@ -587,7 +616,21 @@
         photoSection.style.display = "none";
       }
 
-      // Financial Summary (if project exists)
+      // Before & After Carousel
+      const beforeAfterSection = this.#dom.drawerBeforeAfterSection;
+      if (beforeAfterSection) {
+        beforeAfterSection.style.display = "block";
+        const beforePhotos = inq.photos?.filter((_, i) => i % 2 === 0) || [];
+        const afterPhotos = inq.photos?.filter((_, i) => i % 2 === 1) || [];
+        this.#renderCarousel("beforeTrack", beforePhotos);
+        this.#renderCarousel("afterTrack", afterPhotos);
+      } else {
+        this.#renderCarousel("beforeTrack", []);
+        this.#renderCarousel("afterTrack", []);
+        beforeAfterSection.style.display = "block";
+      }
+
+      // Financial Summary & Project Details
       const financialSection = this.#dom.drawerFinancialSection;
       if (inq.project && inq.project.id) {
         try {
@@ -613,6 +656,13 @@
           this.#setText("drawerProfit", this.#formatCurrency(profit));
           this.#setText("drawerMargin", margin + "%");
           financialSection.style.display = "block";
+
+          if (p.target_delivery) {
+            const targetDate = new Date(p.target_delivery);
+            if (!isNaN(targetDate)) {
+              this.#setText("drawerTarget", targetDate.toLocaleDateString());
+            }
+          }
         } catch (err) {
           console.warn("Failed to load project financials", err);
           financialSection.style.display = "none";
@@ -626,11 +676,12 @@
       if (inq.activities && inq.activities.length > 0) {
         timeline.innerHTML = inq.activities
           .map(
-            (act) =>
-              `<div class="timeline-item">
-                        <span>${new Date(act.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                        <p>${this.#escapeHtml(act.activity)}</p>
-                    </div>`,
+            (act) => `
+              <div class="timeline-item">
+                <span>${new Date(act.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                <p>${this.#escapeHtml(act.activity)}</p>
+              </div>
+            `,
           )
           .join("");
       } else {
@@ -674,6 +725,97 @@
           viewProjectBtn.style.display = "none";
         }
       }
+    }
+
+    // ─── Carousel ─────────────────────────────────────────────
+    #renderCarousel(trackId, photos) {
+      const track = this.#dom[trackId];
+      if (!track) return;
+      const container = track.closest(".carousel-container");
+      if (!container) return;
+
+      if (!photos || photos.length === 0) {
+        track.innerHTML = `<div class="carousel-empty">No photos</div>`;
+        container.querySelectorAll(".carousel-btn").forEach((b) => {
+          b.style.display = "none";
+        });
+        return;
+      }
+      container.querySelectorAll(".carousel-btn").forEach((b) => {
+        b.style.display = "block";
+      });
+
+      track.innerHTML = "";
+
+      if (!photos || photos.length === 0) {
+        track.innerHTML = `<div class="carousel-empty">No photos</div>`;
+        container
+          .querySelectorAll(".carousel-btn")
+          .forEach((b) => (b.style.display = "none"));
+        return;
+      }
+
+      container
+        .querySelectorAll(".carousel-btn")
+        .forEach((b) => (b.style.display = "block"));
+
+      photos.forEach((p) => {
+        const img = document.createElement("img");
+        // ✅ Gunakan prefix /uploads/
+        img.src = `/uploads/${this.#escapeHtml(p.file_path)}`;
+        img.alt = "Photo";
+        img.loading = "lazy";
+        track.appendChild(img);
+      });
+
+      let currentIndex = 0;
+      const total = photos.length;
+      const prevBtn = container.querySelector(".prev");
+      const nextBtn = container.querySelector(".next");
+
+      const updateCarousel = () => {
+        const width = container.clientWidth;
+        track.style.transform = `translateX(-${currentIndex * width}px)`;
+        if (prevBtn) prevBtn.disabled = currentIndex === 0;
+        if (nextBtn) nextBtn.disabled = currentIndex === total - 1;
+      };
+
+      // Clone & replace to remove old listeners
+      const newPrev = prevBtn?.cloneNode(true);
+      const newNext = nextBtn?.cloneNode(true);
+      if (prevBtn) prevBtn.replaceWith(newPrev);
+      if (nextBtn) nextBtn.replaceWith(newNext);
+
+      if (newPrev) {
+        newPrev.addEventListener("click", () => {
+          if (currentIndex > 0) {
+            currentIndex--;
+            updateCarousel();
+          }
+        });
+      }
+      if (newNext) {
+        newNext.addEventListener("click", () => {
+          if (currentIndex < total - 1) {
+            currentIndex++;
+            updateCarousel();
+          }
+        });
+      }
+
+      const resizeHandler = () => updateCarousel();
+      window.addEventListener("resize", resizeHandler);
+      requestAnimationFrame(updateCarousel);
+    }
+
+    // ─── Helper untuk Project Status ──────────────────────────
+    #getProjectStatusInfo(inquiry) {
+      if (!inquiry.project) return { label: "No Project", class: "no-project" };
+      const status = inquiry.project.status;
+      if (status === "completed") {
+        return { label: "✅ Project Completed", class: "completed" };
+      }
+      return { label: this.#getProjectStatusLabel(status), class: status };
     }
 
     // ─── CRUD Actions ─────────────────────────────────────────
@@ -735,19 +877,57 @@
     async #convertInquiry(id) {
       const inquiry = this.#state.inquiries.find((i) => i.id === id);
       if (inquiry) {
-        const statusLow = (inquiry.status || "").toLowerCase();
-        if (["converted", "rejected", "completed"].includes(statusLow)) {
+        const status = (inquiry.status || "").toLowerCase();
+        if (["converted", "rejected", "completed"].includes(status)) {
           this.#showToast("Inquiry cannot be converted", true);
           return;
         }
       }
-      if (!confirm("Convert this inquiry to a project?")) return;
+      this.#openConvertModal(id);
+    }
+
+    async #handleConvertSubmit(e) {
+      e.preventDefault();
+      const id = this.#state.currentInquiryId;
+      if (!id) return;
+      const startDate = this.#dom.convertStartDate.value;
+      const targetDelivery = this.#dom.convertTargetDelivery.value;
+
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      const originalText = submitBtn?.textContent || "Convert";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Converting...";
+      }
+
       try {
-        await this.#fetchJSON(`${API_BASE}/${id}/convert`, { method: "POST" });
-        this.#showToast("Inquiry converted to project!");
-        await this.#refreshAfterAction(id);
+        const response = await this.#fetchJSON(`${API_BASE}/${id}/convert`, {
+          method: "POST",
+          body: JSON.stringify({
+            start_date: startDate || null,
+            target_delivery: targetDelivery || null,
+          }),
+        });
+        if (response && response.data && response.data.project_id) {
+          this.#showToast(
+            `✅ Inquiry converted to project! ID: ${response.data.project_id.slice(
+              0,
+              8,
+            )}`,
+          );
+          this.#closeConvertModal();
+          await this.#refreshAfterAction(id);
+        } else {
+          throw new Error("Invalid response from server");
+        }
       } catch (err) {
-        this.#showToast("Conversion failed: " + err.message, true);
+        console.error("Conversion error:", err);
+        this.#showToast(`❌ ${err.message || "Conversion failed"}`, true);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     }
 
@@ -854,27 +1034,25 @@
     #showToast(message, isError = false) {
       if (typeof window.showToast === "function") {
         window.showToast(message, isError ? "error" : "success");
-      } else {
-        // Fallback simple toast
-        const toast =
-          document.querySelector(".app-toast") ||
-          (() => {
-            const el = document.createElement("div");
-            el.className = "app-toast";
-            document.body.appendChild(el);
-            return el;
-          })();
-        toast.textContent = message;
-        toast.className = "app-toast" + (isError ? " error" : "");
-        clearTimeout(toast._timeout);
-        requestAnimationFrame(() => toast.classList.add("show"));
-        toast._timeout = setTimeout(() => toast.classList.remove("show"), 3000);
+        return;
       }
+      const toast =
+        document.querySelector(".app-toast") ||
+        (() => {
+          const el = document.createElement("div");
+          el.className = "app-toast";
+          document.body.appendChild(el);
+          return el;
+        })();
+      toast.textContent = message;
+      toast.className = "app-toast" + (isError ? " error" : "");
+      clearTimeout(toast._timeout);
+      requestAnimationFrame(() => toast.classList.add("show"));
+      toast._timeout = setTimeout(() => toast.classList.remove("show"), 3000);
     }
 
     async #refreshAfterAction(id) {
       await this.#loadInquiries();
-      // If drawer is open for the same inquiry, refresh it
       if (
         this.#modals.drawer?.classList.contains("active") &&
         this.#state.currentInquiryId === id

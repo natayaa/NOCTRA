@@ -7,9 +7,7 @@ from sqlalchemy import select, func, and_, extract
 
 from models.projects import Project
 from models.customer_inquiry import CustomerInquiry
-from models.inventory_items import InventoryItems
-from models.inventory_stock_movement import StockMovement
-from models.inventory_material_usage import JobMaterialUsage
+from models.inventory import InventoryStockMovement, InventoryMaterialUsage, InventoryItem
 from models.price_list import PriceListItem
 
 from schemas.analytics import (
@@ -151,9 +149,9 @@ class AnalyticsService:
 
         # 4. Low stock items (from inventory)
         low_stock = await self.db.scalar(
-            select(func.count(InventoryItems.id)).where(
-                InventoryItems.current_stock <= InventoryItems.min_stock_threshold,
-                InventoryItems.status == 'active'
+            select(func.count(InventoryItem.id)).where(
+                InventoryItem.current_stock <= InventoryItem.min_stock_threshold,
+                InventoryItem.status == 'active'
             )
         ) or 0
 
@@ -357,11 +355,11 @@ class AnalyticsService:
     async def get_material_consumption(self) -> MaterialConsumptionResponse:
         """Get material consumption breakdown by total quantity used."""
         stmt = select(
-            InventoryItems.name,
-            func.sum(JobMaterialUsage.quantity).label('total_qty')
-        ).join(JobMaterialUsage, JobMaterialUsage.item_id == InventoryItems.id)\
-         .group_by(InventoryItems.id)\
-         .order_by(func.sum(JobMaterialUsage.quantity).desc())
+            InventoryItem.name,
+            func.sum(InventoryMaterialUsage.quantity).label('total_qty')
+        ).join(InventoryMaterialUsage, InventoryMaterialUsage.item_id == InventoryItem.id)\
+         .group_by(InventoryItem.id)\
+         .order_by(func.sum(InventoryMaterialUsage.quantity).desc())
 
         result = await self.db.execute(stmt)
         rows = result.all()
@@ -443,11 +441,11 @@ class AnalyticsService:
 
         # 4. Inventory turnover (estimate)
         total_usage = await self.db.scalar(
-            select(func.sum(JobMaterialUsage.quantity * InventoryItems.cost_price))
-            .join(InventoryItems, JobMaterialUsage.item_id == InventoryItems.id)
+            select(func.sum(InventoryMaterialUsage.quantity * InventoryItem.cost_price))
+            .join(InventoryItem, InventoryMaterialUsage.item_id == InventoryItem.id)
         ) or 0
         avg_stock = await self.db.scalar(
-            select(func.avg(InventoryItems.current_stock * InventoryItems.cost_price))
+            select(func.avg(InventoryItem.current_stock * InventoryItem.cost_price))
         ) or 1
         turnover = total_usage / avg_stock if avg_stock else 0
 

@@ -1,5 +1,5 @@
 # services/customer_inquiry.py
-import os
+import re
 from pathlib import Path
 from uuid import uuid4, UUID
 
@@ -34,9 +34,6 @@ class InquiryService:
         request: CustomerInquiryRequest,
         photos: list[UploadFile] | None = None,
     ) -> CustomerInquiry:
-        """
-        Create a new inquiry with optional photo uploads.
-        """
         inquiry = CustomerInquiry(**request.model_dump(exclude_none=True))
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -50,9 +47,11 @@ class InquiryService:
                 content = await photo.read()
                 with open(file_path, "wb") as f:
                     f.write(content)
-                inquiry.photos.append(
-                    CustomerInquiryPhoto(file_path=str(file_path))
-                )
+                
+                # ✅ Tambahkan ke session
+                photo_obj = CustomerInquiryPhoto(file_path=str(file_path))
+                self.repo.db.add(photo_obj)   # <-- PENTING!
+                inquiry.photos.append(photo_obj)
 
         return await self.repo.create(inquiry)
 
@@ -131,48 +130,64 @@ class InquiryService:
         if not inquiry:
             return None
         inquiry.status = InquiryStatus.CONVERTED
+        
         await self.repo.db.flush()
         await self.repo.add_activity(inquiry_id, "Converted to project")
         return inquiry
 
-
 class InquiryPhotoService:
-    """
-    Service for handling photo uploads related to inquiries.
-    Separated from InquiryService to keep single responsibility.
-    """
-
-    def __init__(self, repo: InquiryRepo):
+    def __init__(self, repo: InquiryRepo, upload_dir: Path = UPLOAD_DIR):
         self.repo = repo
+        self.upload_dir = upload_dir
 
     async def upload_photos(
         self,
         inquiry_id: UUID,
         photos: list[UploadFile],
     ) -> list[CustomerInquiryPhoto]:
-        """
-        Upload multiple photos for an inquiry.
-        Saves files to disk and creates Photo records in the database.
-        """
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        photo_models = []
+        # Pastikan folder utama ada
+        self.upload_dir.mkdir(parents=True, exist_ok=True)
 
+        # Ambil data inquiry
+        inquiry = await self.repo.get(inquiry_id)
+        if not inquiry:
+            raise ValueError("Inquiry not found")
+
+        # Buat folder dengan nama customer + brand + model
+        customer_part = re.sub(r'[^a-zA-Z0-9_]', '_', inquiry.customer_name or 'unknown').strip('_') or 'unknown'
+        brand_part = re.sub(r'[^a-zA-Z0-9_]', '_', inquiry.vehicle_brand or '').strip('_') or 'unknown_brand'
+        model_part = re.sub(r'[^a-zA-Z0-9_]', '_', inquiry.vehicle_model or '').strip('_') or 'unknown_model'
+        folder_name = f"{customer_part}_{brand_part}_{model_part}".lower()
+        if len(folder_name) > 80:
+            folder_name = folder_name[:80]
+
+        customer_folder = self.upload_dir / folder_name
+        customer_folder.mkdir(parents=True, exist_ok=True)
+
+        photo_models = []
         for photo in photos:
             if not photo.filename:
                 continue
             ext = Path(photo.filename).suffix.lower()
+            if ext not in {'.jpg', '.jpeg', '.png', '.webp', '.gif'}:
+                raise ValueError(f"Unsupported file type: {ext}")
             filename = f"{uuid4()}{ext}"
-            file_path = UPLOAD_DIR / filename
+            file_path = customer_folder / filename
 
             content = await photo.read()
             with open(file_path, "wb") as f:
                 f.write(content)
 
-            photo_models.append(
-                CustomerInquiryPhoto(
-                    inquiry_id=inquiry_id,
-                    file_path=str(file_path),
-                )
+            # Simpan path relatif
+            relative_path = str(file_path.relative_to(self.upload_dir))
+            photo_obj = CustomerInquiryPhoto(
+                inquiry_id=inquiry_id,
+                file_path=relative_path,
             )
+            # ✅ Tambahkan ke session agar tersimpan di database
+            self.repo.db.add(photo_obj)
+            photo_models.append(photo_obj)
 
+        # ✅ Flush untuk memberikan ID (opsional, bisa di-router commit)
+        await self.repo.db.flush()
         return photo_models

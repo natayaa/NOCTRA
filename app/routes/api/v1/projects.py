@@ -7,10 +7,16 @@ from decimal import Decimal
 from database.session import SessionDep
 from schemas.base_response import BaseResponse, ErrorResponse
 
-from schemas.projects import ProjectCreate, ProjectUpdateStatus, ProjectResponse, ProjectUpdate, ProjectLaborCreate, ProjectLaborResponse
+from schemas.projects import (
+    ProjectCreate, 
+    ProjectUpdateStatus, 
+    ProjectResponse, 
+    ProjectUpdate, 
+    ProjectLaborCreate, 
+    ProjectLaborResponse
+)
 from repositories.projects import ProjectRepository
 from services.projects import ProjectService
-from services.inventory_items import InventoryService
 
 
 project_router = APIRouter(
@@ -44,7 +50,7 @@ async def revenue(db: SessionDep):
     total = await service.revenue_summary(db)  # returns a Decimal
     return BaseResponse(data={"total_estimated_revenue": total})
 
-@project_router.get("/{project_id}", response_model=BaseResponse[ProjectResponse])
+"""@project_router.get("/{project_id}", response_model=BaseResponse[ProjectResponse])
 async def get_project(project_id: UUID, db: SessionDep):
     service = ProjectService()
     project = await service.repo.get(db, str(project_id))
@@ -57,7 +63,7 @@ async def get_project(project_id: UUID, db: SessionDep):
         "financial_summary": financials
     }
     
-    return BaseResponse(data=response_data)
+    return BaseResponse(data=response_data)"""
 
 @project_router.patch("/{project_id}", response_model=BaseResponse)
 async def update_project(project_id: UUID, request: ProjectUpdate, db: SessionDep):
@@ -205,10 +211,10 @@ async def delete_labor(project_id: UUID, labor_id: UUID, db: SessionDep):
 @project_router.get("/{project_id}", response_model=BaseResponse)
 async def get_project(project_id: UUID, db: SessionDep):
     service = ProjectService()
-    data = await service.get_project_with_financials(db, str(project_id))
+    data = await service.get_project_financials(db, str(project_id))
     if not data:
         raise HTTPException(status_code=404, detail="Project not found")
-    # Kirim response dengan data project + financial summary
+
     return BaseResponse(data={
         "project": ProjectResponse.model_validate(data["project"]),
         "financial_summary": {
@@ -218,8 +224,8 @@ async def get_project(project_id: UUID, db: SessionDep):
             "profit": str(data["profit"]),
             "margin": str(data["margin"])
         },
-        "material_usages": [{"item_name": u.item.name, "quantity": u.quantity, "cost": u.quantity * u.item.cost_price} for u in data["material_usages"]],
-        "labor_items": [{"type": l.labor_type, "hours": str(l.hours), "rate": str(l.rate_per_hour), "total": str(l.total_cost)} for l in data["labor_items"]]
+        "material_usages": data["material_usages"],   # ✅ sudah ada
+        "labor_items": data["labor_items"]            # ✅ sudah ada
     })
     
 @project_router.post("/{project_id}/complete", response_model=BaseResponse)
