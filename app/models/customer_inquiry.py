@@ -63,6 +63,7 @@ class CustomerInquiryPhoto(Base, UUIDMixin, TimestampMixin):
         index=True,
     )
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    stage: Mapped[str] = mapped_column(String(50), nullable=False)
 
     inquiry = relationship("CustomerInquiry", back_populates="photos")
 

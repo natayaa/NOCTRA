@@ -62,30 +62,27 @@
 
       <div class="grid">
         <div class="input-group">
-          <label>Brand *</label>
-          <select id="bike_brand" required>
-            <option value="">Select Brand</option>
-            <option value="Honda">Honda</option>
-            <option value="Yamaha">Yamaha</option>
-            <option value="Suzuki">Suzuki</option>
-            <option value="Kawasaki">Kawasaki</option>
-            <option value="Vespa">Vespa</option>
-            <option value="Benelli">Benelli</option>
-            <option value="KTM">KTM</option>
-            <option value="BMW">BMW</option>
-            <option value="Royal Enfield">Royal Enfield</option>
-            <option value="TVS">TVS</option>
-            <option value="Viar">Viar</option>
-          </select>
+            <label>Brand *</label>
+            <select id="bike_brand" required>
+                <option value="">Select Brand</option>
+                {% for brand in motorcycle_data.keys() %}
+                    <option value="{{ brand }}">{{ brand }}</option>
+                {% endfor %}
+            </select>
         </div>
 
         <div class="input-group">
-          <label>Model *</label>
-          <select id="bike_model" required>
-            <option value="">Select Model</option>
-          </select>
+            <label>Model *</label>
+            <select id="bike_model" required>
+                <option value="">Select Model</option>
+                {% for brand, models in motorcycle_data.items() %}
+                    {% for model in models %}
+                        <option value="{{ model }}" data-brand="{{ brand }}">{{ model }}</option>
+                    {% endfor %}
+                {% endfor %}
+            </select>
         </div>
-      </div>
+    </div>
 
       <div class="grid">
         <div class="input-group">
@@ -157,21 +154,21 @@
         <div class="input-group">
           <label>Estimated Budget</label>
           <select id="estimated_budget">
-            <option value="">Select Budget Range</option>
-            <option value="2000000">Below Rp 2.000.000</option>
-            <option value="5000000">Rp 2.000.000 - Rp 5.000.000</option>
-            <option value="10000000">Rp 5.000.000 - Rp 10.000.000</option>
-            <option value="15000000">Above Rp 10.000.000</option>
+              <option value="">Select Budget Range</option>
+              {% for budget in estimasi_budget %}
+                  <option value="{{ budget.value }}">
+                      Dibawah {{ budget.label }}
+                  </option>
+              {% endfor %}
           </select>
         </div>
         <div class="input-group">
-          <label>Target Result</label>
+          <label>Target Hasil</label>
           <select id="target_result">
             <option value="">Select Target</option>
-            <option>Daily Rider</option>
-            <option>OEM Restoration</option>
-            <option>Showroom Condition</option>
-            <option>Full Custom Build</option>
+            {% for target in target_result %}
+              <option value="{{ target }}">{{ target }}</option>
+            {% endfor %}
           </select>
         </div>
       </div>

@@ -34,18 +34,14 @@ def get_photo_service(db: SessionDep) -> InquiryPhotoService:
     repo = InquiryRepo(db)
     return InquiryPhotoService(repo)
 
-
+# Inquiry list
 @customer_inquiry.get("/", response_class=JSONResponse)
-async def list_inquiries(
-    status: str | None = Query(None),
-    search: str | None = Query(None),
-    db: SessionDep = None,
-):
+async def list_inquiries(status: str | None = Query(None), search: str | None = Query(None), db: SessionDep = None):
     service = get_inquiry_service(db)
     inquiries = await service.list_inquiries(status, search)
     return BaseResponse(data=[CustomerInquirySummary.model_validate(i) for i in inquiries])
 
-
+# Inquiry Detail of customer
 @customer_inquiry.get("/{inquiry_id}", response_class=JSONResponse)
 async def get_inquiry(inquiry_id: UUID, db: SessionDep):
     service = get_inquiry_service(db)

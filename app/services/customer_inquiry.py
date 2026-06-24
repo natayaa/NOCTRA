@@ -49,7 +49,7 @@ class InquiryService:
                     f.write(content)
                 
                 # ✅ Tambahkan ke session
-                photo_obj = CustomerInquiryPhoto(file_path=str(file_path))
+                photo_obj = CustomerInquiryPhoto(file_path=str(file_path), stage="before")
                 self.repo.db.add(photo_obj)   # <-- PENTING!
                 inquiry.photos.append(photo_obj)
 
@@ -161,7 +161,7 @@ class InquiryPhotoService:
         if len(folder_name) > 80:
             folder_name = folder_name[:80]
 
-        customer_folder = self.upload_dir / folder_name
+        customer_folder = self.upload_dir / folder_name / "before"
         customer_folder.mkdir(parents=True, exist_ok=True)
 
         photo_models = []
@@ -183,6 +183,7 @@ class InquiryPhotoService:
             photo_obj = CustomerInquiryPhoto(
                 inquiry_id=inquiry_id,
                 file_path=relative_path,
+                stage="before"
             )
             # ✅ Tambahkan ke session agar tersimpan di database
             self.repo.db.add(photo_obj)

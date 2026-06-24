@@ -572,6 +572,129 @@
   color: white;
 }
 
+/* Custom Modal */
+.custom-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  animation: fadeIn 0.3s ease;
+}
+
+.custom-modal {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 450px;
+  width: 90%;
+  text-align: center;
+  animation: slideUp 0.4s ease;
+}
+
+.custom-modal-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.custom-modal h3 {
+  color: #fff;
+  margin-bottom: 12px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.custom-modal p {
+  color: #aaa;
+  margin-bottom: 24px;
+  line-height: 1.8;
+  white-space: pre-line;
+}
+
+.custom-modal-btn {
+  background: #d4a84b;
+  color: #1a1a1a;
+  border: none;
+  padding: 12px 40px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.custom-modal-btn:hover {
+  background: #e8b84b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(212, 168, 75, 0.3);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* SweetAlert2 Dark Theme Override */
+.swal-dark-theme {
+  background: #1a1a1a !important;
+  border: 1px solid #333 !important;
+}
+
+.swal-confirm-btn {
+  background: #d4a84b !important;
+  color: #1a1a1a !important;
+  font-weight: 600 !important;
+  padding: 12px 32px !important;
+  border-radius: 8px !important;
+}
+
+.swal-confirm-btn:hover {
+  background: #e8b84b !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(212, 168, 75, 0.3) !important;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 /* ======================
    MOBILE
 ====================== */

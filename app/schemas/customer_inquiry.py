@@ -50,7 +50,7 @@ class CustomerInquiryRequest(BaseModel):
     vehicle_model: str = Field(..., min_length=1, max_length=100, strip_whitespace=True)
     vehicle_license_plate: Optional[str] = Field(None, max_length=20, strip_whitespace=True)
     vehicle_condition: str = Field(..., min_length=1, max_length=100, strip_whitespace=True)
-    project_type: str = Field(..., min_length=1, max_length=50, strip_whitespace=True)
+    project_type: str = Field(..., min_length=1, max_length=500, strip_whitespace=True)
     project_description: str = Field(..., min_length=10, max_length=5000, strip_whitespace=True)
     project_target: Optional[str] = Field(None, max_length=255, strip_whitespace=True)
     reference_link: Optional[str] = Field(None, strip_whitespace=True)
@@ -150,4 +150,5 @@ class CustomerInquirySummary(BaseModel):
 class CustomerInquiryPhotoSummary(BaseModel):
     id: UUID
     file_path: str
+    stage: str
     created_at: datetime
