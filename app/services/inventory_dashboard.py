@@ -385,9 +385,9 @@ class InventoryServices:
             # fallback ke cost_price dari inventory item
             return Decimal(str(item.cost_price))
         
-    async def use_item_for_job(self, proeject_id: str, item_id: str, quantity: int, note: str = None, job_id: str = None) -> InventoryMaterialUsage:
+    async def use_item_for_job(self, project_id: str, item_id: str, quantity: int, note: str = None, job_id: str = None) -> InventoryMaterialUsage:
         try:
-            project_uuid = UUID(proeject_id)
+            project_uuid = UUID(project_id)
             item_uuid = UUID(item_id)
         except ValueError:
             raise ValueError("Invalid UUID Format for Project/Item")
@@ -413,7 +413,7 @@ class InventoryServices:
         
         # buat material usage
         materialusage = InventoryMaterialUsage(
-            proeject_id=project_uuid,
+            project_id=project_uuid,
             item_id=item_uuid,
             quantity=quantity,
             note=note,

@@ -930,7 +930,7 @@
       // Render images
       photos.forEach((photo) => {
         const img = document.createElement("img");
-        img.src = `/uploads/${this.#escapeHtml(photo.file_path)}`;
+        img.src = `/uploads/customer_inquiries/${this.#escapeHtml(photo.file_path)}`;
         img.alt = "Photo";
         img.loading = "lazy";
         track.appendChild(img);
