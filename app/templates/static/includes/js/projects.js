@@ -1,27 +1,40 @@
 /**
  * NOCTRA Project Management
  * Card view with Tabbed Drawer, Progress Popup, Material & Labor management.
- *
- * Refactored as modular class with clear separation of concerns.
- * Designed for easy extension and maintenance.
  */
 (function () {
   "use strict";
 
   // ─── Constants ──────────────────────────────────────────────
   const API_BASE = "/api/projects";
+  const INVENTORY_API = "/api/inventory";
+  const PRICE_LIST_API = "/api/price-list";
+
   const STATUS_LABELS = {
-    new: "New",
-    quoted: "Quoted",
-    approved: "Approved",
+    draft: "Draft",
+    active: "Active",
+    in_progress: "In Progress",
+    on_hold: "On Hold",
+    completed: "Completed",
+    cancelled: "Cancelled",
     preparation: "Preparation",
     painting: "Painting",
     assembly: "Assembly",
-    completed: "Completed",
+    new: "New",
+    quoted: "Quoted",
+    approved: "Approved",
+  };
+
+  const PRIORITY_LABELS = {
+    low: "Low",
+    medium: "Medium",
+    high: "High",
+    urgent: "Urgent",
   };
 
   const MILESTONE_STAGES = [
-    { key: "disassembly", label: "Disassembly", threshold: 20 },
+    { key: "inquiry", label: "Inquiry Approved", threshold: 10 },
+    { key: "disassembly", label: "Disassembly", threshold: 25 },
     { key: "paint_prep", label: "Paint Prep", threshold: 40 },
     { key: "painting", label: "Painting", threshold: 60 },
     { key: "assembly", label: "Assembly", threshold: 80 },
@@ -35,10 +48,13 @@
     #state = {
       projects: [],
       currentFilter: "",
+      currentPriority: "",
       currentSearch: "",
       currentProjectId: null,
       isSubmitting: false,
       isLoading: false,
+      laborOptions: [],
+      materialOptions: [],
     };
 
     #dom = {};
@@ -62,6 +78,7 @@
         "projectCardGrid",
         "projectSearch",
         "statusFilter",
+        "priorityFilter",
         "activeCount",
         "prodCount",
         "completedCount",
@@ -91,14 +108,19 @@
         "drawerTitle",
         "drawerCustomer",
         "drawerPhone",
+        "drawerEmail",
         "drawerStatus",
+        "drawerPriority",
         "drawerProgressFill",
         "drawerProgressText",
         "drawerBrand",
         "drawerModel",
+        "drawerYear",
         "drawerPlate",
         "drawerStartDate",
         "drawerDelivery",
+        "drawerActualDelivery",
+        "drawerCompletedAt",
         "drawerDuration",
         "drawerTimelineStatus",
         "drawerNotes",
@@ -106,13 +128,26 @@
         "laborList",
         "materialSelect",
         "materialQty",
+        "materialUnit",
         "consumeMaterialBtn",
         "laborTypeSelect",
         "laborHours",
+        "laborRate",
         "addLaborBtn",
         "timelineMilestones",
         "timelineNote",
+        "drawerActivities",
         "exportBtn",
+        "drawerEstCost",
+        "drawerActualCost",
+        "drawerEstRevenue",
+        "drawerActualRevenue",
+        "drawerDeposit",
+        "drawerDepositPaid",
+        "drawerProfit",
+        "drawerMargin",
+        "progressDisplay",
+        "progressSliderForm",
       ];
       const refs = {};
       ids.forEach((id) => {
@@ -122,6 +157,7 @@
       refs.tabButtons = document.querySelectorAll(".tab-btn");
       refs.tabPanels = {
         overview: document.getElementById("tab-overview"),
+        financial: document.getElementById("tab-financial"),
         material: document.getElementById("tab-material"),
         labor: document.getElementById("tab-labor"),
         timeline: document.getElementById("tab-timeline"),
@@ -151,14 +187,24 @@
                 .card-actions button:hover { background: rgba(255,255,255,0.1); }
                 .btn-complete { background: #10b981 !important; color: #fff !important; }
                 .badge-completed { background: #10b981; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+                .priority-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 600; }
+                .priority-badge.low { background: rgba(107,114,128,0.15); color: #6b7280; }
+                .priority-badge.medium { background: rgba(59,130,246,0.15); color: #3b82f6; }
+                .priority-badge.high { background: rgba(245,158,11,0.15); color: #f59e0b; }
+                .priority-badge.urgent { background: rgba(239,68,68,0.15); color: #ef4444; }
                 .status-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
-                .status-badge.new { background: rgba(59,130,246,0.15); color: #3b82f6; }
-                .status-badge.quoted { background: rgba(245,158,11,0.15); color: #f59e0b; }
-                .status-badge.approved { background: rgba(16,185,129,0.15); color: #10b981; }
+                .status-badge.draft { background: rgba(107,114,128,0.15); color: #6b7280; }
+                .status-badge.active { background: rgba(59,130,246,0.15); color: #3b82f6; }
+                .status-badge.in_progress { background: rgba(245,158,11,0.15); color: #f59e0b; }
+                .status-badge.on_hold { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+                .status-badge.completed { background: rgba(34,197,94,0.15); color: #22c55e; }
+                .status-badge.cancelled { background: rgba(239,68,68,0.15); color: #ef4444; }
                 .status-badge.preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
                 .status-badge.painting { background: rgba(236,72,153,0.15); color: #ec4899; }
                 .status-badge.assembly { background: rgba(14,165,233,0.15); color: #0ea5e9; }
-                .status-badge.completed { background: rgba(34,197,94,0.15); color: #22c55e; }
+                .status-badge.new { background: rgba(59,130,246,0.15); color: #3b82f6; }
+                .status-badge.quoted { background: rgba(245,158,11,0.15); color: #f59e0b; }
+                .status-badge.approved { background: rgba(16,185,129,0.15); color: #10b981; }
                 .milestone-item { padding: 4px 0; font-size: 0.85rem; }
                 .milestone-item.done { color: #10b981; }
                 .milestone-item.active { color: #f59e0b; font-weight: 600; }
@@ -169,6 +215,15 @@
                 .project-status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 500; }
                 .project-status-badge.completed { background: rgba(16,185,129,0.15); color: #10b981; }
                 .project-status-badge.no-project { background: rgba(107,114,128,0.15); color: #6b7280; }
+                .financial-detail-table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
+                .financial-detail-table th, .financial-detail-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border-color, #2d2d44); }
+                .financial-detail-table th { color: var(--text-muted, #94a3b8); font-weight: 500; }
+                .no-data { color: var(--text-muted, #94a3b8); font-style: italic; }
+                .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+                .detail-item { display: flex; flex-direction: column; }
+                .detail-item label { font-size: 0.7rem; color: var(--text-muted, #94a3b8); text-transform: uppercase; letter-spacing: 0.05em; }
+                .detail-item p { margin: 0; font-weight: 500; }
+                .detail-item.full { grid-column: span 2; }
             `;
       document.head.appendChild(style);
     }
@@ -225,6 +280,7 @@
       const {
         projectSearch,
         statusFilter,
+        priorityFilter,
         newProjectBtn,
         closeDrawer,
         projectModal,
@@ -243,7 +299,6 @@
         markCompleteCheckbox,
       } = this.#dom;
 
-      // Search with debounce
       projectSearch?.addEventListener("input", () => {
         clearTimeout(this.#timers.search);
         this.#timers.search = setTimeout(() => {
@@ -252,16 +307,18 @@
         }, 300);
       });
 
-      // Status filter
       statusFilter?.addEventListener("change", () => {
         this.#state.currentFilter = statusFilter.value;
         this.#renderCards();
       });
 
-      // New project button
+      priorityFilter?.addEventListener("change", () => {
+        this.#state.currentPriority = priorityFilter.value;
+        this.#renderCards();
+      });
+
       newProjectBtn?.addEventListener("click", () => this.#openModal());
 
-      // Drawer close
       closeDrawer?.addEventListener("click", () => this.#closeDrawer());
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
@@ -274,17 +331,14 @@
         }
       });
 
-      // Modal close
       closeModal?.addEventListener("click", () => this.#closeModal());
       cancelModalBtn?.addEventListener("click", () => this.#closeModal());
       projectModal?.addEventListener("click", (e) => {
         if (e.target === projectModal) this.#closeModal();
       });
 
-      // Modal form submit
       projectForm?.addEventListener("submit", (e) => this.#handleFormSubmit(e));
 
-      // Progress popup close
       closeProgressPopup?.addEventListener("click", () =>
         this.#closeProgressPopup(),
       );
@@ -295,7 +349,6 @@
         if (e.target === progressPopup) this.#closeProgressPopup();
       });
 
-      // Progress popup slider
       progressPopupSlider?.addEventListener("input", (e) => {
         const val = parseInt(e.target.value, 10);
         if (this.#dom.progressPopupValue)
@@ -310,25 +363,20 @@
         }
       });
 
-      // Save progress
       saveProgressBtn?.addEventListener("click", () =>
         this.#saveProgressPopup(),
       );
 
-      // Consume material
       consumeMaterialBtn?.addEventListener("click", (e) =>
         this.#consumeMaterial(e),
       );
 
-      // Add labor
       addLaborBtn?.addEventListener("click", (e) => this.#addLabor(e));
 
-      // Export
       exportBtn?.addEventListener("click", () =>
         this.#showToast("Export feature coming soon"),
       );
 
-      // Delete items via event delegation
       document.addEventListener("click", (e) => {
         const deleteBtn = e.target.closest(".btn-delete-item");
         if (deleteBtn) {
@@ -343,14 +391,17 @@
         }
       });
 
-      // Progress slider in modal
-      const sliderForm = document.getElementById("progressSliderForm");
-      const display = document.getElementById("progressDisplay");
+      // Progress slider in modal - FIXED
+      const sliderForm = this.#dom.progressSliderForm;
+      const display = this.#dom.progressDisplay;
       if (sliderForm && display) {
         sliderForm.addEventListener("input", () => {
           display.textContent = sliderForm.value;
-          sliderForm.style.background = `linear-gradient(90deg, var(--accent, #ff7b2c) ${sliderForm.value}%, rgba(255,255,255,0.08) ${sliderForm.value}%)`;
+          // Update background gradient for visual feedback
+          const percentage = parseInt(sliderForm.value, 10);
+          sliderForm.style.background = `linear-gradient(90deg, var(--accent, #ff7b2c) ${percentage}%, rgba(255,255,255,0.08) ${percentage}%)`;
         });
+        // Trigger initial display
         sliderForm.dispatchEvent(new Event("input"));
       }
     }
@@ -358,8 +409,6 @@
     // ─── Initialization ──────────────────────────────────────
     async #init() {
       await this.#loadProjects();
-      await this.#loadLaborOptions(); // load labor options once
-      // Check URL param 'open'
       const params = new URLSearchParams(window.location.search);
       const openId = params.get("open");
       if (openId) {
@@ -395,15 +444,17 @@
         grid.innerHTML = `<div class="loading-placeholder">Loading projects...</div>`;
 
       try {
-        const data = await this.#fetchJSON(`${API_BASE}/`);
-        this.#state.projects = data.data || [];
+        const response = await this.#fetchJSON(`${API_BASE}/`);
+        const items = response?.data?.items;
+        this.#state.projects = Array.isArray(items) ? items : [];
         this.#renderCards();
         this.#updateDashboard();
       } catch (err) {
-        console.error(err);
+        console.error("Load projects error:", err);
         this.#showToast("Failed to load projects", "error");
         if (grid)
           grid.innerHTML = `<div class="loading-placeholder">Error loading projects</div>`;
+        this.#state.projects = [];
       } finally {
         this.#state.isLoading = false;
       }
@@ -414,18 +465,26 @@
       const grid = this.#dom.projectCardGrid;
       if (!grid) return;
 
-      const search = this.#state.currentSearch.toLowerCase().trim();
-      const status = this.#state.currentFilter;
+      const projects = Array.isArray(this.#state.projects)
+        ? this.#state.projects
+        : [];
 
-      const filtered = this.#state.projects.filter((proj) => {
+      const search = (this.#state.currentSearch || "").toLowerCase().trim();
+      const status = (this.#state.currentFilter || "").toLowerCase();
+      const priority = (this.#state.currentPriority || "").toLowerCase();
+
+      const filtered = projects.filter((proj) => {
         const matchSearch =
           !search ||
-          proj.name.toLowerCase().includes(search) ||
-          proj.customer_name.toLowerCase().includes(search) ||
-          proj.vehicle_brand.toLowerCase().includes(search) ||
-          proj.vehicle_model.toLowerCase().includes(search);
-        const matchStatus = !status || proj.status === status;
-        return matchSearch && matchStatus;
+          (proj.name || "").toLowerCase().includes(search) ||
+          (proj.customer_name || "").toLowerCase().includes(search) ||
+          (proj.vehicle_brand || "").toLowerCase().includes(search) ||
+          (proj.vehicle_model || "").toLowerCase().includes(search);
+        const matchStatus =
+          !status || (proj.status || "").toLowerCase() === status;
+        const matchPriority =
+          !priority || (proj.priority || "").toLowerCase() === priority;
+        return matchSearch && matchStatus && matchPriority;
       });
 
       if (filtered.length === 0) {
@@ -436,16 +495,19 @@
       grid.innerHTML = filtered
         .map((proj) => {
           const progress = proj.progress || 0;
-          const isComplete = proj.status === "completed";
+          const isComplete = (proj.status || "").toLowerCase() === "completed";
+          const statusKey = (proj.status || "").toLowerCase();
+          const priorityKey = (proj.priority || "medium").toLowerCase();
           return `
                     <div class="project-card-item" data-id="${proj.id}">
                         <div class="card-header">
                             <h4>${this.#escapeHtml(proj.name)}</h4>
-                            <span class="status-badge ${proj.status}">${this.#statusLabel(proj.status)}</span>
+                            <span class="status-badge ${statusKey}">${this.#statusLabel(proj.status)}</span>
                         </div>
                         <div class="card-body">
                             <div class="customer">👤 ${this.#escapeHtml(proj.customer_name)}</div>
                             <div class="vehicle">🏍️ ${this.#escapeHtml(proj.vehicle_brand)} ${this.#escapeHtml(proj.vehicle_model)}</div>
+                            <div class="priority">🔹 ${this.#priorityLabel(proj.priority)}</div>
                         </div>
                         <div class="card-progress">
                             <div class="progress-bar"><div class="fill" style="width:${progress}%;"></div></div>
@@ -474,28 +536,41 @@
         })
         .join("");
 
-      // Attach events on dynamic buttons
+      // Attach events - FIXED untuk semua action
       grid
         .querySelectorAll('[data-action="update-progress"]')
         .forEach((btn) => {
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
-            this.#openProgressPopup(btn.dataset.id);
+            const id = btn.dataset.id;
+            if (id) {
+              console.log("🔄 Opening progress popup for project:", id);
+              this.#openProgressPopup(id);
+            }
           });
         });
+
       grid.querySelectorAll('[data-action="view-details"]').forEach((btn) => {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
-          this.#openDrawer(btn.dataset.id);
+          const id = btn.dataset.id;
+          if (id) {
+            console.log("📋 Opening drawer for project:", id);
+            this.#openDrawer(id);
+          }
         });
       });
+
       grid.querySelectorAll('[data-action="complete"]').forEach((btn) => {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
-          this.#completeProject(btn.dataset.id);
+          const id = btn.dataset.id;
+          if (id) {
+            this.#completeProject(id);
+          }
         });
       });
-      // Click card -> open progress popup
+
       grid.querySelectorAll(".project-card-item").forEach((card) => {
         card.addEventListener("click", (e) => {
           if (e.target.closest(".card-actions")) return;
@@ -507,14 +582,20 @@
 
     // ─── Dashboard ────────────────────────────────────────────
     #updateDashboard() {
-      const projects = this.#state.projects;
-      const active = projects.filter((p) => p.status !== "completed").length;
-      const inProd = projects.filter((p) =>
-        ["preparation", "painting", "assembly"].includes(p.status),
+      const projects = Array.isArray(this.#state.projects)
+        ? this.#state.projects
+        : [];
+      const active = projects.filter(
+        (p) => (p.status || "").toLowerCase() !== "completed",
       ).length;
-      const completed = projects.filter((p) => p.status === "completed").length;
+      const inProd = projects.filter((p) =>
+        ["active", "in_progress"].includes((p.status || "").toLowerCase()),
+      ).length;
+      const completed = projects.filter(
+        (p) => (p.status || "").toLowerCase() === "completed",
+      ).length;
       const revenue = projects.reduce(
-        (sum, p) => sum + (p.estimated_revenue || 0),
+        (sum, p) => sum + (parseFloat(p.estimated_revenue) || 0),
         0,
       );
 
@@ -535,15 +616,15 @@
 
       try {
         const data = await this.#fetchJSON(`${API_BASE}/${id}`);
-        const project = data.data;
-        this.#populateDrawer(project);
+        const project = data.data?.project || data.data;
+        this.#populateDrawer(project, data.data);
 
-        // Load semua data secara paralel
         await Promise.all([
           this.#loadMaterialUsageList(id),
           this.#loadLaborList(id),
           this.#loadMaterialsDropdown(),
           this.#loadLaborOptions(),
+          this.#loadActivities(id),
         ]);
       } catch (err) {
         console.error(err);
@@ -563,23 +644,38 @@
         "drawerTitle",
         "drawerCustomer",
         "drawerPhone",
+        "drawerEmail",
         "drawerStatus",
+        "drawerPriority",
         "drawerProgressFill",
         "drawerProgressText",
         "drawerBrand",
         "drawerModel",
+        "drawerYear",
         "drawerPlate",
         "drawerStartDate",
         "drawerDelivery",
+        "drawerActualDelivery",
+        "drawerCompletedAt",
         "drawerDuration",
         "drawerTimelineStatus",
         "drawerNotes",
+        "drawerEstCost",
+        "drawerActualCost",
+        "drawerEstRevenue",
+        "drawerActualRevenue",
+        "drawerDeposit",
+        "drawerDepositPaid",
+        "drawerProfit",
+        "drawerMargin",
       ];
       fields.forEach((id) => {
         const el = this.#dom[id];
         if (el) {
           if (id === "drawerStatus")
             el.innerHTML = '<span class="status-badge">-</span>';
+          else if (id === "drawerPriority")
+            el.innerHTML = '<span class="priority-badge">-</span>';
           else if (id === "drawerProgressFill") el.style.width = "0%";
           else if (id === "drawerProgressText") el.textContent = "0%";
           else if (id === "drawerTitle") el.textContent = "Loading...";
@@ -594,9 +690,12 @@
           '<p style="color:var(--text-muted);">Loading...</p>';
       if (this.#dom.timelineMilestones)
         this.#dom.timelineMilestones.innerHTML = "";
+      if (this.#dom.drawerActivities)
+        this.#dom.drawerActivities.innerHTML =
+          '<p style="color:var(--text-muted);">Loading...</p>';
     }
 
-    #populateDrawer(project) {
+    #populateDrawer(project, fullData) {
       const setText = (id, val) => {
         const el = this.#dom[id];
         if (el) el.textContent = val ?? "-";
@@ -608,26 +707,69 @@
 
       setText("drawerTitle", project.name);
       setText("drawerCustomer", project.customer_name);
-      setText("drawerPhone", project.phone_number);
+      setText("drawerPhone", project.customer_phone || "-");
+      setText("drawerEmail", project.customer_email || "-");
+      const statusKey = (project.status || "").toLowerCase();
       setHTML(
         "drawerStatus",
-        `<span class="status-badge ${project.status || ""}">${this.#statusLabel(project.status)}</span>`,
+        `<span class="status-badge ${statusKey}">${this.#statusLabel(project.status)}</span>`,
+      );
+      const priorityKey = (project.priority || "medium").toLowerCase();
+      setHTML(
+        "drawerPriority",
+        `<span class="priority-badge ${priorityKey}">${this.#priorityLabel(project.priority)}</span>`,
       );
 
       const progress = project.progress || 0;
       const fill = this.#dom.drawerProgressFill;
       if (fill) fill.style.width = progress + "%";
       setText("drawerProgressText", progress + "%");
-      setText("drawerBrand", project.vehicle_brand);
-      setText("drawerModel", project.vehicle_model);
-      setText("drawerPlate", project.license_plate);
+      setText("drawerBrand", project.vehicle_brand || "-");
+      setText("drawerModel", project.vehicle_model || "-");
+      setText("drawerYear", project.vehicle_year || "-");
+      setText("drawerPlate", project.vehicle_license_plate || "-");
 
-      // Timeline
-      const startDate = project.start_date
-        ? new Date(project.start_date)
+      const financial = fullData?.financial_summary || {};
+      setText(
+        "drawerEstCost",
+        this.#formatCurrency(project.estimated_cost || 0),
+      );
+      setText(
+        "drawerActualCost",
+        this.#formatCurrency(financial.actual_cost || project.actual_cost || 0),
+      );
+      setText(
+        "drawerEstRevenue",
+        this.#formatCurrency(project.estimated_revenue || 0),
+      );
+      setText(
+        "drawerActualRevenue",
+        this.#formatCurrency(
+          financial.actual_revenue || project.actual_revenue || 0,
+        ),
+      );
+      setText(
+        "drawerDeposit",
+        this.#formatCurrency(project.deposit_amount || 0),
+      );
+      setText(
+        "drawerDepositPaid",
+        project.deposit_paid ? "✅ Paid" : "❌ Not Paid",
+      );
+      setText("drawerProfit", this.#formatCurrency(financial.profit || 0));
+      setText("drawerMargin", (financial.margin || 0) + "%");
+
+      const startDate = project.project_start_date
+        ? new Date(project.project_start_date)
         : null;
-      const targetDate = project.target_delivery
-        ? new Date(project.target_delivery)
+      const targetDate = project.project_target_delivery
+        ? new Date(project.project_target_delivery)
+        : null;
+      const actualDate = project.actual_delivery_date
+        ? new Date(project.actual_delivery_date)
+        : null;
+      const completedDate = project.completed_at
+        ? new Date(project.completed_at)
         : null;
       const now = new Date();
 
@@ -638,6 +780,14 @@
       setText(
         "drawerDelivery",
         targetDate ? targetDate.toLocaleDateString() : "-",
+      );
+      setText(
+        "drawerActualDelivery",
+        actualDate ? actualDate.toLocaleDateString() : "-",
+      );
+      setText(
+        "drawerCompletedAt",
+        completedDate ? completedDate.toLocaleDateString() : "-",
       );
 
       let durationText = "-";
@@ -650,12 +800,17 @@
         const daysRemaining = Math.ceil(
           (targetDate - now) / (1000 * 60 * 60 * 24),
         );
-        if (now > targetDate)
+        if ((project.status || "").toLowerCase() === "completed") {
+          timelineStatusText = "✅ Completed";
+        } else if (now > targetDate) {
           timelineStatusText = `⚠️ Overdue by ${Math.abs(daysRemaining)} days`;
-        else if (daysRemaining <= 0) timelineStatusText = "🎯 Due today!";
-        else if (daysRemaining <= 3)
+        } else if (daysRemaining <= 0) {
+          timelineStatusText = "🎯 Due today!";
+        } else if (daysRemaining <= 3) {
           timelineStatusText = `⏰ ${daysRemaining} days remaining (urgent)`;
-        else timelineStatusText = `✅ ${daysRemaining} days remaining`;
+        } else {
+          timelineStatusText = `✅ ${daysRemaining} days remaining`;
+        }
       } else if (startDate && !targetDate) {
         const daysPassed = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
         durationText = "No target set";
@@ -666,12 +821,10 @@
       setText("drawerDuration", durationText);
       setText("drawerTimelineStatus", timelineStatusText);
 
-      // Notes
-      setText("drawerNotes", project.notes);
+      setText("drawerNotes", project.notes || "-");
       if (this.#dom.timelineNote)
         this.#dom.timelineNote.textContent = project.notes || "-";
 
-      // Milestones
       this.#updateTimelineMilestones(progress);
     }
 
@@ -694,20 +847,121 @@
       container.innerHTML = html;
     }
 
-    // ─── Material Usage ──────────────────────────────────────
+    // ─── Activities ───────────────────────────────────────────
+    async #loadActivities(projectId) {
+      const container = this.#dom.drawerActivities;
+      if (!container) return;
+      try {
+        const data = await this.#fetchJSON(
+          `${API_BASE}/${projectId}/activities`,
+        );
+        const items = data.data || [];
+        if (items.length === 0) {
+          container.innerHTML =
+            '<p style="color:var(--text-muted);">No activities recorded.</p>';
+          return;
+        }
+        container.innerHTML = items
+          .map(
+            (act) => `
+                    <div style="padding: 6px 0; border-bottom: 1px solid var(--border-color, #2d2d44);">
+                        <div style="font-weight: 500;">${this.#escapeHtml(act.activity)}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted, #94a3b8);">
+                            ${act.performed_by || "system"} • ${new Date(act.created_at).toLocaleString()}
+                            ${act.activity_type ? `<span style="background: rgba(255,255,255,0.05); padding: 0 6px; border-radius: 4px;">${act.activity_type}</span>` : ""}
+                        </div>
+                    </div>
+                `,
+          )
+          .join("");
+      } catch (err) {
+        container.innerHTML =
+          '<p style="color:var(--text-muted);">No activities recorded.</p>';
+      }
+    }
+
+    // ─── Load Materials ──────────────────────────────────────
     async #loadMaterialsDropdown() {
       try {
-        const data = await this.#fetchJSON("/api/inventory/");
+        const data = await this.#fetchJSON(`${INVENTORY_API}/`);
         const select = this.#dom.materialSelect;
-        if (!select) return;
+        const unitSelect = this.#dom.materialUnit; // 🔥 Sekarang tidak undefined
+
+        if (!select) {
+          console.warn("materialSelect not found");
+          return;
+        }
+
+        const items = data.data?.items || data.data || [];
+        this.#state.materialOptions = items;
         select.innerHTML = '<option value="">Select Material</option>';
-        if (data.data) {
-          data.data.forEach((item) => {
-            const opt = document.createElement("option");
-            opt.value = item.id;
-            opt.textContent = `${item.name} (${item.current_stock} ${item.unit})`;
-            select.appendChild(opt);
+
+        items.forEach((item) => {
+          const opt = document.createElement("option");
+          opt.value = item.id;
+
+          const stock = parseFloat(item.current_stock) || 0;
+          const unitDisplay = item.unit || "pcs";
+
+          let stockDisplay;
+          if (unitDisplay === "ml" || unitDisplay === "liter") {
+            stockDisplay = stock.toFixed(2);
+          } else if (unitDisplay === "gram" || unitDisplay === "kg") {
+            stockDisplay = stock.toFixed(2);
+          } else {
+            stockDisplay = Math.floor(stock);
+          }
+
+          opt.textContent = `${item.name} (${stockDisplay} ${unitDisplay})`;
+          opt.dataset.unit = unitDisplay;
+          opt.dataset.baseUnit = item.base_unit || unitDisplay;
+          opt.dataset.conversionFactor = item.conversion_factor || 1;
+          opt.dataset.stock = stock;
+          opt.disabled = stock <= 0;
+          select.appendChild(opt);
+        });
+
+        // 🔥 Set default unit berdasarkan material yang dipilih
+        if (unitSelect) {
+          const firstOption = select.options[1];
+          if (firstOption) {
+            const unit = firstOption.dataset?.unit || "pcs";
+            if (unit === "liter" || unit === "kg") {
+              unitSelect.value = unit === "liter" ? "ml" : "gram";
+            } else {
+              unitSelect.value = unit;
+            }
+          }
+
+          // Event listener untuk change material
+          select.addEventListener("change", () => {
+            const selected = select.options[select.selectedIndex];
+            const unit = selected?.dataset?.unit || "pcs";
+            if (unitSelect) {
+              if (unit === "liter") {
+                unitSelect.value = "ml";
+              } else if (unit === "kg") {
+                unitSelect.value = "gram";
+              } else {
+                unitSelect.value = unit;
+              }
+            }
+            // Update placeholder
+            const qtyInput = this.#dom.materialQty;
+            if (qtyInput) {
+              const displayUnit = unitSelect?.value || unit;
+              qtyInput.placeholder = `Qty (${displayUnit})`;
+              qtyInput.step =
+                displayUnit === "ml" || displayUnit === "gram" ? "1" : "0.1";
+              qtyInput.min =
+                displayUnit === "ml" || displayUnit === "gram" ? "1" : "0.01";
+            }
           });
+
+          // Trigger initial change
+          if (select.options.length > 1) {
+            select.dispatchEvent(new Event("change"));
+          }
         }
       } catch (err) {
         console.warn("Failed to load materials dropdown:", err);
@@ -719,7 +973,7 @@
       if (!container) return;
       try {
         const data = await this.#fetchJSON(
-          `/api/inventory/usage/project/${projectId}`,
+          `${INVENTORY_API}/usage/project/${projectId}`,
         );
         const items = data.data || [];
         if (items.length === 0) {
@@ -728,16 +982,30 @@
           return;
         }
         container.innerHTML = items
-          .map(
-            (item) => `
-                    <div>
-                        <span>${this.#escapeHtml(item.item_name || "Unknown")}</span>
-                        <span>${item.quantity} ${this.#escapeHtml(item.unit || "")}</span>
-                        <span>${this.#formatCurrency(item.total_cost || item.quantity * item.cost_price)}</span>
-                        <button class="btn-delete-item" data-type="material" data-id="${item.id}" data-project="${projectId}" title="Hapus pemakaian material ini">×</button>
-                    </div>
-                `,
-          )
+          .map((item) => {
+            // 🔥 FIX: Parse quantity ke number
+            const qty = parseFloat(item.quantity) || 0;
+            const unit = item.unit || "pcs";
+
+            // 🔥 FIX: Format quantity dengan presisi yang sesuai
+            let displayQty;
+            if (unit === "ml" || unit === "liter") {
+              displayQty = qty.toFixed(2);
+            } else if (unit === "gram" || unit === "kg") {
+              displayQty = qty.toFixed(2);
+            } else {
+              displayQty = qty % 1 === 0 ? Math.floor(qty) : qty.toFixed(2);
+            }
+
+            return `
+          <div>
+            <span>${this.#escapeHtml(item.item_name || "Unknown")}</span>
+            <span>${displayQty} ${unit}</span>
+            <span>${this.#formatCurrency(item.total_cost || 0)}</span>
+            <button class="btn-delete-item" data-type="material" data-id="${item.usage_id || item.id}" data-project="${projectId}" title="Hapus pemakaian material ini">×</button>
+          </div>
+        `;
+          })
           .join("");
       } catch (err) {
         container.innerHTML =
@@ -745,38 +1013,123 @@
       }
     }
 
+    // ─── Consume Material ──────────────────────────────────────
     async #consumeMaterial(e) {
       e.preventDefault();
       const projectId = this.#state.currentProjectId;
       if (!projectId) return this.#showToast("No project selected", "error");
+
       const select = this.#dom.materialSelect;
       const qtyInput = this.#dom.materialQty;
-      if (!select || !qtyInput)
+      const unitSelect = this.#dom.materialUnit; // 🔥 Sekarang tidak undefined
+
+      if (!select || !qtyInput) {
         return this.#showToast("Material form not ready", "error");
+      }
 
       const itemId = select.value;
-      const qty = parseInt(qtyInput.value, 10);
+      const selectedOption = select.options[select.selectedIndex];
+      const itemUnit = selectedOption?.dataset?.unit || "pcs";
+
+      // 🔥 Ambil unit yang dipilih user, fallback ke 'ml'
+      const selectedUnit = unitSelect?.value || "ml";
+      const qty = parseFloat(qtyInput.value);
+
       if (!itemId) return this.#showToast("Select a material", "error");
-      if (!qty || qty < 1)
+      if (!qty || qty <= 0) {
         return this.#showToast("Enter valid quantity", "error");
+      }
+
+      // 🔥 DEBUG: Log untuk debugging
+      console.log("🔍 Consuming material:", {
+        itemId,
+        qty,
+        selectedUnit,
+        itemUnit,
+        unitSelectValue: unitSelect?.value,
+      });
+
+      // 🔥 Validasi untuk unit ml
+      if (selectedUnit === "ml" && qty > 1000) {
+        if (
+          !confirm(
+            `Anda memasukkan ${qty} ml (${(qty / 1000).toFixed(2)} liter). Apakah Anda yakin?`,
+          )
+        ) {
+          return;
+        }
+      }
+
+      const selectedItem = this.#state.materialOptions.find(
+        (i) => i.id === itemId,
+      );
+
+      // 🔥 Konversi ke unit item
+      let qtyInItemUnit = qty;
+      let conversionNote = "";
+
+      if (selectedUnit === "ml" && itemUnit === "liter") {
+        qtyInItemUnit = qty / 1000;
+        conversionNote = ` (${qty} ml = ${qtyInItemUnit.toFixed(3)} liter)`;
+      } else if (selectedUnit === "liter" && itemUnit === "ml") {
+        qtyInItemUnit = qty * 1000;
+        conversionNote = ` (${qty} liter = ${qtyInItemUnit} ml)`;
+      } else if (selectedUnit === "gram" && itemUnit === "kg") {
+        qtyInItemUnit = qty / 1000;
+        conversionNote = ` (${qty} gram = ${qtyInItemUnit.toFixed(3)} kg)`;
+      } else if (selectedUnit === "kg" && itemUnit === "gram") {
+        qtyInItemUnit = qty * 1000;
+        conversionNote = ` (${qty} kg = ${qtyInItemUnit} gram)`;
+      } else if (selectedUnit !== itemUnit) {
+        this.#showToast(
+          `Unit '${selectedUnit}' tidak kompatibel dengan item unit '${itemUnit}'`,
+          "error",
+        );
+        return;
+      }
+
+      console.log(
+        `🔍 Converted: ${qty} ${selectedUnit} -> ${qtyInItemUnit} ${itemUnit}${conversionNote}`,
+      );
+
+      // 🔥 Cek stock
+      const currentStock = parseFloat(selectedItem?.current_stock) || 0;
+
+      if (selectedItem && currentStock < qtyInItemUnit) {
+        const stockDisplay =
+          currentStock < 1 ? currentStock.toFixed(3) : Math.floor(currentStock);
+        return this.#showToast(
+          `Stok tidak mencukupi. Tersedia: ${stockDisplay} ${itemUnit}${conversionNote}`,
+          "error",
+        );
+      }
 
       try {
-        await this.#fetchJSON("/api/inventory/usage", {
-          method: "POST",
-          body: JSON.stringify({
-            project_id: projectId,
-            item_id: itemId,
-            quantity: qty,
-          }),
-        });
-        this.#showToast("Material consumed ✅");
+        const payload = {
+          project_id: projectId,
+          item_id: itemId,
+          quantity: qty,
+          unit: selectedUnit,
+          note: conversionNote ? `Konversi: ${conversionNote}` : undefined,
+        };
 
-        // Refresh dropdown & history tanpa menutup drawer
+        console.log("📤 Sending payload:", payload);
+
+        await this.#fetchJSON(`${INVENTORY_API}/usage`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        const qtyDisplay = qty < 1 ? qty.toFixed(2) : Math.floor(qty);
+        this.#showToast(
+          `Material consumed ✅ (${qtyDisplay} ${selectedUnit})${conversionNote}`,
+        );
+
         await this.#loadMaterialsDropdown();
         await this.#loadMaterialUsageList(projectId);
-        // Reset input
         qtyInput.value = "";
       } catch (err) {
+        console.error("❌ Consume material error:", err);
         this.#showToast(err.message || "Failed to consume material", "error");
       }
     }
@@ -784,64 +1137,55 @@
     async #deleteMaterial(usageId, projectId) {
       if (!confirm("Hapus pemakaian material ini?")) return;
       try {
-        await this.#fetchJSON(`/api/inventory/usage/${usageId}`, {
+        await this.#fetchJSON(`${INVENTORY_API}/usage/${usageId}`, {
           method: "DELETE",
         });
         this.#showToast("Material usage deleted");
-        this.#openDrawer(projectId);
+        await this.#loadMaterialUsageList(projectId);
+        await this.#loadMaterialsDropdown();
       } catch (err) {
         this.#showToast(err.message || "Gagal hapus material", "error");
       }
     }
 
     // ─── Labor ────────────────────────────────────────────────
-    // ─── Labor ────────────────────────────────────────────────
     async #loadLaborOptions() {
       try {
         const select = this.#dom.laborTypeSelect;
-        if (!select) {
-          console.warn("laborTypeSelect not found");
-          return;
-        }
+        if (!select) return;
 
-        // Coba ambil dari API dengan filter category=labor
-        let url = "/api/price-list/?category=labor&active_only=true";
+        let url = `${PRICE_LIST_API}/?category=labor&active_only=true&limit=100`;
         let res = await fetch(url);
         let data = await res.json();
 
-        // Jika tidak ada data, fallback ke semua price list
         if (!data.data || data.data.length === 0) {
-          res = await fetch("/api/price-list/?active_only=true");
+          res = await fetch(`${PRICE_LIST_API}/?active_only=true&limit=100`);
           data = await res.json();
         }
 
+        const items = data.data || [];
+        this.#state.laborOptions = items;
+
         select.innerHTML = '<option value="">Pilih Labor</option>';
 
-        if (data.data && data.data.length > 0) {
-          // Filter manual: cari yang category-nya 'labor' atau nama mengandung 'labor'
-          const laborItems = data.data.filter(
-            (item) =>
-              item.category?.toLowerCase() === "labor" ||
-              item.name?.toLowerCase().includes("labor"),
-          );
+        const laborItems = items.filter(
+          (item) =>
+            item.category?.toLowerCase() === "labor" ||
+            item.name?.toLowerCase().includes("labor"),
+        );
 
-          // Gunakan hasil filter, atau semua item jika tidak ada yang cocok
-          const items = laborItems.length > 0 ? laborItems : data.data;
+        const displayItems = laborItems.length > 0 ? laborItems : items;
 
-          items.forEach((item) => {
-            const opt = document.createElement("option");
-            opt.value = item.name || item.id;
-            const price = parseFloat(item.price) || 0;
-            const unit = item.unit || "jam";
-            opt.textContent = `${item.name} (${this.#formatCurrency(price)} / ${unit})`;
-            select.appendChild(opt);
-          });
+        displayItems.forEach((item) => {
+          const opt = document.createElement("option");
+          opt.value = item.name || item.id;
+          const price = parseFloat(item.price) || 0;
+          const unit = item.unit || "jam";
+          opt.textContent = `${item.name} (${this.#formatCurrency(price)} / ${unit})`;
+          select.appendChild(opt);
+        });
 
-          // Jika items kosong, beri tahu user
-          if (items.length === 0) {
-            select.innerHTML = '<option value="">Tidak ada data labor</option>';
-          }
-        } else {
+        if (displayItems.length === 0) {
           select.innerHTML = '<option value="">Tidak ada data labor</option>';
         }
       } catch (err) {
@@ -857,7 +1201,7 @@
       const container = this.#dom.laborList;
       if (!container) return;
       try {
-        const data = await this.#fetchJSON(`/api/projects/${projectId}/labor`);
+        const data = await this.#fetchJSON(`${API_BASE}/${projectId}/labor`);
         const items = data.data || [];
         if (items.length === 0) {
           container.innerHTML =
@@ -888,8 +1232,12 @@
       if (!projectId) return this.#showToast("No project selected", "error");
       const select = this.#dom.laborTypeSelect;
       const hoursInput = this.#dom.laborHours;
+      const rateInput = this.#dom.laborRate;
+
       const laborType = select?.value;
       const hours = parseFloat(hoursInput?.value);
+      const rate = rateInput?.value ? parseFloat(rateInput.value) : null;
+
       if (!laborType) return this.#showToast("Pilih jenis labor", "error");
       if (!hours || hours < 0.5)
         return this.#showToast(
@@ -897,14 +1245,18 @@
           "error",
         );
 
+      const payload = { labor_type: laborType, hours };
+      if (rate && rate > 0) payload.rate_per_hour = rate;
+
       try {
-        await this.#fetchJSON(`/api/projects/${projectId}/labor`, {
+        await this.#fetchJSON(`${API_BASE}/${projectId}/labor`, {
           method: "POST",
-          body: JSON.stringify({ labor_type: laborType, hours }),
+          body: JSON.stringify(payload),
         });
         this.#showToast("Labor added ✅");
         await this.#loadLaborList(projectId);
         hoursInput.value = "";
+        if (rateInput) rateInput.value = "";
       } catch (err) {
         this.#showToast(err.message || "Gagal menambah labor", "error");
       }
@@ -913,11 +1265,11 @@
     async #deleteLabor(laborId, projectId) {
       if (!confirm("Hapus data labor ini?")) return;
       try {
-        await this.#fetchJSON(`/api/projects/${projectId}/labor/${laborId}`, {
+        await this.#fetchJSON(`${API_BASE}/${projectId}/labor/${laborId}`, {
           method: "DELETE",
         });
         this.#showToast("Labor deleted");
-        this.#openDrawer(projectId);
+        await this.#loadLaborList(projectId);
       } catch (err) {
         this.#showToast(err.message || "Gagal hapus labor", "error");
       }
@@ -927,10 +1279,18 @@
     #openProgressPopup(id) {
       const popup = this.#dom.progressPopup;
       if (!popup) return;
-      const proj = this.#state.projects.find((p) => p.id === id);
-      if (!proj) return;
 
-      // Set title
+      const projects = Array.isArray(this.#state.projects)
+        ? this.#state.projects
+        : [];
+      const proj = projects.find((p) => p.id === id);
+      if (!proj) {
+        this.#showToast("Project not found", "error");
+        return;
+      }
+
+      console.log("📊 Opening progress popup for:", proj.name);
+
       if (this.#dom.progressPopupTitle)
         this.#dom.progressPopupTitle.textContent = `Update Progress: ${proj.name}`;
       if (this.#dom.progressPopupSubtitle) {
@@ -944,7 +1304,11 @@
       const markComplete = this.#dom.markCompleteCheckbox;
 
       const progress = proj.progress || 0;
-      if (slider) slider.value = progress;
+      if (slider) {
+        slider.value = progress;
+        // Update background gradient
+        slider.style.background = `linear-gradient(90deg, var(--accent, #ff7b2c) ${progress}%, rgba(255,255,255,0.08) ${progress}%)`;
+      }
       if (valueDisplay) valueDisplay.textContent = progress;
       if (note) note.value = proj.notes || "";
 
@@ -958,10 +1322,8 @@
           )
           .join("");
       }
-      this.#updateMilestoneHighlights(progress);
 
-      // Mark complete checkbox
-      const isCompleted = proj.status === "completed";
+      const isCompleted = (proj.status || "").toLowerCase() === "completed";
       if (markComplete) {
         if (isCompleted) {
           markComplete.style.display = "flex";
@@ -978,7 +1340,6 @@
         }
       }
 
-      // Store current project id for save
       this.#state.currentProjectId = id;
       popup.classList.add("active");
       document.body.style.overflow = "hidden";
@@ -1024,15 +1385,21 @@
         { key: "delivery", label: "Ready for Delivery" },
       ];
       const statusMap = {
-        new: ["inquiry"],
-        quoted: ["inquiry"],
-        approved: ["inquiry"],
+        draft: ["inquiry"],
+        active: ["inquiry"],
+        in_progress: ["inquiry", "parts"],
+        on_hold: ["inquiry", "parts"],
+        completed: allStages.map((s) => s.key),
+        cancelled: [],
         preparation: ["inquiry", "parts"],
         painting: ["inquiry", "parts", "disassembly", "paint_prep"],
         assembly: ["inquiry", "parts", "disassembly", "paint_prep", "painting"],
-        completed: allStages.map((s) => s.key),
+        new: ["inquiry"],
+        quoted: ["inquiry"],
+        approved: ["inquiry"],
       };
-      const completedKeys = statusMap[status] || ["inquiry"];
+      const statusLower = (status || "").toLowerCase();
+      const completedKeys = statusMap[statusLower] || ["inquiry"];
       return allStages.map((stage, idx) => {
         const isDone = completedKeys.includes(stage.key);
         const isActive = !isDone && completedKeys.length === idx;
@@ -1043,33 +1410,71 @@
       });
     }
 
+    // ─── Save Progress ──────────────────────────────────────
     async #saveProgressPopup() {
       const projectId = this.#state.currentProjectId;
-      if (!projectId) return;
+      if (!projectId) {
+        this.#showToast("No project selected", "error");
+        return;
+      }
+
       const progress = parseInt(this.#dom.progressPopupSlider?.value || 0, 10);
       const note = this.#dom.progressPopupNote?.value.trim() || "";
       const markComplete = this.#dom.markCompleteCheckbox?.checked || false;
 
+      console.log("💾 Saving progress:", {
+        projectId,
+        progress,
+        note,
+        markComplete,
+      });
+
       const payload = { progress };
       if (note) payload.notes = note;
-      if (markComplete && progress === 100) payload.status = "completed";
+      if (markComplete && progress === 100) {
+        payload.status = "completed";
+        payload.completed_at = new Date().toISOString();
+      }
+
+      const submitBtn = this.#dom.saveProgressBtn;
+      const originalText = submitBtn?.textContent || "Save";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Saving...";
+      }
 
       try {
-        await this.#fetchJSON(`${API_BASE}/${projectId}`, {
+        const response = await this.#fetchJSON(`${API_BASE}/${projectId}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
         });
-        this.#showToast("Progress updated successfully");
-        this.#closeProgressPopup();
-        this.#loadProjects();
-        if (
-          this.#dom.projectDrawer?.classList.contains("active") &&
-          this.#state.currentProjectId === projectId
-        ) {
-          this.#openDrawer(projectId);
+
+        if (response?.success !== false) {
+          this.#showToast("✅ Progress updated successfully!");
+          this.#closeProgressPopup();
+          await this.#loadProjects();
+
+          // Refresh drawer if open
+          if (
+            this.#dom.projectDrawer?.classList.contains("active") &&
+            this.#state.currentProjectId === projectId
+          ) {
+            await this.#openDrawer(projectId);
+          }
+        } else {
+          throw new Error(response?.message || "Failed to update progress");
         }
       } catch (err) {
-        this.#showToast("Failed to update progress", "error");
+        console.error("Save progress error:", err);
+        this.#showToast(
+          `❌ ${err.message || "Failed to update progress"}`,
+          "error",
+        );
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     }
 
@@ -1084,7 +1489,7 @@
       try {
         await this.#fetchJSON(`${API_BASE}/${id}/complete`, { method: "POST" });
         this.#showToast("🎉 Project completed successfully!");
-        this.#loadProjects();
+        await this.#loadProjects();
       } catch (err) {
         this.#showToast(err.message || "Failed to complete project", "error");
       }
@@ -1100,22 +1505,22 @@
         this.#dom.modalSubtitle.textContent = "Update project details";
         this.#dom.submitProjectBtn.textContent = "Update Project";
         this.#dom.editProjectId.value = editData.id;
-        // Populate fields
         const fieldMap = {
           projectName: "name",
           customerName: "customer_name",
-          phoneNumber: "phone_number",
+          customerPhone: "customer_phone",
+          customerEmail: "customer_email",
           projectStatus: "status",
+          projectPriority: "priority",
           progressSliderForm: "progress",
           vehicleBrand: "vehicle_brand",
           vehicleModel: "vehicle_model",
-          licensePlate: "license_plate",
+          vehicleYear: "vehicle_year",
+          licensePlate: "vehicle_license_plate",
           estimatedCost: "estimated_cost",
           estimatedRevenue: "estimated_revenue",
-          actualCost: "actual_cost",
-          actualRevenue: "actual_revenue",
-          startDate: "start_date",
-          targetDelivery: "target_delivery",
+          startDate: "project_start_date",
+          targetDelivery: "project_target_delivery",
           projectNotes: "notes",
         };
         Object.keys(fieldMap).forEach((elId) => {
@@ -1125,11 +1530,11 @@
             el.value = editData[key];
           }
         });
-        // Trigger progress display
         const slider = document.getElementById("progressSliderForm");
         const display = document.getElementById("progressDisplay");
         if (slider && display) {
           display.textContent = slider.value;
+          slider.style.background = `linear-gradient(90deg, var(--accent, #ff7b2c) ${slider.value}%, rgba(255,255,255,0.08) ${slider.value}%)`;
         }
       } else {
         this.#dom.modalTitle.textContent = "Create New Project";
@@ -1140,7 +1545,10 @@
         this.#dom.editProjectId.value = "";
         const display = document.getElementById("progressDisplay");
         const slider = document.getElementById("progressSliderForm");
-        if (slider) slider.value = 0;
+        if (slider) {
+          slider.value = 0;
+          slider.style.background = `linear-gradient(90deg, var(--accent, #ff7b2c) 0%, rgba(255,255,255,0.08) 0%)`;
+        }
         if (display) display.textContent = "0";
       }
       modal.classList.add("active");
@@ -1163,19 +1571,20 @@
       const payload = {
         name: getVal("projectName").trim(),
         customer_name: getVal("customerName").trim(),
-        phone_number: getVal("phoneNumber").trim(),
+        customer_phone: getVal("customerPhone").trim() || null,
+        customer_email: getVal("customerEmail").trim() || null,
         status: getVal("projectStatus"),
+        priority: getVal("projectPriority") || "medium",
         progress: parseInt(getVal("progressSliderForm"), 10) || 0,
         vehicle_brand: getVal("vehicleBrand").trim(),
         vehicle_model: getVal("vehicleModel").trim(),
-        license_plate: getVal("licensePlate").trim(),
+        vehicle_year: parseInt(getVal("vehicleYear")) || null,
+        vehicle_license_plate: getVal("licensePlate").trim() || null,
         estimated_cost: parseFloat(getVal("estimatedCost")) || 0,
         estimated_revenue: parseFloat(getVal("estimatedRevenue")) || 0,
-        actual_cost: parseFloat(getVal("actualCost")) || 0,
-        actual_revenue: parseFloat(getVal("actualRevenue")) || 0,
-        start_date: getVal("startDate") || null,
-        target_delivery: getVal("targetDelivery") || null,
-        notes: getVal("projectNotes").trim(),
+        project_start_date: getVal("startDate") || null,
+        project_target_delivery: getVal("targetDelivery") || null,
+        notes: getVal("projectNotes").trim() || null,
       };
 
       try {
@@ -1188,7 +1597,7 @@
         await this.#fetchJSON(url, { method, body: JSON.stringify(payload) });
         this.#showToast(editId ? "Project updated" : "Project created");
         this.#closeModal();
-        this.#loadProjects();
+        await this.#loadProjects();
       } catch (err) {
         this.#showToast(
           err.message || (editId ? "Update failed" : "Create failed"),
@@ -1201,6 +1610,7 @@
 
     // ─── Helpers ──────────────────────────────────────────────
     #formatCurrency(amount) {
+      if (amount === undefined || amount === null) return "Rp 0";
       return new Intl.NumberFormat("id-ID", {
         style: "currency",
         currency: "IDR",
@@ -1219,7 +1629,13 @@
     }
 
     #statusLabel(status) {
-      return STATUS_LABELS[status] || status;
+      const key = (status || "").toLowerCase();
+      return STATUS_LABELS[key] || status || "-";
+    }
+
+    #priorityLabel(priority) {
+      const key = (priority || "").toLowerCase();
+      return PRIORITY_LABELS[key] || priority || "Medium";
     }
 
     #setText(id, value) {

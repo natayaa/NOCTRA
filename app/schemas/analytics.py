@@ -5,21 +5,30 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
+
 # -----------------------------------------------------------------------------
 # KPI Response
 # -----------------------------------------------------------------------------
 
 class KPITrend(BaseModel):
-    value: Decimal | float | int
+    value: float = Field(..., description="Nilai KPI saat ini")
     trend_percent: Optional[float] = Field(None, description="Persentase perubahan vs periode sebelumnya")
 
+    @classmethod
+    def from_decimal(cls, value: Decimal, trend: Optional[Decimal] = None):
+        return cls(
+            value=float(value),
+            trend_percent=float(trend) if trend is not None else None
+        )
+
+
 class KPIsResponse(BaseModel):
-    total_revenue: KPITrend | Decimal
-    net_profit: KPITrend | Decimal
-    conversion_rate: KPITrend | float
-    completed_projects: KPITrend | int
-    low_stock_items: Optional[int] = 0
-    active_projects: Optional[int] = 0
+    total_revenue: KPITrend = Field(..., description="Total pendapatan")
+    net_profit: KPITrend = Field(..., description="Laba bersih")
+    conversion_rate: KPITrend = Field(..., description="Rate konversi inquiry ke project")
+    completed_projects: KPITrend = Field(..., description="Jumlah project selesai")
+    low_stock_items: int = Field(0, description="Jumlah item dengan stok rendah")
+    active_projects: int = Field(0, description="Jumlah project aktif")
     period: str = Field(..., description="Periode yang digunakan (today, week, month, quarter, year)")
 
 
@@ -28,13 +37,14 @@ class KPIsResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 class RevenueProfitDataPoint(BaseModel):
-    label: str
-    revenue: float
-    profit: float
+    label: str = Field(..., description="Label untuk sumbu X (tanggal/minggu/bulan)")
+    revenue: float = Field(..., description="Pendapatan")
+    profit: float = Field(..., description="Laba")
+
 
 class RevenueProfitResponse(BaseModel):
-    period: str
-    data: List[RevenueProfitDataPoint]
+    period: str = Field(..., description="Periode yang digunakan")
+    data: List[RevenueProfitDataPoint] = Field(default_factory=list, description="Data chart")
 
 
 # -----------------------------------------------------------------------------
@@ -42,13 +52,14 @@ class RevenueProfitResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 class ConversionDataPoint(BaseModel):
-    label: str
-    inquiries: int
-    conversions: int
+    label: str = Field(..., description="Label untuk sumbu X")
+    inquiries: int = Field(..., description="Jumlah inquiry")
+    conversions: int = Field(..., description="Jumlah konversi")
+
 
 class ConversionResponse(BaseModel):
-    period: str
-    data: List[ConversionDataPoint]
+    period: str = Field(..., description="Periode yang digunakan")
+    data: List[ConversionDataPoint] = Field(default_factory=list, description="Data chart")
 
 
 # -----------------------------------------------------------------------------
@@ -56,12 +67,13 @@ class ConversionResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 class ServiceBreakdownItem(BaseModel):
-    name: str
-    value: float  # percentage
-    color: Optional[str] = None  # hex color
+    name: str = Field(..., description="Nama service")
+    value: float = Field(..., description="Persentase")
+    color: Optional[str] = Field(None, description="Warna hex")
+
 
 class ServiceBreakdownResponse(BaseModel):
-    items: List[ServiceBreakdownItem]
+    items: List[ServiceBreakdownItem] = Field(default_factory=list, description="Data pie chart")
 
 
 # -----------------------------------------------------------------------------
@@ -69,12 +81,13 @@ class ServiceBreakdownResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 class MaterialConsumptionItem(BaseModel):
-    name: str
-    value: float  # percentage
-    color: Optional[str] = None
+    name: str = Field(..., description="Nama material")
+    value: float = Field(..., description="Persentase")
+    color: Optional[str] = Field(None, description="Warna hex")
+
 
 class MaterialConsumptionResponse(BaseModel):
-    items: List[MaterialConsumptionItem]
+    items: List[MaterialConsumptionItem] = Field(default_factory=list, description="Data pie chart")
 
 
 # -----------------------------------------------------------------------------
@@ -82,13 +95,14 @@ class MaterialConsumptionResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 class TopServiceItem(BaseModel):
-    name: str
-    projects: int
-    revenue: Decimal
-    trend: Optional[float] = None  # % growth compared to previous period
+    name: str = Field(..., description="Nama service")
+    projects: int = Field(..., description="Jumlah project")
+    revenue: Decimal = Field(..., description="Total pendapatan")
+    trend: Optional[float] = Field(None, description="Persentase pertumbuhan")
+
 
 class TopServicesResponse(BaseModel):
-    items: List[TopServiceItem]
+    items: List[TopServiceItem] = Field(default_factory=list, description="Data top services")
 
 
 # -----------------------------------------------------------------------------
@@ -96,13 +110,15 @@ class TopServicesResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 class OperationalKPIItem(BaseModel):
-    label: str
-    value: str | float | int
+    label: str = Field(..., description="Label KPI")
+    value: str = Field(..., description="Nilai KPI dalam format string")
     progress: Optional[int] = Field(None, description="Persentase untuk progress bar (0-100)")
     color: Optional[str] = Field(None, description="success, warning, danger, atau custom")
+    status: Optional[str] = Field(None, description="Status untuk indikator")
+
 
 class OperationalKPIsResponse(BaseModel):
-    items: List[OperationalKPIItem]
+    items: List[OperationalKPIItem] = Field(default_factory=list, description="Data operational KPIs")
 
 
 # -----------------------------------------------------------------------------
@@ -110,13 +126,14 @@ class OperationalKPIsResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 class InsightItem(BaseModel):
-    icon: str  # FontAwesome class
-    message: str
+    icon: str = Field(..., description="FontAwesome class")
+    message: str = Field(..., description="Pesan insight")
     type: str = Field(..., description="positive, warning, neutral")
-    link: Optional[str] = None
+    link: Optional[str] = Field(None, description="Link untuk tindakan")
+
 
 class InsightsResponse(BaseModel):
-    items: List[InsightItem]
+    items: List[InsightItem] = Field(default_factory=list, description="Data insights")
 
 
 # -----------------------------------------------------------------------------
@@ -124,12 +141,12 @@ class InsightsResponse(BaseModel):
 # -----------------------------------------------------------------------------
 
 class FullAnalyticsResponse(BaseModel):
-    period: str
-    kpis: KPIsResponse
-    revenue_profit: RevenueProfitResponse
-    conversion: ConversionResponse
-    service_breakdown: ServiceBreakdownResponse
-    material_consumption: MaterialConsumptionResponse
-    top_services: TopServicesResponse
-    operational_kpis: OperationalKPIsResponse
-    insights: InsightsResponse
+    period: str = Field(..., description="Periode yang digunakan")
+    kpis: KPIsResponse = Field(..., description="Data KPIs")
+    revenue_profit: RevenueProfitResponse = Field(..., description="Data revenue vs profit")
+    conversion: ConversionResponse = Field(..., description="Data conversion")
+    service_breakdown: ServiceBreakdownResponse = Field(..., description="Data service breakdown")
+    material_consumption: MaterialConsumptionResponse = Field(..., description="Data material consumption")
+    top_services: TopServicesResponse = Field(..., description="Data top services")
+    operational_kpis: OperationalKPIsResponse = Field(..., description="Data operational KPIs")
+    insights: InsightsResponse = Field(..., description="Data insights")

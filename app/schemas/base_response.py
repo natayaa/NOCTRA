@@ -1,4 +1,5 @@
-from typing import Any, Generic, TypeVar
+# schemas/base_response.py
+from typing import Any, Generic, TypeVar, Optional, List
 
 from pydantic import BaseModel, Field
 
@@ -12,7 +13,7 @@ class BaseResponse(BaseModel, Generic[T]):
     """
     success: bool = True
     message: str = "Success"
-    data: T | None = None
+    data: Optional[T] = None
 
 
 class ErrorResponse(BaseModel):
@@ -21,7 +22,7 @@ class ErrorResponse(BaseModel):
     """
     success: bool = False
     message: str
-    errors: dict[str, Any] | None = None
+    errors: Optional[dict[str, Any]] = None
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
@@ -34,8 +35,9 @@ class PaginatedResponse(BaseModel, Generic[T]):
     total: int = 0
     page: int = 1
     page_size: int = 10
+    total_pages: int = 0
 
-    data: list[T] = Field(default_factory=list)
+    data: List[T] = Field(default_factory=list)
 
 
 class ListResponse(BaseModel, Generic[T]):
@@ -47,14 +49,14 @@ class ListResponse(BaseModel, Generic[T]):
 
     count: int = 0
 
-    data: list[T] = Field(default_factory=list)
+    data: List[T] = Field(default_factory=list)
 
 
 class BulkRequest(BaseModel, Generic[T]):
     """
     Generic bulk request payload.
     """
-    results: list[T] = Field(
+    results: List[T] = Field(
         default_factory=list,
         min_length=1,
     )

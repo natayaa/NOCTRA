@@ -11,7 +11,6 @@ from schemas.budgeting import (
     CashflowPoint, ProjectProfitabilityItem
 )
 from services.budgeting import BudgetingService
-from repositories.expenses import ExpenseRepository  # optional, jika ada
 
 budgeting = APIRouter(prefix="/api/budgeting", tags=["Budgeting"])
 
@@ -38,6 +37,17 @@ async def get_kpis(
     service = BudgetingService(db)
     data = await service.get_kpis(period)
     return BaseResponse(data=data.model_dump())
+
+
+@budgeting.get("/expense-summary", response_model=BaseResponse)
+async def get_expense_summary(
+    period: str = Query('month', description="month, last_month, quarter, year"),
+    db: SessionDep = None
+) -> BaseResponse:
+    """Get expense summary for dashboard."""
+    service = BudgetingService(db)
+    data = await service.get_expense_summary(period)
+    return BaseResponse(data=data)
 
 
 # -------------------------------------------------------------------------
@@ -96,6 +106,7 @@ async def list_expenses(
     period: str = Query('month', description="month, last_month, quarter, year"),
     search: str | None = Query(None, description="Search in description"),
     category: str | None = Query(None, description="Filter by category"),
+    status: str | None = Query(None, description="Filter by status"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: SessionDep = None
@@ -105,6 +116,7 @@ async def list_expenses(
         period=period,
         search=search,
         category=category,
+        status=status,
         limit=limit,
         offset=(page - 1) * limit
     )
@@ -177,3 +189,30 @@ async def delete_expense(
         raise HTTPException(status_code=404, detail="Expense not found")
     await db.commit()
     return BaseResponse(data={"id": str(expense_id)})
+
+
+@budgeting.patch("/expenses/{expense_id}/approve", response_model=BaseResponse)
+async def approve_expense(
+    db: SessionDep,
+    expense_id: UUID,
+    approved_by: str = Query(..., description="Name of approver")
+) -> BaseResponse:
+    service = BudgetingService(db)
+    expense = await service.approve_expense(expense_id, approved_by)
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    await db.commit()
+    return BaseResponse(data={"id": str(expense.id), "status": "approved"})
+
+
+@budgeting.patch("/expenses/{expense_id}/pay", response_model=BaseResponse)
+async def mark_expense_as_paid(
+    expense_id: UUID,
+    db: SessionDep
+) -> BaseResponse:
+    service = BudgetingService(db)
+    expense = await service.mark_as_paid(expense_id)
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    await db.commit()
+    return BaseResponse(data={"id": str(expense.id), "status": "paid"})

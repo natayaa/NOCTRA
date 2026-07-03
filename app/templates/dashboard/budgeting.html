@@ -40,32 +40,32 @@
     <div class="summary-icon"><i class="fas fa-briefcase"></i></div>
     <div>
       <span>Active Projects</span>
-      <h2 id="activeProjects">12</h2>
-      <small class="trend positive">+2 this month</small>
+      <h2 id="activeProjects">0</h2>
+      <small class="trend positive">Loading...</small>
     </div>
   </div>
   <div class="summary-card">
     <div class="summary-icon"><i class="fas fa-clock"></i></div>
     <div>
       <span>Pending Payments</span>
-      <h2 id="pendingPayments">Rp 9.400.000</h2>
-      <small class="trend negative">↓ 8%</small>
+      <h2 id="pendingPayments">Rp 0</h2>
+      <small class="trend neutral">Loading...</small>
     </div>
   </div>
   <div class="summary-card">
     <div class="summary-icon"><i class="fas fa-percent"></i></div>
     <div>
       <span>Material Cost Ratio</span>
-      <h2 id="materialRatio">34%</h2>
-      <small class="trend neutral">within budget</small>
+      <h2 id="materialRatio">0%</h2>
+      <small class="trend neutral">Loading...</small>
     </div>
   </div>
   <div class="summary-card">
     <div class="summary-icon"><i class="fas fa-chart-simple"></i></div>
     <div>
       <span>Average Project Profit</span>
-      <h2 id="avgProfit">Rp 3.100.000</h2>
-      <small class="trend positive">↑ 6%</small>
+      <h2 id="avgProfit">Rp 0</h2>
+      <small class="trend positive">Loading...</small>
     </div>
   </div>
 </div>
@@ -76,32 +76,32 @@
     <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
     <div>
       <span>Revenue</span>
-      <h2 id="totalRevenue">Rp 48.200.000</h2>
-      <small class="stat-trend positive">↑ 18% vs last month</small>
+      <h2 id="totalRevenue">Rp 0</h2>
+      <small class="stat-trend positive">Loading...</small>
     </div>
   </div>
   <div class="stat-card expense">
     <div class="stat-icon"><i class="fas fa-wallet"></i></div>
     <div>
       <span>Expenses</span>
-      <h2 id="totalExpenses">Rp 16.800.000</h2>
-      <small class="stat-trend negative">↓ 4% vs last month</small>
+      <h2 id="totalExpenses">Rp 0</h2>
+      <small class="stat-trend negative">Loading...</small>
     </div>
   </div>
   <div class="stat-card profit">
     <div class="stat-icon"><i class="fas fa-coins"></i></div>
     <div>
       <span>Net Profit</span>
-      <h2 id="netProfit">Rp 31.400.000</h2>
-      <small class="stat-trend positive">65.1% Margin</small>
+      <h2 id="netProfit">Rp 0</h2>
+      <small class="stat-trend positive">Loading...</small>
     </div>
   </div>
   <div class="stat-card cashflow">
     <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
     <div>
       <span>Cash Available</span>
-      <h2 id="cashAvailable">Rp 12.000.000</h2>
-      <small class="stat-trend neutral">Operational Fund</small>
+      <h2 id="cashAvailable">Rp 0</h2>
+      <small class="stat-trend neutral">Loading...</small>
     </div>
   </div>
 </div>
@@ -159,7 +159,7 @@
         </tr>
       </thead>
       <tbody id="profitabilityBody">
-        <!-- akan diisi JS -->
+        <!-- Dynamic content -->
       </tbody>
     </table>
   </div>
@@ -176,10 +176,20 @@
       <input type="text" id="expenseSearch" placeholder="Search expense..." />
       <select id="expenseFilter">
         <option value="">All Categories</option>
-        <option value="Material">Material</option>
-        <option value="Labor">Labor</option>
-        <option value="Operational">Operational</option>
-        <option value="Equipment">Equipment</option>
+        <option value="materials">Materials</option>
+        <option value="labor">Labor</option>
+        <option value="equipment">Equipment</option>
+        <option value="rental">Rental</option>
+        <option value="transportation">Transportation</option>
+        <option value="utilities">Utilities</option>
+        <option value="other">Other</option>
+      </select>
+      <select id="expenseStatusFilter">
+        <option value="">All Status</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="paid">Paid</option>
       </select>
     </div>
   </div>
@@ -192,11 +202,12 @@
           <th>Category</th>
           <th>Description</th>
           <th>Amount</th>
+          <th>Status</th>
           <th style="text-align:center;">Action</th>
         </tr>
       </thead>
       <tbody id="expenseTable">
-        <!-- akan diisi JS -->
+        <!-- Dynamic content -->
       </tbody>
     </table>
   </div>
@@ -218,25 +229,41 @@
         <label>Project</label>
         <select id="expenseProject" required>
           <option value="">Select Project</option>
-          <!-- diisi oleh JS -->
         </select>
       </div>
       <div class="form-group">
         <label>Category</label>
         <select id="expenseCategory" required>
           <option value="">Select Category</option>
-          <option>Material</option>
-          <option>Labor</option>
-          <option>Operational</option>
-          <option>Equipment</option>
+          <option value="materials">Materials</option>
+          <option value="labor">Labor</option>
+          <option value="equipment">Equipment</option>
+          <option value="rental">Rental</option>
+          <option value="transportation">Transportation</option>
+          <option value="utilities">Utilities</option>
+          <option value="other">Other</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label>Payment Method</label>
+        <select id="expensePaymentMethod">
+          <option value="">Select Payment Method</option>
+          <option value="cash">Cash</option>
+          <option value="bank_transfer">Bank Transfer</option>
+          <option value="credit_card">Credit Card</option>
+          <option value="e_wallet">E-Wallet</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Reference Number</label>
+        <input type="text" id="expenseReference" placeholder="Invoice/Reference number" />
       </div>
       <div class="form-group">
         <label>Description</label>
         <textarea id="expenseDescription" rows="3" placeholder="Expense details..."></textarea>
       </div>
       <div class="form-group">
-        <label>Amount</label>
+        <label>Amount (Rp)</label>
         <input type="number" id="expenseAmount" placeholder="Enter amount" min="0" step="1000" required />
       </div>
       <button type="submit" class="btn-primary full-width">Save Expense</button>
@@ -244,13 +271,9 @@
   </div>
 </div>
 
-<!-- TOAST CONTAINER (global) -->
-<div id="toastContainer"></div>
-
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script src="{{ url_for('static', path='js/budgeting.js') }}"></script>
 {% endblock %}

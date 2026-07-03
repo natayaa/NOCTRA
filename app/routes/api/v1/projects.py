@@ -1,8 +1,10 @@
+# routers/projects.py
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Query, status
 from fastapi.responses import JSONResponse
-from typing_extensions import List
+from typing import List, Optional
 from decimal import Decimal
+from datetime import datetime, timedelta
 
 from database.session import SessionDep
 from schemas.base_response import BaseResponse, ErrorResponse
@@ -13,9 +15,14 @@ from schemas.projects import (
     ProjectResponse, 
     ProjectUpdate, 
     ProjectLaborCreate, 
-    ProjectLaborResponse
+    ProjectLaborResponse,
+    ProjectTaskCreate,
+    ProjectTaskUpdate,
+    ProjectTaskResponse,
+    ProjectDetailResponse,
+    ProjectKanbanResponse,
+    ProjectUpdateProgress
 )
-from repositories.projects import ProjectRepository
 from services.projects import ProjectService
 
 
@@ -24,148 +31,246 @@ project_router = APIRouter(
     prefix="/api/projects"
 )
 
-@project_router.post("/", response_model=BaseResponse)
-async def create_project(request: ProjectCreate, db: SessionDep):
-    service = ProjectService()
-    project = await service.create(db, request.model_dump())
+
+# =============================================================================
+# CRUD Operations
+# =============================================================================
+
+@project_router.post("/", response_model=BaseResponse, status_code=status.HTTP_201_CREATED)
+async def create_project(
+    request: ProjectCreate,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    project = await service.create(request)
     await db.commit()
     await db.refresh(project)
     return BaseResponse(data={"id": str(project.id)})
 
-@project_router.get("/", response_model=BaseResponse[List[ProjectResponse]])
-async def list_projects(db: SessionDep):
-    repo = ProjectRepository()
-    projects = await repo.list(db)
-    return BaseResponse(data=[ProjectResponse.model_validate(p) for p in projects])
 
-@project_router.get("/kanban", response_model=BaseResponse[dict])
-async def kanban(db: SessionDep):
-    service = ProjectService()
-    data = await service.kanban(db)
+@project_router.get("/", response_model=BaseResponse)
+async def list_projects(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    priority: Optional[str] = Query(None, description="Filter by priority"),
+    brand: Optional[str] = Query(None, description="Filter by vehicle brand"),
+    search: Optional[str] = Query(None, description="Search by name, customer, vehicle"),
+    is_archived: bool = Query(False, description="Show archived projects"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: SessionDep = None
+):
+    service = ProjectService(db)
+    projects, total = await service.list_all(
+        status=status,
+        priority=priority,
+        brand=brand,
+        search=search,
+        is_archived=is_archived,
+        limit=limit,
+        offset=offset
+    )
+    return BaseResponse(data={
+        "items": [ProjectResponse.model_validate(p).model_dump() for p in projects],
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    })
+
+
+@project_router.get("/kanban", response_model=BaseResponse)
+async def kanban(
+    db: SessionDep = None
+):
+    service = ProjectService(db)
+    data = await service.kanban()
     return BaseResponse(data=data)
 
-@project_router.get("/revenue")
-async def revenue(db: SessionDep):
-    service = ProjectService()
-    total = await service.revenue_summary(db)  # returns a Decimal
-    return BaseResponse(data={"total_estimated_revenue": total})
 
-"""@project_router.get("/{project_id}", response_model=BaseResponse[ProjectResponse])
-async def get_project(project_id: UUID, db: SessionDep):
-    service = ProjectService()
-    project = await service.repo.get(db, str(project_id))
-    if not project: 
-        raise HTTPException(status_code=404, detail="project not found")
+@project_router.get("/statistics", response_model=BaseResponse)
+async def get_statistics(
+    db: SessionDep = None
+):
+    service = ProjectService(db)
+    data = await service.get_statistics()
+    return BaseResponse(data=data)
+
+
+# routers/projects.py
+@project_router.get("/{project_id}", response_model=BaseResponse)
+async def get_project(
+    project_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    project = await service.get(project_id)  # <-- PASTIKAN ADA await
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     
-    financials = await service.get_project_financials(db, str(project_id))
+    financials = await service.get_project_financials(project_id)  # <-- PASTIKAN ADA await
+    
+    # Serialize dengan aman - semua data sudah di-load secara eager
     response_data = {
-        **ProjectResponse.model_validate(project).model_dump(),
-        "financial_summary": financials
+        "project": ProjectResponse.model_validate(project).model_dump(),
+        "financial_summary": {
+            "estimated_cost": float(financials["estimated_cost"]) if financials else 0,
+            "actual_cost": float(financials["actual_cost"]) if financials else 0,
+            "estimated_revenue": float(financials["estimated_revenue"]) if financials else 0,
+            "actual_revenue": float(financials["actual_revenue"]) if financials else 0,
+            "material_cost": float(financials["material_cost"]) if financials else 0,
+            "labor_cost": float(financials["labor_cost"]) if financials else 0,
+            "expenses": float(financials["expenses"]) if financials else 0,
+            "profit": float(financials["profit"]) if financials else 0,
+            "margin": float(financials["margin"]) if financials else 0,
+        },
+        "material_usages": financials.get("material_usages", []) if financials else [],
+        "labor_items": financials.get("labor_items", []) if financials else [],
+        "tasks": [ProjectTaskResponse.model_validate(t).model_dump() for t in project.tasks] if project.tasks else [],
+        "activities": [
+            {"id": str(a.id), "activity": a.activity, "activity_type": a.activity_type, 
+             "performed_by": a.performed_by, "created_at": a.created_at.isoformat() if a.created_at else None}
+            for a in project.activities
+        ] if project.activities else []
     }
     
-    return BaseResponse(data=response_data)"""
+    return BaseResponse(data=response_data)
 
 @project_router.patch("/{project_id}", response_model=BaseResponse)
-async def update_project(project_id: UUID, request: ProjectUpdate, db: SessionDep):
-    repo = ProjectRepository()
-    project = await repo.get(db, str(project_id))
+async def update_project(
+    project_id: UUID,
+    request: ProjectUpdate,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    project = await service.update(project_id, request)
     if not project:
         raise HTTPException(404, "Project not found")
-    
-    update_data = request.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        if hasattr(project, key):
-            setattr(project, key, value)
-    
     await db.commit()
-    await db.refresh(project)
     return BaseResponse(data={"id": str(project.id)})
 
 
-@project_router.patch("/{project_id}/progress")
-async def update_progress(project_id: UUID, db: SessionDep, request: dict = Body(...)):
-    progress = request.get("progress")
-    if progress is None:
-        raise HTTPException(400, "Missing 'progress' field")
-    if not isinstance(progress, int) or progress < 0 or progress > 100:
-        raise HTTPException(400, "Progress must be integer between 0 and 100")
-    repo = ProjectRepository()
-    project = await repo.get(db, str(project_id))
+@project_router.patch("/{project_id}/progress", response_model=BaseResponse)
+async def update_progress(
+    project_id: UUID,
+    request: ProjectUpdateProgress,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    project = await service.update_progress(project_id, request.progress)
     if not project:
         raise HTTPException(404, "Project not found")
-    project.progress = progress
     await db.commit()
-    await db.refresh(project)
-    return BaseResponse(data={"id": str(project.id), "progress": progress})
-
-@project_router.patch("/{project_id}/notes")
-async def update_notes(project_id: UUID, db: SessionDep, request: dict = Body(...)):
-    notes = request.get("notes")
-    if notes is None:
-        raise HTTPException(400, "Missing 'notes' field")
-    repo = ProjectRepository()
-    project = await repo.get(db, str(project_id))
-    if not project:
-        raise HTTPException(404, "Project not found")
-    project.notes = notes   # assuming you have a notes column in Project model
-    await db.commit()
-    await db.refresh(project)
-    return BaseResponse(data={"id": str(project.id)})
+    return BaseResponse(data={"id": str(project.id), "progress": request.progress})
 
 
 @project_router.patch("/{project_id}/status", response_model=BaseResponse)
-async def update_status(project_id: UUID, request: ProjectUpdateStatus, db: SessionDep):
-    repo = ProjectRepository()
-    project = await repo.update_status(db, str(project_id), request.status)
+async def update_status(
+    project_id: UUID,
+    request: ProjectUpdateStatus,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    project = await service.update_status(project_id, request.status, request.note)
     if not project:
         raise HTTPException(404, "Project not found")
     await db.commit()
     return BaseResponse(data={"id": str(project_id), "status": request.status})
 
+
+@project_router.post("/{project_id}/complete", response_model=BaseResponse)
+async def complete_project(
+    project_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    project = await service.complete_project(project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    await db.commit()
+    return BaseResponse(data={"id": str(project.id), "status": "completed"})
+
+
+@project_router.post("/{project_id}/archive", response_model=BaseResponse)
+async def archive_project(
+    project_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    result = await service.archive(project_id)
+    if not result:
+        raise HTTPException(404, "Project not found")
+    await db.commit()
+    return BaseResponse(data={"id": str(project_id), "archived": True})
+
+
 @project_router.delete("/{project_id}", response_model=BaseResponse)
-async def delete_project(project_id: UUID, db: SessionDep):
-    repo = ProjectRepository()
-    deleted = await repo.delete(db, str(project_id))
+async def delete_project(
+    project_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    deleted = await service.delete(project_id)
     if not deleted:
         raise HTTPException(404, "Project not found")
     await db.commit()
     return BaseResponse(data={"id": str(project_id)})
 
 
-@project_router.post("/from-inquiry/{inquiry_id}", response_class=JSONResponse)
-async def create_project_from_inquiry(inquiry_id: UUID, db: SessionDep):
-    from repositories.customer_inquiry import InquiryRepo
-    from services.projects import ProjectService
-    from schemas.projects import ProjectCreate
+# =============================================================================
+# Project Tasks
+# =============================================================================
 
-    # Fetch inquiry
-    inquiry_repo = InquiryRepo(db)
-    inquiry = await inquiry_repo.get_with_details(inquiry_id)
-    if not inquiry:
-        return JSONResponse(status_code=404, content={"detail": "Inquiry not found"})
-
-    # Create project payload
-    project_data = ProjectCreate(
-        inquiry_id=inquiry.id,
-        name=f"{inquiry.vehicle_brand} {inquiry.vehicle_model} - {inquiry.customer_name}",
-        customer_name=inquiry.customer_name,
-        vehicle_brand=inquiry.vehicle_brand,
-        vehicle_model=inquiry.vehicle_model,
-        estimated_cost=0,   # you can set from inquiry if you have quoted amount
-        estimated_revenue=0
-    )
-
-    # Create project
-    project_service = ProjectService()
-    project = await project_service.create(db, project_data.model_dump())
-
-    # Update inquiry status
-    inquiry.status = "converted"
-    await db.flush()
+@project_router.post("/{project_id}/tasks", response_model=BaseResponse)
+async def add_task(
+    project_id: UUID,
+    request: ProjectTaskCreate,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    task = await service.add_task(project_id, request.model_dump())
     await db.commit()
+    return BaseResponse(data={"id": str(task.id)})
 
-    return BaseResponse(data={"project_id": str(project.id), "inquiry_id": str(inquiry_id)})
 
+@project_router.get("/{project_id}/tasks", response_model=BaseResponse)
+async def get_tasks(
+    project_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    tasks = await service.get_tasks(project_id)
+    return BaseResponse(data=[ProjectTaskResponse.model_validate(t).model_dump() for t in tasks])
+
+
+@project_router.patch("/tasks/{task_id}", response_model=BaseResponse)
+async def update_task(
+    task_id: UUID,
+    request: ProjectTaskUpdate,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    task = await service.update_task(task_id, request.model_dump(exclude_unset=True))
+    if not task:
+        raise HTTPException(404, "Task not found")
+    await db.commit()
+    return BaseResponse(data={"id": str(task.id)})
+
+
+@project_router.delete("/tasks/{task_id}", response_model=BaseResponse)
+async def delete_task(
+    task_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    deleted = await service.delete_task(task_id)
+    if not deleted:
+        raise HTTPException(404, "Task not found")
+    await db.commit()
+    return BaseResponse(data={"id": str(task_id)})
+
+
+# =============================================================================
+# Project Labor
+# =============================================================================
 
 @project_router.post("/{project_id}/labor", response_model=BaseResponse)
 async def add_labor_to_project(
@@ -173,77 +278,124 @@ async def add_labor_to_project(
     payload: ProjectLaborCreate,
     db: SessionDep
 ):
-    service = ProjectService()
+    service = ProjectService(db)
     try:
-        # Konversi hours ke Decimal
-        hours_decimal = Decimal(str(payload.hours))
-        
         labor = await service.add_labor(
-            db,
-            str(project_id),
+            project_id,
             payload.labor_type,
-            hours_decimal,
-            payload.rate_per_hour  # ini bisa None atau Decimal
+            Decimal(str(payload.hours)),
+            payload.rate_per_hour,
+            payload.technician_name,
+            payload.description
         )
         await db.commit()
         return BaseResponse(data={"id": str(labor.id)})
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @project_router.get("/{project_id}/labor", response_model=BaseResponse)
-async def get_project_labor(project_id: UUID, db: SessionDep):
-    service = ProjectService()
-    labor_list = await service.get_labor_list(db, str(project_id))
-    return BaseResponse(data=[ProjectLaborResponse.model_validate(l) for l in labor_list])
+async def get_project_labor(
+    project_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    labor_list = await service.get_labor_items(project_id)
+    return BaseResponse(data=[ProjectLaborResponse.model_validate(l).model_dump() for l in labor_list])
 
 
-@project_router.delete("/{project_id}/labor/{labor_id}", response_model=BaseResponse)
-async def delete_labor(project_id: UUID, labor_id: UUID, db: SessionDep):
-    service = ProjectService()
-    deleted = await service.delete_labor(db, str(labor_id))
+@project_router.delete("/labor/{labor_id}", response_model=BaseResponse)
+async def delete_labor(
+    labor_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    deleted = await service.delete_labor(labor_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Labor entry not found")
     await db.commit()
     return BaseResponse(data={"id": str(labor_id)})
 
 
-# Perbaiki GET /{project_id} agar mengembalikan data lengkap dengan financials
-@project_router.get("/{project_id}", response_model=BaseResponse)
-async def get_project(project_id: UUID, db: SessionDep):
-    service = ProjectService()
-    data = await service.get_project_financials(db, str(project_id))
-    if not data:
-        raise HTTPException(status_code=404, detail="Project not found")
+# =============================================================================
+# Project Activities
+# =============================================================================
 
-    return BaseResponse(data={
-        "project": ProjectResponse.model_validate(data["project"]),
-        "financial_summary": {
-            "material_cost": str(data["material_cost"]),
-            "labor_cost": str(data["labor_cost"]),
-            "actual_cost": str(data["actual_cost"]),
-            "profit": str(data["profit"]),
-            "margin": str(data["margin"])
-        },
-        "material_usages": data["material_usages"],   # ✅ sudah ada
-        "labor_items": data["labor_items"]            # ✅ sudah ada
-    })
-    
-@project_router.post("/{project_id}/complete", response_model=BaseResponse)
-async def complete_project(project_id: UUID, db: SessionDep):
-    service = ProjectService()
-    project = await service.complete_project(db, str(project_id))
-    if not project:
-        raise HTTPException(404, "Project not found")
+@project_router.get("/{project_id}/activities", response_model=BaseResponse)
+async def get_project_activities(
+    project_id: UUID,
+    db: SessionDep
+):
+    service = ProjectService(db)
+    activities = await service.get_activities(project_id)
+    return BaseResponse(data=[
+        {
+            "id": str(a.id),
+            "activity": a.activity,
+            "activity_type": a.activity_type,
+            "performed_by": a.performed_by,
+            "created_at": a.created_at.isoformat() if a.created_at else None
+        }
+        for a in activities
+    ])
 
-    # Jika project memiliki inquiry, update status inquiry menjadi 'completed'
-    if project.inquiry_id:
-        from repositories.customer_inquiry import InquiryRepo
-        inquiry_repo = InquiryRepo(db)
-        inquiry = await inquiry_repo.get(project.inquiry_id)
-        if inquiry:
-            inquiry.status = "completed"  # atau "done"
-            await inquiry_repo.add_activity(project.inquiry_id, "Project completed")
-            await db.flush()
 
+# =============================================================================
+# Project Stages
+# =============================================================================
+
+@project_router.get("/stages", response_model=BaseResponse)
+async def get_stages(
+    db: SessionDep
+):
+    service = ProjectService(db)
+    stages = await service.get_stages()
+    return BaseResponse(data=stages)
+
+
+# =============================================================================
+# Convert from Inquiry
+# =============================================================================
+
+@project_router.post("/from-inquiry/{inquiry_id}", response_model=BaseResponse)
+async def create_project_from_inquiry(
+    inquiry_id: UUID,
+    db: SessionDep
+):
+    from repositories.customer_inquiry import InquiryRepo
+
+    # Fetch inquiry
+    inquiry_repo = InquiryRepo(db)
+    inquiry = await inquiry_repo.get_with_details(inquiry_id)
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+
+    # Create project payload
+    project_data = ProjectCreate(
+        inquiry_id=inquiry.id,
+        name=f"{inquiry.vehicle_brand} {inquiry.vehicle_model} - {inquiry.customer_name}",
+        customer_name=inquiry.customer_name,
+        customer_phone=inquiry.customer_phone_number,
+        customer_email=inquiry.customer_email,
+        vehicle_brand=inquiry.vehicle_brand,
+        vehicle_model=inquiry.vehicle_model,
+        vehicle_year=inquiry.vehicle_year,
+        vehicle_license_plate=inquiry.vehicle_license_plate,
+        estimated_cost=Decimal(inquiry.estimated_budget or 0),
+        estimated_revenue=Decimal(0),
+        project_start_date=datetime.now(),
+        project_target_delivery=datetime.now() + timedelta(days=30),
+        notes=f"Converted from inquiry {inquiry_id}"
+    )
+
+    # Create project
+    project_service = ProjectService(db)
+    project = await project_service.create(project_data)
+
+    # Update inquiry status
+    inquiry.status = "converted"
+    inquiry.converted_at = datetime.now()
+    await inquiry_repo.add_activity(inquiry_id, f"Converted to project: {project.name}", "conversion", performed_by="system")
     await db.commit()
-    return BaseResponse(data={"id": str(project.id), "status": "completed"})
+
+    return BaseResponse(data={"project_id": str(project.id), "inquiry_id": str(inquiry_id)})

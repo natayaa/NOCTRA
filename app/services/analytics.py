@@ -3,12 +3,13 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, extract
+from sqlalchemy import select, func, and_, extract, or_
 
 from models.projects import Project
 from models.customer_inquiry import CustomerInquiry
 from models.inventory import InventoryStockMovement, InventoryMaterialUsage, InventoryItem
 from models.price_list import PriceListItem
+from models.expenses import Expense
 
 from schemas.analytics import (
     KPIsResponse, KPITrend,
@@ -20,6 +21,7 @@ from schemas.analytics import (
     OperationalKPIsResponse, OperationalKPIItem,
     InsightsResponse, InsightItem
 )
+from schemas.constants import ProjectStatus, InquiryStatus, InventoryStatus, ExpenseStatus
 
 
 class AnalyticsService:
@@ -70,6 +72,23 @@ class AnalyticsService:
         prev_start = prev_end - duration
         return prev_start, prev_end
 
+    def _calc_trend(self, current: Decimal | float | int, previous: Decimal | float | int) -> float:
+        """Calculate trend percentage between current and previous values."""
+        current = float(current) if current else 0
+        previous = float(previous) if previous else 0
+        if previous == 0:
+            return 0 if current == 0 else 100
+        return ((current - previous) / previous) * 100
+
+    def _get_chart_unit(self, period: str) -> str:
+        """Determine chart unit based on period."""
+        if period in ['today', 'week']:
+            return 'day'
+        elif period == 'month':
+            return 'week'
+        else:
+            return 'month'
+
     # -------------------------------------------------------------------------
     # KPIs
     # -------------------------------------------------------------------------
@@ -80,24 +99,34 @@ class AnalyticsService:
         prev_start, prev_end = await self._get_previous_period_range(period)
 
         # 1. Revenue & Profit (from projects)
-        revenue_stmt = select(func.sum(Project.actual_revenue)).where(
+        revenue_stmt = select(func.coalesce(func.sum(Project.actual_revenue), 0)).where(
+            Project.status == ProjectStatus.COMPLETED,
             Project.completed_at >= start,
             Project.completed_at <= end
         )
         revenue = (await self.db.execute(revenue_stmt)).scalar() or Decimal(0)
 
-        profit_stmt = select(func.sum(Project.actual_revenue - Project.actual_cost)).where(
+        profit_stmt = select(func.coalesce(func.sum(Project.actual_revenue - Project.actual_cost), 0)).where(
+            Project.status == ProjectStatus.COMPLETED,
             Project.completed_at >= start,
             Project.completed_at <= end
         )
         profit = (await self.db.execute(profit_stmt)).scalar() or Decimal(0)
 
         # Previous period for trends
-        prev_revenue_stmt = select(func.sum(Project.actual_revenue)).where(
+        prev_revenue_stmt = select(func.coalesce(func.sum(Project.actual_revenue), 0)).where(
+            Project.status == ProjectStatus.COMPLETED,
             Project.completed_at >= prev_start,
             Project.completed_at <= prev_end
         )
         prev_revenue = (await self.db.execute(prev_revenue_stmt)).scalar() or Decimal(0)
+
+        prev_profit_stmt = select(func.coalesce(func.sum(Project.actual_revenue - Project.actual_cost), 0)).where(
+            Project.status == ProjectStatus.COMPLETED,
+            Project.completed_at >= prev_start,
+            Project.completed_at <= prev_end
+        )
+        prev_profit = (await self.db.execute(prev_profit_stmt)).scalar() or Decimal(0)
 
         # 2. Conversion rate (inquiries -> projects)
         total_inquiries = await self.db.scalar(
@@ -106,9 +135,10 @@ class AnalyticsService:
                 CustomerInquiry.created_at <= end
             )
         ) or 0
+        
         converted = await self.db.scalar(
             select(func.count(CustomerInquiry.id)).where(
-                CustomerInquiry.status == 'converted',
+                CustomerInquiry.status == InquiryStatus.CONVERTED,
                 CustomerInquiry.created_at >= start,
                 CustomerInquiry.created_at <= end
             )
@@ -124,7 +154,7 @@ class AnalyticsService:
         ) or 1
         prev_converted = await self.db.scalar(
             select(func.count(CustomerInquiry.id)).where(
-                CustomerInquiry.status == 'converted',
+                CustomerInquiry.status == InquiryStatus.CONVERTED,
                 CustomerInquiry.created_at >= prev_start,
                 CustomerInquiry.created_at <= prev_end
             )
@@ -134,14 +164,14 @@ class AnalyticsService:
         # 3. Completed projects
         completed = await self.db.scalar(
             select(func.count(Project.id)).where(
-                Project.status == 'completed',
+                Project.status == ProjectStatus.COMPLETED,
                 Project.completed_at >= start,
                 Project.completed_at <= end
             )
         ) or 0
         prev_completed = await self.db.scalar(
             select(func.count(Project.id)).where(
-                Project.status == 'completed',
+                Project.status == ProjectStatus.COMPLETED,
                 Project.completed_at >= prev_start,
                 Project.completed_at <= prev_end
             )
@@ -151,14 +181,14 @@ class AnalyticsService:
         low_stock = await self.db.scalar(
             select(func.count(InventoryItem.id)).where(
                 InventoryItem.current_stock <= InventoryItem.min_stock_threshold,
-                InventoryItem.status == 'active'
+                InventoryItem.status == InventoryStatus.ACTIVE
             )
         ) or 0
 
         # 5. Active projects (in progress)
         active_projects = await self.db.scalar(
             select(func.count(Project.id)).where(
-                Project.status.in_(['preparation', 'painting', 'assembly'])
+                Project.status.in_([ProjectStatus.ACTIVE, ProjectStatus.IN_PROGRESS])
             )
         ) or 0
 
@@ -166,11 +196,11 @@ class AnalyticsService:
         return KPIsResponse(
             total_revenue=KPITrend(
                 value=float(revenue),
-                trend_percent=self._calc_trend(revenue, prev_revenue)
+                trend_percent=round(self._calc_trend(revenue, prev_revenue), 1)
             ),
             net_profit=KPITrend(
                 value=float(profit),
-                trend_percent=self._calc_trend(profit, profit)  # placeholder, bisa dihitung dari prev profit
+                trend_percent=round(self._calc_trend(profit, prev_profit), 1)
             ),
             conversion_rate=KPITrend(
                 value=round(conversion_rate, 1),
@@ -178,17 +208,12 @@ class AnalyticsService:
             ),
             completed_projects=KPITrend(
                 value=completed,
-                trend_percent=completed - prev_completed
+                trend_percent=round(self._calc_trend(completed, prev_completed), 1)
             ),
             low_stock_items=low_stock,
             active_projects=active_projects,
             period=period
         )
-
-    def _calc_trend(self, current: Decimal | float, previous: Decimal | float) -> float:
-        if not previous:
-            return 0
-        return float(((current - previous) / previous) * 100)
 
     # -------------------------------------------------------------------------
     # Revenue vs Profit Chart
@@ -196,43 +221,26 @@ class AnalyticsService:
 
     async def get_revenue_profit(self, period: str) -> RevenueProfitResponse:
         """Get revenue vs profit data for line chart."""
-        # Untuk chart, kita butuh data agregat per unit waktu (hari/bulan/tahun)
-        # Tergantung period: week -> daily, month -> weekly, year -> monthly
         start, end = self._get_period_range(period)
         unit = self._get_chart_unit(period)
 
         # Build query based on unit
         if unit == 'day':
-            # Group by day
-            stmt = select(
-                func.date_trunc('day', Project.completed_at).label('date'),
-                func.sum(Project.actual_revenue).label('revenue'),
-                func.sum(Project.actual_revenue - Project.actual_cost).label('profit')
-            ).where(
-                Project.status == 'completed',
-                Project.completed_at >= start,
-                Project.completed_at <= end
-            ).group_by('date').order_by('date')
+            date_trunc = func.date_trunc('day', Project.completed_at)
         elif unit == 'week':
-            stmt = select(
-                func.date_trunc('week', Project.completed_at).label('date'),
-                func.sum(Project.actual_revenue).label('revenue'),
-                func.sum(Project.actual_revenue - Project.actual_cost).label('profit')
-            ).where(
-                Project.status == 'completed',
-                Project.completed_at >= start,
-                Project.completed_at <= end
-            ).group_by('date').order_by('date')
-        else:  # month
-            stmt = select(
-                func.date_trunc('month', Project.completed_at).label('date'),
-                func.sum(Project.actual_revenue).label('revenue'),
-                func.sum(Project.actual_revenue - Project.actual_cost).label('profit')
-            ).where(
-                Project.status == 'completed',
-                Project.completed_at >= start,
-                Project.completed_at <= end
-            ).group_by('date').order_by('date')
+            date_trunc = func.date_trunc('week', Project.completed_at)
+        else:
+            date_trunc = func.date_trunc('month', Project.completed_at)
+
+        stmt = select(
+            date_trunc.label('date'),
+            func.coalesce(func.sum(Project.actual_revenue), 0).label('revenue'),
+            func.coalesce(func.sum(Project.actual_revenue - Project.actual_cost), 0).label('profit')
+        ).where(
+            Project.status == ProjectStatus.COMPLETED,
+            Project.completed_at >= start,
+            Project.completed_at <= end
+        ).group_by('date').order_by('date')
 
         result = await self.db.execute(stmt)
         rows = result.all()
@@ -240,10 +248,11 @@ class AnalyticsService:
         # Build labels and data
         data_points = []
         for row in rows:
-            label = row.date.strftime('%Y-%m-%d')
-            if unit == 'week':
+            if unit == 'day':
+                label = row.date.strftime('%d %b')
+            elif unit == 'week':
                 label = f"Week {row.date.isocalendar()[1]}"
-            elif unit == 'month':
+            else:
                 label = row.date.strftime('%b %Y')
             data_points.append(
                 RevenueProfitDataPoint(
@@ -255,14 +264,6 @@ class AnalyticsService:
 
         return RevenueProfitResponse(period=period, data=data_points)
 
-    def _get_chart_unit(self, period: str) -> str:
-        if period in ['today', 'week']:
-            return 'day'
-        elif period == 'month':
-            return 'week'
-        else:
-            return 'month'
-
     # -------------------------------------------------------------------------
     # Conversion Chart
     # -------------------------------------------------------------------------
@@ -272,9 +273,16 @@ class AnalyticsService:
         start, end = self._get_period_range(period)
         unit = self._get_chart_unit(period)
 
+        if unit == 'day':
+            date_trunc = func.date_trunc('day', CustomerInquiry.created_at)
+        elif unit == 'week':
+            date_trunc = func.date_trunc('week', CustomerInquiry.created_at)
+        else:
+            date_trunc = func.date_trunc('month', CustomerInquiry.created_at)
+
         # Inquiries per unit
         inq_stmt = select(
-            func.date_trunc(unit, CustomerInquiry.created_at).label('date'),
+            date_trunc.label('date'),
             func.count(CustomerInquiry.id).label('count')
         ).where(
             CustomerInquiry.created_at >= start,
@@ -283,10 +291,10 @@ class AnalyticsService:
 
         # Conversions per unit
         conv_stmt = select(
-            func.date_trunc(unit, CustomerInquiry.created_at).label('date'),
+            date_trunc.label('date'),
             func.count(CustomerInquiry.id).label('count')
         ).where(
-            CustomerInquiry.status == 'converted',
+            CustomerInquiry.status == InquiryStatus.CONVERTED,
             CustomerInquiry.created_at >= start,
             CustomerInquiry.created_at <= end
         ).group_by('date').order_by('date')
@@ -301,10 +309,11 @@ class AnalyticsService:
         all_dates = sorted(set(inq_map.keys()) | set(conv_map.keys()))
         data_points = []
         for dt in all_dates:
-            label = dt.strftime('%Y-%m-%d')
-            if unit == 'week':
+            if unit == 'day':
+                label = dt.strftime('%d %b')
+            elif unit == 'week':
                 label = f"Week {dt.isocalendar()[1]}"
-            elif unit == 'month':
+            else:
                 label = dt.strftime('%b %Y')
             data_points.append(
                 ConversionDataPoint(
@@ -322,12 +331,11 @@ class AnalyticsService:
 
     async def get_service_breakdown(self) -> ServiceBreakdownResponse:
         """Get distribution of services by project count or revenue."""
-        # Ambil data dari project_type di CustomerInquiry yang sudah converted
         stmt = select(
             CustomerInquiry.project_type,
             func.count(CustomerInquiry.id).label('count')
         ).where(
-            CustomerInquiry.status == 'converted'
+            CustomerInquiry.status == InquiryStatus.CONVERTED
         ).group_by(CustomerInquiry.project_type).order_by(func.count(CustomerInquiry.id).desc())
 
         result = await self.db.execute(stmt)
@@ -356,9 +364,9 @@ class AnalyticsService:
         """Get material consumption breakdown by total quantity used."""
         stmt = select(
             InventoryItem.name,
-            func.sum(InventoryMaterialUsage.quantity).label('total_qty')
+            func.coalesce(func.sum(InventoryMaterialUsage.quantity), 0).label('total_qty')
         ).join(InventoryMaterialUsage, InventoryMaterialUsage.item_id == InventoryItem.id)\
-         .group_by(InventoryItem.id)\
+         .group_by(InventoryItem.id, InventoryItem.name)\
          .order_by(func.sum(InventoryMaterialUsage.quantity).desc())
 
         result = await self.db.execute(stmt)
@@ -385,13 +393,12 @@ class AnalyticsService:
 
     async def get_top_services(self, limit: int = 5) -> TopServicesResponse:
         """Get top services by revenue (from projects)."""
-        # Hubungkan project ke inquiry untuk mendapatkan project_type
         stmt = select(
             CustomerInquiry.project_type,
             func.count(Project.id).label('projects'),
-            func.sum(Project.actual_revenue).label('revenue')
+            func.coalesce(func.sum(Project.actual_revenue), 0).label('revenue')
         ).join(CustomerInquiry, CustomerInquiry.id == Project.inquiry_id)\
-         .where(Project.status == 'completed')\
+         .where(Project.status == ProjectStatus.COMPLETED)\
          .group_by(CustomerInquiry.project_type)\
          .order_by(func.sum(Project.actual_revenue).desc())\
          .limit(limit)
@@ -406,7 +413,7 @@ class AnalyticsService:
                     name=row.project_type or 'Other',
                     projects=row.projects or 0,
                     revenue=row.revenue or Decimal(0),
-                    trend=None  # bisa dihitung jika ada data historical
+                    trend=None
                 )
             )
         return TopServicesResponse(items=items)
@@ -417,35 +424,36 @@ class AnalyticsService:
 
     async def get_operational_kpis(self) -> OperationalKPIsResponse:
         """Get operational KPIs: avg duration, success rate, margin, turnover."""
-        # 1. Avg project duration
+        # 1. Avg project duration (in days)
         duration_stmt = select(
             func.avg(func.extract('epoch', Project.completed_at - Project.created_at) / 86400)
-        ).where(Project.status == 'completed')
+        ).where(Project.status == ProjectStatus.COMPLETED)
         avg_duration = (await self.db.execute(duration_stmt)).scalar() or 0
 
         # 2. Success rate (% completed vs total)
         total_projects = await self.db.scalar(select(func.count(Project.id))) or 1
         completed_projects = await self.db.scalar(
-            select(func.count(Project.id)).where(Project.status == 'completed')
+            select(func.count(Project.id)).where(Project.status == ProjectStatus.COMPLETED)
         ) or 0
         success_rate = (completed_projects / total_projects) * 100
 
-        # 3. Avg margin (gunakan func.nullif untuk menghindari division by zero)
+        # 3. Avg margin
         margin_stmt = select(
             func.avg(
                 (Project.actual_revenue - Project.actual_cost) / 
                 func.nullif(Project.actual_revenue, 0) * 100
             )
-        ).where(Project.status == 'completed')
+        ).where(Project.status == ProjectStatus.COMPLETED)
         avg_margin = (await self.db.execute(margin_stmt)).scalar() or 0
 
         # 4. Inventory turnover (estimate)
         total_usage = await self.db.scalar(
-            select(func.sum(InventoryMaterialUsage.quantity * InventoryItem.cost_price))
+            select(func.coalesce(func.sum(InventoryMaterialUsage.quantity * InventoryItem.cost_price), 0))
             .join(InventoryItem, InventoryMaterialUsage.item_id == InventoryItem.id)
         ) or 0
         avg_stock = await self.db.scalar(
-            select(func.avg(InventoryItem.current_stock * InventoryItem.cost_price))
+            select(func.coalesce(func.avg(InventoryItem.current_stock * InventoryItem.cost_price), 1))
+            .where(InventoryItem.status == InventoryStatus.ACTIVE)
         ) or 1
         turnover = total_usage / avg_stock if avg_stock else 0
 
@@ -454,25 +462,29 @@ class AnalyticsService:
                 label='Avg Project Duration',
                 value=f"{int(avg_duration)} days",
                 progress=min(int(avg_duration * 10), 100),
-                color=None
+                color=None,
+                status='success' if avg_duration < 30 else 'warning' if avg_duration < 60 else 'danger'
             ),
             OperationalKPIItem(
                 label='Project Success Rate',
                 value=f"{round(success_rate, 1)}%",
                 progress=round(success_rate),
-                color='success'
+                color='success' if success_rate > 80 else 'warning' if success_rate > 50 else 'danger',
+                status='success' if success_rate > 80 else 'warning' if success_rate > 50 else 'danger'
             ),
             OperationalKPIItem(
                 label='Avg Margin',
                 value=f"{round(avg_margin, 1)}%",
-                progress=round(avg_margin),
-                color='success' if avg_margin > 50 else 'warning'
+                progress=round(max(0, avg_margin)),
+                color='success' if avg_margin > 50 else 'warning' if avg_margin > 25 else 'danger',
+                status='success' if avg_margin > 50 else 'warning' if avg_margin > 25 else 'danger'
             ),
             OperationalKPIItem(
                 label='Inventory Turnover',
                 value=f"{round(turnover, 1)}x",
                 progress=min(round(turnover * 10), 100),
-                color=None
+                color=None,
+                status='success' if turnover > 5 else 'warning' if turnover > 2 else 'danger'
             )
         ]
         return OperationalKPIsResponse(items=items)
@@ -503,6 +515,21 @@ class AnalyticsService:
                 type='warning'
             ))
 
+        # Conversion insight
+        conv_trend = kpis.conversion_rate.trend_percent or 0
+        if conv_trend > 5:
+            insights.append(InsightItem(
+                icon='fa-users',
+                message=f'Conversion rate <strong>+{conv_trend:.1f}%</strong> – great job converting inquiries!',
+                type='positive'
+            ))
+        elif conv_trend < -5:
+            insights.append(InsightItem(
+                icon='fa-users',
+                message=f'Conversion rate <strong>down {abs(conv_trend):.1f}%</strong> – review your sales process.',
+                type='warning'
+            ))
+
         # Low stock alert
         if kpis.low_stock_items and kpis.low_stock_items > 0:
             insights.append(InsightItem(
@@ -520,5 +547,30 @@ class AnalyticsService:
                 message=f'Top service: <strong>{top.name}</strong> with {top.projects} projects.',
                 type='neutral'
             ))
+
+        # Profit insight
+        profit_trend = kpis.net_profit.trend_percent or 0
+        if profit_trend > 5:
+            insights.append(InsightItem(
+                icon='fa-coins',
+                message=f'Net profit <strong>+{profit_trend:.1f}%</strong> – healthy financial performance!',
+                type='positive'
+            ))
+        elif profit_trend < -5:
+            insights.append(InsightItem(
+                icon='fa-coins',
+                message=f'Net profit <strong>down {abs(profit_trend):.1f}%</strong> – review your expenses.',
+                type='warning'
+            ))
+
+        # Expenses insight
+        if kpis.net_profit.value > 0 and kpis.total_revenue.value > 0:
+            profit_margin = (kpis.net_profit.value / kpis.total_revenue.value) * 100
+            if profit_margin < 10:
+                insights.append(InsightItem(
+                    icon='fa-exclamation-circle',
+                    message=f'Profit margin is <strong>{profit_margin:.1f}%</strong> – consider reducing costs or increasing prices.',
+                    type='warning'
+                ))
 
         return InsightsResponse(items=insights)

@@ -54,18 +54,22 @@
       <i class="ph ph-magnifying-glass"></i>
       <input type="search" id="searchInquiry" placeholder="Search customer, vehicle, or phone..." />
     </div>
-    <select id="statusFilter">
-      <option value="">All Status</option>
-      <option value="new">New</option>
-      <option value="quoted">Quoted</option>
-      <option value="approved">Approved</option>
-      <option value="rejected">Rejected</option>
-      <option value="converted">Converted</option>
-      <option value="completed">Completed</option>
-      <option value="has_project">Has Project</option>
-      <option value="no_project">No Project</option>
-      <option value="project_completed">Project Completed</option>
-    </select>
+    <!-- inquiries.html - Status Filter -->
+      <select id="statusFilter">
+        <option value="">All Status</option>
+        <option value="new">New</option>
+        <option value="under_review">Under Review</option>
+        <option value="contacted">Contacted</option>
+        <option value="quoted">Quoted</option>
+        <option value="approved">Approved</option>  <!-- TAMBAHKAN -->
+        <option value="converted">Converted</option>
+        <option value="rejected">Rejected</option>
+        <option value="closed">Closed</option>
+        <option value="completed">Completed</option>
+        <option value="has_project">Has Project</option>
+        <option value="no_project">No Project</option>
+        <option value="project_completed">Project Completed</option>
+      </select>
   </div>
   <div class="toolbar-right">
     <button class="btn-secondary" id="exportInquiriesBtn"><i class="ph ph-file-arrow-down"></i> Export</button>
@@ -112,23 +116,29 @@
         <div class="detail-item"><label>Name</label><p id="drawerName">-</p></div>
         <div class="detail-item"><label>Phone</label><p id="drawerPhone">-</p></div>
         <div class="detail-item"><label>Email</label><p id="drawerEmail">-</p></div>
+        <div class="detail-item"><label>Province</label><p id="drawerProvince">-</p></div>
+        <div class="detail-item"><label>City</label><p id="drawerCity">-</p></div>
       </div>
     </section>
 
-    <!-- Vehicle & Project -->
+    <!-- Tambahkan di bagian Vehicle & Project -->
     <section class="detail-card">
       <h3>Vehicle &amp; Project</h3>
       <div class="detail-grid">
         <div class="detail-item"><label>Brand</label><p id="drawerBrand">-</p></div>
         <div class="detail-item"><label>Model</label><p id="drawerModel">-</p></div>
+        <div class="detail-item"><label>Year</label><p id="drawerYear">-</p></div>
         <div class="detail-item"><label>License Plate</label><p id="drawerPlate">-</p></div>
+        <div class="detail-item"><label>Previous Repaint</label><p id="drawerPrevRepaint">-</p></div>
+        <div class="detail-item"><label>Bike Modified</label><p id="drawerBikeModified">-</p></div>
         <div class="detail-item"><label>Condition</label><p id="drawerCondition">-</p></div>
         <div class="detail-item"><label>Project Type</label><p id="drawerType">-</p></div>
+        <div class="detail-item"><label>Services</label><p id="drawerServices">-</p></div>
+        <div class="detail-item"><label>Desired Finish</label><p id="drawerFinish">-</p></div>
+        <div class="detail-item"><label>Desired Color</label><p id="drawerColor">-</p></div>
         <div class="detail-item"><label>Estimated Budget</label><p id="drawerBudget">-</p></div>
-        <div class="detail-item"><label>Target (from Inquiry)</label><p id="drawerTarget">-</p></div>
-        <div class="detail-item"><label>Project Status</label><p id="drawerProjectStatus">-</p></div>
-        <div class="detail-item"><label>Project Start Date</label><p id="projectStartDateDisplay">-</p></div>
-        <div class="detail-item"><label>Project Target Delivery</label><p id="projectTargetDeliveryDisplay">-</p></div>
+        <div class="detail-item"><label>Deadline</label><p id="drawerDeadline">-</p></div>
+        <div class="detail-item"><label>Priority</label><p id="drawerPriority">-</p></div>
       </div>
     </section>
 
@@ -151,6 +161,22 @@
         <div class="detail-item"><label>Actual Revenue</label><p id="drawerActualRevenue">-</p></div>
         <div class="detail-item"><label>Profit</label><p id="drawerProfit">-</p></div>
         <div class="detail-item"><label>Margin</label><p id="drawerMargin">-</p></div>
+      </div>
+    </section>
+
+    <!-- Labor Items -->
+    <section class="detail-card" id="drawerLaborSection">
+      <h3>Labor Items</h3>
+      <div id="drawerLaborItems">
+        <p class="no-data">No labor items</p>
+      </div>
+    </section>
+
+    <!-- Material Usages -->
+    <section class="detail-card" id="drawerMaterialSection">
+      <h3>Material Usage</h3>
+      <div id="drawerMaterialUsages">
+        <p class="no-data">No material usage</p>
       </div>
     </section>
 
@@ -242,18 +268,18 @@
     <div class="modal-header">
       <div>
         <h2>Send Quotation</h2>
-        <p>Enter estimated cost and revenue</p>
+        <p>Enter estimated cost and notes</p>
       </div>
       <button id="closeQuoteModal">×</button>
     </div>
     <form id="quoteForm">
       <div class="form-group">
-        <label for="quoteCost">Estimated Cost (Rp)</label>
-        <input type="number" id="quoteCost" step="0.01" required />
+        <label for="quoteCost">Estimated Cost (Rp) *</label>
+        <input type="number" id="quoteCost" step="1000" min="0" placeholder="e.g. 5000000" required />
       </div>
       <div class="form-group">
-        <label for="quoteRevenue">Estimated Revenue (Rp)</label>
-        <input type="number" id="quoteRevenue" step="0.01" required />
+        <label for="quoteNotes">Notes (Optional)</label>
+        <textarea id="quoteNotes" rows="4" placeholder="Add quotation notes, breakdown, or special conditions..."></textarea>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-secondary" id="cancelQuoteBtn">Cancel</button>

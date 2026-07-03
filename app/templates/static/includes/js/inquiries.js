@@ -1,43 +1,42 @@
 /**
- * NOCTRA Inquiries Dashboard
+ * NOCTRA Inquiries Management
  * Full CRUD + Drawer, integrated with backend APIs
- *
- * Refactored for performance, memory safety, and readability.
- * All logic encapsulated in a single class with clean separation of concerns.
+ * Based on CustomerInquiry schema
  */
 (function () {
   "use strict";
 
   // ─── Constants ──────────────────────────────────────────────
+  const API_BASE = "/api/customer/inquiry";
+  const PROJECT_API = "/api/projects";
 
   const STATUS_MAP = {
     new: "New",
+    under_review: "Under Review",
+    contacted: "Contacted",
     quoted: "Quoted",
-    approved: "Approved",
-    rejected: "Rejected",
+    approved: "Approved", // <-- TAMBAHKAN INI
     converted: "Converted",
+    rejected: "Rejected",
+    closed: "Closed",
     completed: "Completed",
   };
 
   const PROJECT_STATUS_MAP = {
-    new: "New",
-    quoted: "Quoted",
-    approved: "Approved",
+    draft: "Draft",
+    active: "Active",
+    in_progress: "In Progress",
+    on_hold: "On Hold",
+    completed: "Completed",
+    cancelled: "Cancelled",
     preparation: "Preparation",
     painting: "Painting",
     assembly: "Assembly",
-    completed: "Completed",
-  };
-
-  const API = {
-    INQUIRIES: "/api/customer/inquiry",
-    PROJECT: "/api/projects",
   };
 
   // ─── Main Class ──────────────────────────────────────────────
-
   class InquiryManager {
-    // Private fields
+    // ─── Private fields ──────────────────────────────────────
     #state = {
       inquiries: [],
       filterStatus: "",
@@ -51,31 +50,27 @@
     #isLoading = false;
     #completedProjectsNotified = new Set();
     #carouselResizeHandlers = new Map();
-
-    // Private fields (add to the class)
     #lightbox = {
       overlay: null,
       image: null,
       prevBtn: null,
       nextBtn: null,
-      photos: [], // array of image URLs
+      photos: [],
       currentIndex: 0,
       isOpen: false,
     };
 
     // ─── Constructor ──────────────────────────────────────────
-
     constructor() {
       this.#cacheDom();
       this.#initModals();
       this.#bindEvents();
-      this.#initLightbox(); // <-- ADD THIS
-      this.#bindTableEvents(); // ✅ Now called inside the class
+      this.#initLightbox();
+      this.#bindTableEvents();
       this.#loadInquiries();
     }
 
     // ─── DOM Caching ──────────────────────────────────────────
-
     #cacheDom() {
       const ids = [
         "inquiriesBody",
@@ -83,6 +78,7 @@
         "statusFilter",
         "totalCount",
         "newCount",
+        "underReviewCount",
         "quotedCount",
         "convertedCount",
         "inquiryDrawer",
@@ -92,17 +88,24 @@
         "drawerName",
         "drawerPhone",
         "drawerEmail",
+        "drawerProvince",
+        "drawerCity",
         "drawerBrand",
         "drawerModel",
+        "drawerYear",
         "drawerPlate",
+        "drawerPrevRepaint",
+        "drawerBikeModified",
         "drawerCondition",
         "drawerType",
+        "drawerServices",
+        "drawerFinish",
+        "drawerColor",
         "drawerBudget",
-        "drawerTarget",
+        "drawerDeadline",
+        "drawerPriority",
         "drawerDescription",
         "drawerReference",
-        "drawerPhotosSection",
-        "drawerPhotos",
         "drawerTimeline",
         "drawerNotes",
         "noteCounter",
@@ -120,10 +123,12 @@
         "drawerProfit",
         "drawerMargin",
         "drawerProjectStatus",
+        "drawerProjectStartDate",
+        "drawerProjectTargetDelivery",
         "quoteModal",
         "quoteForm",
         "quoteCost",
-        "quoteRevenue",
+        "quoteNotes",
         "closeQuoteModal",
         "cancelQuoteBtn",
         "rejectModal",
@@ -141,6 +146,10 @@
         "drawerBeforeAfterSection",
         "beforeTrack",
         "afterTrack",
+        "projectStartDateDisplay",
+        "projectTargetDeliveryDisplay",
+        "drawerLaborItems",
+        "drawerMaterialUsages",
       ];
 
       const refs = {};
@@ -150,8 +159,28 @@
       this.#dom = refs;
     }
 
-    // ─── Modal Initialization ────────────────────────────────
+    // ─── Toast Notification ──────────────────────────────────
+    #showToast(message, isError = false) {
+      if (typeof window.showToast === "function") {
+        window.showToast(message, isError ? "error" : "success");
+        return;
+      }
 
+      let toast = document.querySelector(".app-toast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.className = "app-toast";
+        document.body.appendChild(toast);
+      }
+
+      toast.textContent = message;
+      toast.className = "app-toast" + (isError ? " error" : "");
+      clearTimeout(toast._timeout);
+      requestAnimationFrame(() => toast.classList.add("show"));
+      toast._timeout = setTimeout(() => toast.classList.remove("show"), 3000);
+    }
+
+    // ─── Modal Initialization ────────────────────────────────
     #initModals() {
       const { inquiryDrawer, closeDrawer } = this.#dom;
 
@@ -237,35 +266,69 @@
         this.#showToast("Export feature coming soon");
       });
 
+      // Quote form submit
+      this.#dom.quoteForm?.addEventListener("submit", (e) =>
+        this.#handleQuoteSubmit(e),
+      );
+
       // Drawer action buttons
       const drawerActions = [
+        { btn: "drawerApproveBtn", action: "approve" },
+        { btn: "drawerQuoteBtn", action: "quote" },
+        { btn: "drawerRejectBtn", action: "reject" },
+        { btn: "drawerConvertBtn", action: "convert" },
+        { btn: "drawerWhatsappBtn", action: "whatsapp" },
+      ];
+
+      // 🔥 DEBUG: Cek drawer action buttons
+      // console.log("🔍 Checking drawer action buttons:");
+      const drawerBtnIds = [
         "drawerApproveBtn",
         "drawerQuoteBtn",
         "drawerRejectBtn",
         "drawerConvertBtn",
         "drawerWhatsappBtn",
       ];
+      drawerBtnIds.forEach((id) => {
+        const el = document.getElementById(id);
+        /// console.log(`  ${id}:`, el ? "✅ Found" : "❌ Not found");
+      });
 
-      drawerActions.forEach((btnId) => {
-        const btn = this.#dom[btnId];
-        if (!btn) return;
-        btn.addEventListener("click", () => {
+      drawerActions.forEach(({ btn, action }) => {
+        const btnEl = document.getElementById(btn); // 🔥 Gunakan getElementById langsung
+        // if (!btnEl) {
+        //  console.warn(`⚠️ Button ${btn} not found in DOM`);
+        //  return;
+        // }
+        // console.log(
+        //  `✅ Attaching event listener to ${btn} for action: ${action}`,
+        // );
+        btnEl.addEventListener("click", (e) => {
+          console.log(`🖱️ ${btn} clicked!`);
+          e.preventDefault();
+          e.stopPropagation();
           const id = this.#state.currentInquiryId;
-          if (!id) return;
-          switch (btnId) {
-            case "drawerApproveBtn":
+          console.log(`📌 Current inquiry ID:`, id);
+          if (!id) {
+            this.#showToast("No inquiry selected", true);
+            return;
+          }
+
+          switch (action) {
+            case "approve":
+              console.log("🟢 Approving inquiry:", id);
               this.#approveInquiry(id);
               break;
-            case "drawerQuoteBtn":
+            case "quote":
               this.#openQuoteModal(id);
               break;
-            case "drawerRejectBtn":
+            case "reject":
               this.#openRejectModal(id);
               break;
-            case "drawerConvertBtn":
-              this.#convertInquiry(id);
+            case "convert":
+              this.#openConvertModal(id);
               break;
-            case "drawerWhatsappBtn":
+            case "whatsapp":
               this.#openWhatsApp(id);
               break;
           }
@@ -287,7 +350,6 @@
     }
 
     // ─── Table Event Delegation ──────────────────────────────
-
     #bindTableEvents() {
       const tbody = this.#dom.inquiriesBody;
       if (!tbody) return;
@@ -320,7 +382,7 @@
                 this.#openRejectModal(id);
                 break;
               case "convert":
-                this.#convertInquiry(id);
+                this.#openConvertModal(id);
                 break;
             }
             return;
@@ -332,34 +394,7 @@
       });
     }
 
-    // ─── Data Loading ─────────────────────────────────────────
-
-    async #loadInquiries() {
-      if (this.#isLoading) return;
-      this.#isLoading = true;
-
-      const tbody = this.#dom.inquiriesBody;
-      if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Loading inquiries...</td></tr>`;
-      }
-
-      try {
-        const data = await this.#fetchJSON(`${API.INQUIRIES}/`);
-        this.#state.inquiries = data.data || [];
-        this.#renderTable();
-        this.#updateStats();
-        this.#notifyCompletedProjects();
-      } catch (err) {
-        console.error("Inquiries load error:", err);
-        this.#showToast("Failed to load inquiries", true);
-        if (tbody) {
-          tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Error loading inquiries</td></tr>`;
-        }
-      } finally {
-        this.#isLoading = false;
-      }
-    }
-
+    // ─── Lightbox ─────────────────────────────────────────────
     #initLightbox() {
       const overlay = document.getElementById("lightboxOverlay");
       if (!overlay) {
@@ -372,12 +407,10 @@
       this.#lightbox.nextBtn = document.getElementById("lightboxNext");
       const closeBtn = document.getElementById("lightboxClose");
 
-      // Close on overlay click (background)
       overlay.addEventListener("click", (e) => {
         if (e.target === overlay) this.#closeLightbox();
       });
 
-      // Close on ESC key
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && this.#lightbox.isOpen) this.#closeLightbox();
         if (e.key === "ArrowLeft" && this.#lightbox.isOpen)
@@ -393,21 +426,6 @@
       this.#lightbox.nextBtn?.addEventListener("click", () =>
         this.#nextLightbox(),
       );
-
-      // In constructor, after #bindEvents()
-      document.addEventListener("click", (e) => {
-        const img = e.target.closest(".carousel-track img");
-        if (!img) return;
-        const track = img.closest(".carousel-track");
-        if (!track) return;
-        // Get all images in this track
-        const allImages = Array.from(track.querySelectorAll("img"));
-        const urls = allImages.map((el) => el.src);
-        const index = allImages.indexOf(img);
-        if (index !== -1) {
-          this.#openLightbox(urls, index);
-        }
-      });
     }
 
     #openLightbox(imageUrls, initialIndex = 0) {
@@ -428,7 +446,6 @@
       this.#lightbox.overlay.style.display = "flex";
       document.body.style.overflow = "hidden";
 
-      // Safely show/hide nav buttons
       const hasPrev = this.#lightbox.currentIndex > 0;
       const hasNext =
         this.#lightbox.currentIndex < this.#lightbox.photos.length - 1;
@@ -437,7 +454,6 @@
       if (this.#lightbox.nextBtn)
         this.#lightbox.nextBtn.style.display = hasNext ? "flex" : "none";
 
-      // Update counter
       let counter = this.#lightbox.overlay.querySelector(".lightbox-counter");
       if (!counter) {
         counter = document.createElement("div");
@@ -461,12 +477,10 @@
       const idx = this.#lightbox.currentIndex;
       if (img && urls && urls.length > 0) {
         img.src = urls[idx];
-        // Update counter
         const counter =
           this.#lightbox.overlay?.querySelector(".lightbox-counter");
         if (counter) counter.textContent = `${idx + 1} / ${urls.length}`;
       }
-      // Update nav buttons
       const hasPrev = idx > 0;
       const hasNext = idx < urls.length - 1;
       if (this.#lightbox.prevBtn)
@@ -489,6 +503,35 @@
       }
     }
 
+    // ─── Data Loading ─────────────────────────────────────────
+    async #loadInquiries() {
+      if (this.#isLoading) return;
+      this.#isLoading = true;
+
+      const tbody = this.#dom.inquiriesBody;
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Loading inquiries...</td></tr>`;
+      }
+
+      try {
+        const data = await this.#fetchJSON(`${API_BASE}/`);
+        // 🔥 FIX: Response dari API adalah { success, message, data: [...] }
+        const inquiries = Array.isArray(data.data) ? data.data : [];
+        this.#state.inquiries = inquiries;
+        this.#renderTable();
+        this.#updateStats();
+        this.#notifyCompletedProjects();
+      } catch (err) {
+        console.error("Inquiries load error:", err);
+        this.#showToast("Failed to load inquiries", true);
+        if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="7" class="loading-placeholder">Error loading inquiries</td></tr>`;
+        }
+      } finally {
+        this.#isLoading = false;
+      }
+    }
+
     #notifyCompletedProjects() {
       this.#state.inquiries.forEach((inq) => {
         if (
@@ -505,7 +548,6 @@
     }
 
     // ─── Fetch Helper ─────────────────────────────────────────
-
     async #fetchJSON(url, options = {}) {
       const response = await fetch(url, {
         ...options,
@@ -521,24 +563,7 @@
       return response.json();
     }
 
-    renderInquiryPhotos(photos) {
-      const groups = { before: [], after: [] };
-      photos.forEach((p) => {
-        const stage = p.stage || "before";
-        if (groups[stage]) {
-          groups[stage].push(p);
-        } else {
-          groups.before.push(p); // fallback
-        }
-      });
-
-      // Use the actual element IDs from HTML
-      this.#renderCarousel("beforeTrack", groups.before);
-      this.#renderCarousel("afterTrack", groups.after);
-    }
-
     // ─── Rendering ────────────────────────────────────────────
-
     #renderTable() {
       const tbody = this.#dom.inquiriesBody;
       if (!tbody) return;
@@ -547,16 +572,15 @@
       const search = searchQuery.toLowerCase();
 
       const filtered = inquiries.filter((inq) => {
-        // Search match
         const matchSearch =
           !search ||
-          inq.customer_name?.toLowerCase().includes(search) ||
-          inq.customer_phone_number?.includes(search) ||
-          inq.vehicle_brand?.toLowerCase().includes(search) ||
-          inq.vehicle_model?.toLowerCase().includes(search);
+          (inq.customer_name || "").toLowerCase().includes(search) ||
+          (inq.customer_phone_number || "").includes(search) ||
+          (inq.vehicle_brand || "").toLowerCase().includes(search) ||
+          (inq.vehicle_model || "").toLowerCase().includes(search);
 
-        // Status filter
         let matchStatus = true;
+        const statusLower = (inq.status || "").toLowerCase();
         if (filterStatus === "has_project") {
           matchStatus = !!inq.project;
         } else if (filterStatus === "no_project") {
@@ -565,7 +589,7 @@
           matchStatus = !!(inq.project && inq.project.status === "completed");
         } else {
           matchStatus =
-            !filterStatus || inq.status?.toLowerCase() === filterStatus;
+            !filterStatus || statusLower === filterStatus.toLowerCase();
         }
 
         return matchSearch && matchStatus;
@@ -576,7 +600,6 @@
         return;
       }
 
-      // Use DocumentFragment for better performance
       const fragment = document.createDocumentFragment();
       filtered.forEach((inq) => {
         const row = this.#createRow(inq);
@@ -592,9 +615,12 @@
       tr.dataset.id = inq.id;
 
       const statusLow = (inq.status || "").toLowerCase();
-      const canConvert = !["converted", "rejected", "completed"].includes(
-        statusLow,
-      );
+      const canConvert = ![
+        "converted",
+        "rejected",
+        "closed",
+        "completed",
+      ].includes(statusLow);
       const projectStatus = inq.project
         ? this.#getProjectStatusLabel(inq.project.status)
         : "—";
@@ -628,23 +654,26 @@
     #updateStats() {
       const total = this.#state.inquiries.length;
       const newCount = this.#state.inquiries.filter(
-        (i) => i.status?.toLowerCase() === "new",
+        (i) => (i.status || "").toLowerCase() === "new",
+      ).length;
+      const underReviewCount = this.#state.inquiries.filter(
+        (i) => (i.status || "").toLowerCase() === "under_review",
       ).length;
       const quotedCount = this.#state.inquiries.filter(
-        (i) => i.status?.toLowerCase() === "quoted",
+        (i) => (i.status || "").toLowerCase() === "quoted",
       ).length;
       const convertedCount = this.#state.inquiries.filter(
-        (i) => i.status?.toLowerCase() === "converted",
+        (i) => (i.status || "").toLowerCase() === "converted",
       ).length;
 
       this.#setText("totalCount", total);
       this.#setText("newCount", newCount);
+      this.#setText("underReviewCount", underReviewCount);
       this.#setText("quotedCount", quotedCount);
       this.#setText("convertedCount", convertedCount);
     }
 
     // ─── Drawer ──────────────────────────────────────────────
-
     async #openDrawer(id) {
       const drawer = this.#modals.drawer;
       if (!drawer) return;
@@ -654,7 +683,7 @@
       this.#resetDrawer();
 
       try {
-        const data = await this.#fetchJSON(`${API.INQUIRIES}/${id}`);
+        const data = await this.#fetchJSON(`${API_BASE}/${id}`);
         const inquiry = data.data;
         await this.#populateDrawer(inquiry);
       } catch (err) {
@@ -669,7 +698,6 @@
       if (drawer) drawer.classList.remove("active");
       this.#state.currentInquiryId = null;
 
-      // Clean up carousel resize listeners
       for (const [trackId, handler] of this.#carouselResizeHandlers) {
         window.removeEventListener("resize", handler);
       }
@@ -683,13 +711,22 @@
         "drawerName",
         "drawerPhone",
         "drawerEmail",
+        "drawerProvince",
+        "drawerCity",
         "drawerBrand",
         "drawerModel",
+        "drawerYear",
         "drawerPlate",
+        "drawerPrevRepaint",
+        "drawerBikeModified",
         "drawerCondition",
         "drawerType",
+        "drawerServices",
+        "drawerFinish",
+        "drawerColor",
         "drawerBudget",
-        "drawerTarget",
+        "drawerDeadline",
+        "drawerPriority",
         "drawerDescription",
         "drawerReference",
         "drawerProjectStatus",
@@ -699,6 +736,8 @@
         "drawerActualRevenue",
         "drawerProfit",
         "drawerMargin",
+        "projectStartDateDisplay",
+        "projectTargetDeliveryDisplay",
       ];
       fields.forEach((id) => {
         const el = this.#dom[id];
@@ -707,9 +746,6 @@
 
       const refLink = this.#dom.drawerReference;
       if (refLink) refLink.style.display = "none";
-
-      const photosSection = this.#dom.drawerPhotosSection;
-      if (photosSection) photosSection.style.display = "none";
 
       const financialSection = this.#dom.drawerFinancialSection;
       if (financialSection) financialSection.style.display = "none";
@@ -727,6 +763,15 @@
 
       const beforeAfter = this.#dom.drawerBeforeAfterSection;
       if (beforeAfter) beforeAfter.style.display = "none";
+
+      const laborContainer = this.#dom.drawerLaborItems;
+      if (laborContainer)
+        laborContainer.innerHTML = '<p class="no-data">No labor items</p>';
+
+      const materialContainer = this.#dom.drawerMaterialUsages;
+      if (materialContainer)
+        materialContainer.innerHTML =
+          '<p class="no-data">No material usage</p>';
     }
 
     async #populateDrawer(inquiry) {
@@ -740,16 +785,25 @@
       this.#setText("drawerName", inquiry.customer_name || "—");
       this.#setText("drawerPhone", inquiry.customer_phone_number || "—");
       this.#setText("drawerEmail", inquiry.customer_email || "—");
+      this.#setText("drawerProvince", inquiry.province || "—");
+      this.#setText("drawerCity", inquiry.city || "—");
       this.#setText("drawerBrand", inquiry.vehicle_brand || "—");
       this.#setText("drawerModel", inquiry.vehicle_model || "—");
+      this.#setText("drawerYear", inquiry.vehicle_year || "—");
       this.#setText("drawerPlate", inquiry.vehicle_license_plate || "—");
+      this.#setText("drawerPrevRepaint", inquiry.previous_repaint || "—");
+      this.#setText("drawerBikeModified", inquiry.bike_modified || "—");
       this.#setText("drawerCondition", inquiry.vehicle_condition || "—");
       this.#setText("drawerType", inquiry.project_type || "—");
+      this.#setText("drawerServices", inquiry.services || "—");
+      this.#setText("drawerFinish", inquiry.desired_finish || "—");
+      this.#setText("drawerColor", inquiry.desired_color || "—");
       this.#setText(
         "drawerBudget",
         this.#formatCurrency(inquiry.estimated_budget),
       );
-      this.#setText("drawerTarget", inquiry.project_target || "—");
+      this.#setText("drawerDeadline", inquiry.deadline || "—");
+      this.#setText("drawerPriority", inquiry.priority || "—");
       this.#setText(
         "drawerDescription",
         inquiry.project_description || "No description provided.",
@@ -784,8 +838,8 @@
         refLink.style.display = "none";
       }
 
-      // Before / After photos – group by stage
-      this.renderInquiryPhotos(inquiry.photos || []);
+      // Before / After photos
+      this.#renderInquiryPhotos(inquiry.photos || []);
 
       const beforeAfterSection = this.#dom.drawerBeforeAfterSection;
       if (beforeAfterSection) beforeAfterSection.style.display = "block";
@@ -808,7 +862,11 @@
       const statusLow = (inquiry.status || "").toLowerCase();
       const isConverted = statusLow === "converted";
       const isRejected = statusLow === "rejected";
-      const isFinal = isConverted || isRejected || statusLow === "completed";
+      const isFinal =
+        isConverted ||
+        isRejected ||
+        statusLow === "closed" ||
+        statusLow === "completed";
 
       const approveBtn = this.#dom.drawerApproveBtn;
       const quoteBtn = this.#dom.drawerQuoteBtn;
@@ -816,9 +874,17 @@
       const convertBtn = this.#dom.drawerConvertBtn;
 
       if (approveBtn)
-        approveBtn.disabled = !(statusLow === "new" || statusLow === "quoted");
+        approveBtn.disabled = !(
+          statusLow === "new" ||
+          statusLow === "under_review" ||
+          statusLow === "quoted"
+        );
       if (quoteBtn)
-        quoteBtn.disabled = !(statusLow === "new" || statusLow === "quoted");
+        quoteBtn.disabled = !(
+          statusLow === "new" ||
+          statusLow === "under_review" ||
+          statusLow === "quoted"
+        );
       if (rejectBtn) rejectBtn.disabled = isFinal;
       if (convertBtn) convertBtn.disabled = isFinal;
 
@@ -834,6 +900,7 @@
       }
     }
 
+    // ─── Financial Methods ──────────────────────────────────
     async #loadProjectFinancials(inquiry) {
       const financialSection = this.#dom.drawerFinancialSection;
       if (!financialSection) return;
@@ -844,32 +911,58 @@
       }
 
       try {
-        const data = await this.#fetchJSON(
+        const response = await this.#fetchJSON(
           `/api/projects/${inquiry.project.id}`,
         );
-        const project = data.data;
-        const estCost = project.estimated_cost || 0;
-        const actualCost = project.actual_cost || 0;
-        const estRevenue = project.estimated_revenue || 0;
-        const actualRevenue = project.actual_revenue || 0;
-        const profit = actualRevenue - actualCost;
-        const margin =
-          actualRevenue > 0 ? ((profit / actualRevenue) * 100).toFixed(0) : 0;
+        const data = response.data;
+        const project = data.project;
+        const laborItems = data.labor_items || [];
+        const materialUsages = data.material_usages || [];
 
-        this.#setText("drawerEstCost", this.#formatCurrency(estCost));
-        this.#setText("drawerActualCost", this.#formatCurrency(actualCost));
-        this.#setText("drawerEstRevenue", this.#formatCurrency(estRevenue));
+        const summary = this.#calculateFinancialSummary(
+          project,
+          laborItems,
+          materialUsages,
+        );
+
+        this.#setText(
+          "drawerEstCost",
+          this.#formatCurrency(project.estimated_cost || 0),
+        );
+        this.#setText(
+          "drawerActualCost",
+          this.#formatCurrency(summary.actual_cost),
+        );
+        this.#setText(
+          "drawerEstRevenue",
+          this.#formatCurrency(project.estimated_revenue || 0),
+        );
         this.#setText(
           "drawerActualRevenue",
-          this.#formatCurrency(actualRevenue),
+          this.#formatCurrency(summary.actual_revenue),
         );
-        this.#setText("drawerProfit", this.#formatCurrency(profit));
-        this.#setText("drawerMargin", margin + "%");
+        this.#setText("drawerProfit", this.#formatCurrency(summary.profit));
+        this.#setText("drawerMargin", summary.margin + "%");
 
-        if (project.target_delivery) {
-          const targetDate = new Date(project.target_delivery);
+        this.#renderFinancialDetails(laborItems, materialUsages);
+
+        if (project.project_start_date) {
+          const startDate = new Date(project.project_start_date);
+          if (!isNaN(startDate)) {
+            this.#setText(
+              "projectStartDateDisplay",
+              startDate.toLocaleDateString("id-ID"),
+            );
+          }
+        }
+
+        if (project.project_target_delivery) {
+          const targetDate = new Date(project.project_target_delivery);
           if (!isNaN(targetDate)) {
-            this.#setText("drawerTarget", targetDate.toLocaleDateString());
+            this.#setText(
+              "projectTargetDeliveryDisplay",
+              targetDate.toLocaleDateString("id-ID"),
+            );
           }
         }
 
@@ -880,27 +973,147 @@
       }
     }
 
-    #renderTimeline(activities) {
-      const timeline = this.#dom.drawerTimeline;
-      if (!timeline) return;
+    #calculateFinancialSummary(project, laborItems, materialUsages) {
+      const totalLaborCost = laborItems.reduce((sum, item) => {
+        let total = 0;
+        if (item.total !== undefined && item.total !== null) {
+          total = parseFloat(item.total) || 0;
+        } else {
+          const hours = parseFloat(item.hours) || 0;
+          const rate = parseFloat(item.rate) || 0;
+          total = hours * rate;
+        }
+        return sum + total;
+      }, 0);
 
-      if (activities && activities.length > 0) {
-        timeline.innerHTML = activities
-          .map(
-            (act) => `
-              <div class="timeline-item">
-                <span>${new Date(act.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                <p>${this.#escapeHtml(act.activity)}</p>
-              </div>
-            `,
-          )
-          .join("");
-      } else {
-        timeline.innerHTML = `<div class="timeline-item"><span>—</span><p>No activity yet</p></div>`;
+      const totalMaterialCost = materialUsages.reduce((sum, item) => {
+        let total = 0;
+        if (item.total !== undefined && item.total !== null) {
+          total = parseFloat(item.total) || 0;
+        } else {
+          const quantity = parseFloat(item.quantity) || 0;
+          const unitPrice = parseFloat(item.unit_price) || 0;
+          total = quantity * unitPrice;
+        }
+        return sum + total;
+      }, 0);
+
+      const actualCost = totalLaborCost + totalMaterialCost;
+
+      let actualRevenue = parseFloat(project.actual_revenue) || 0;
+      if (actualRevenue === 0 && project.estimated_cost) {
+        const estCost = parseFloat(project.estimated_cost) || 0;
+        actualRevenue = estCost * 1.3;
+      }
+
+      const profit = actualRevenue - actualCost;
+
+      let margin = 0;
+      if (actualRevenue > 0) {
+        margin = (profit / actualRevenue) * 100;
+      } else if (actualCost > 0) {
+        margin = (profit / actualCost) * 100;
+      }
+      margin = parseFloat(margin.toFixed(2));
+
+      return {
+        material_cost: parseFloat(totalMaterialCost.toFixed(2)),
+        labor_cost: parseFloat(totalLaborCost.toFixed(2)),
+        actual_cost: parseFloat(actualCost.toFixed(2)),
+        actual_revenue: parseFloat(actualRevenue.toFixed(2)),
+        profit: parseFloat(profit.toFixed(2)),
+        margin: margin,
+      };
+    }
+
+    #renderFinancialDetails(laborItems, materialUsages) {
+      const laborContainer = this.#dom.drawerLaborItems;
+      if (laborContainer) {
+        if (laborItems.length > 0) {
+          laborContainer.innerHTML = `
+            <table class="financial-detail-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Hours</th>
+                  <th>Rate</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${laborItems
+                  .map(
+                    (item) => `
+                  <tr>
+                    <td>${item.type || "-"}</td>
+                    <td>${(parseFloat(item.hours) || 0).toFixed(1)}h</td>
+                    <td>${this.#formatCurrency(item.rate || 0)}</td>
+                    <td>${this.#formatCurrency(item.total || item.hours * item.rate)}</td>
+                  </tr>
+                `,
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          `;
+        } else {
+          laborContainer.innerHTML = '<p class="no-data">No labor items</p>';
+        }
+      }
+
+      const materialContainer = this.#dom.drawerMaterialUsages;
+      if (materialContainer) {
+        if (materialUsages.length > 0) {
+          materialContainer.innerHTML = `
+            <table class="financial-detail-table">
+              <thead>
+                <tr>
+                  <th>Material</th>
+                  <th>Qty</th>
+                  <th>Unit</th>
+                  <th>Unit Price</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${materialUsages
+                  .map(
+                    (item) => `
+                  <tr>
+                    <td>${item.material_name || item.name || "-"}</td>
+                    <td>${(parseFloat(item.quantity) || 0).toFixed(2)}</td>
+                    <td>${item.unit || "pcs"}</td>
+                    <td>${this.#formatCurrency(item.unit_price || 0)}</td>
+                    <td>${this.#formatCurrency(item.total || item.quantity * item.unit_price)}</td>
+                  </tr>
+                `,
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          `;
+        } else {
+          materialContainer.innerHTML =
+            '<p class="no-data">No material usage</p>';
+        }
       }
     }
 
-    // ─── Carousel ─────────────────────────────────────────────
+    // ─── Photo Rendering ─────────────────────────────────────
+    #renderInquiryPhotos(photos) {
+      const groups = { before: [], after: [] };
+      photos.forEach((p) => {
+        const stage = p.stage || "before";
+        if (groups[stage]) {
+          groups[stage].push(p);
+        } else {
+          groups.before.push(p);
+        }
+      });
+
+      this.#renderCarousel("beforeTrack", groups.before);
+      this.#renderCarousel("afterTrack", groups.after);
+    }
 
     #renderCarousel(trackId, photos) {
       const track = this.#dom[trackId];
@@ -908,17 +1121,14 @@
       const container = track.closest(".carousel-container");
       if (!container) return;
 
-      // Remove old resize listener
       const oldHandler = this.#carouselResizeHandlers.get(trackId);
       if (oldHandler) {
         window.removeEventListener("resize", oldHandler);
         this.#carouselResizeHandlers.delete(trackId);
       }
 
-      // Clear track
       track.innerHTML = "";
 
-      // Handle empty state
       const buttons = container.querySelectorAll(".carousel-btn");
       if (!photos || photos.length === 0) {
         track.innerHTML = `<div class="carousel-empty">No photos</div>`;
@@ -927,7 +1137,6 @@
       }
       buttons.forEach((btn) => (btn.style.display = "block"));
 
-      // Render images
       photos.forEach((photo) => {
         const img = document.createElement("img");
         img.src = `/uploads/customer_inquiries/${this.#escapeHtml(photo.file_path)}`;
@@ -948,7 +1157,6 @@
         if (nextBtn) nextBtn.disabled = currentIndex === total - 1;
       };
 
-      // Clone buttons to remove old listeners
       const newPrev = prevBtn?.cloneNode(true);
       const newNext = nextBtn?.cloneNode(true);
       prevBtn?.replaceWith(newPrev);
@@ -971,19 +1179,15 @@
         });
       }
 
-      // Resize handler
       const resizeHandler = () => updateCarousel();
       window.addEventListener("resize", resizeHandler);
       this.#carouselResizeHandlers.set(trackId, resizeHandler);
 
-      // Initial render
       requestAnimationFrame(updateCarousel);
 
-      // After appending images to track, add click listener
       track.addEventListener("click", (e) => {
         const img = e.target.closest("img");
         if (!img) return;
-        // Get all images in this track
         const allImages = Array.from(track.querySelectorAll("img"));
         const urls = allImages.map((el) => el.src);
         const index = allImages.indexOf(img);
@@ -993,8 +1197,28 @@
       });
     }
 
-    // ─── Project Status Helpers ──────────────────────────────
+    // ─── Timeline ─────────────────────────────────────────────
+    #renderTimeline(activities) {
+      const timeline = this.#dom.drawerTimeline;
+      if (!timeline) return;
 
+      if (activities && activities.length > 0) {
+        timeline.innerHTML = activities
+          .map(
+            (act) => `
+              <div class="timeline-item">
+                <span>${new Date(act.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                <p>${this.#escapeHtml(act.activity)}</p>
+              </div>
+            `,
+          )
+          .join("");
+      } else {
+        timeline.innerHTML = `<div class="timeline-item"><span>—</span><p>No activity yet</p></div>`;
+      }
+    }
+
+    // ─── Project Status Helpers ──────────────────────────────
     #getProjectStatusInfo(inquiry) {
       if (!inquiry.project) {
         return { label: "No Project", class: "no-project" };
@@ -1006,44 +1230,144 @@
       return { label: this.#getProjectStatusLabel(status), class: status };
     }
 
-    // ─── CRUD Actions ─────────────────────────────────────────
+    // ─── CRUD Actions ──────────────────────────────────────────
+    // inquiries.js - #approveInquiry
 
     async #approveInquiry(id) {
+      console.log("🟢 approveInquiry called with id:", id);
+
+      if (!id) {
+        console.error("❌ No ID provided");
+        this.#showToast("No inquiry selected", true);
+        return;
+      }
+
+      const inquiry = this.#state.inquiries.find((i) => i.id === id);
+      if (!inquiry) {
+        console.error("❌ Inquiry not found in state");
+        this.#showToast("Inquiry not found", true);
+        return;
+      }
+
+      const currentStatus = (inquiry.status || "").toLowerCase();
+      console.log("📌 Current status:", currentStatus);
+
+      // Status yang bisa di-approve: new, under_review, quoted
+      const validStatuses = ["new", "under_review", "quoted"];
+      if (!validStatuses.includes(currentStatus)) {
+        console.warn("⚠️ Invalid status for approval:", currentStatus);
+        this.#showToast(
+          `Cannot approve inquiry with status: ${inquiry.status}`,
+          true,
+        );
+        return;
+      }
+
+      if (!confirm(`Approve inquiry from ${inquiry.customer_name}?`)) {
+        console.log("❌ User cancelled approval");
+        return;
+      }
+
+      const submitBtn =
+        this.#dom.drawerApproveBtn ||
+        document.getElementById("drawerApproveBtn");
+      const originalText = submitBtn?.textContent || "Approve";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Approving...";
+      }
+
       try {
-        await this.#fetchJSON(`${API.INQUIRIES}/${id}/status`, {
+        // 🔥 FIX: Gunakan status "contacted" atau "quoted" yang sudah ada di enum
+        // Atau gunakan "approved" jika sudah ditambahkan ke enum
+        const newStatus = "approved"; // atau "contacted" / "quoted"
+
+        console.log("📤 Sending approve request with status:", newStatus);
+        const response = await this.#fetchJSON(`${API_BASE}/${id}/status`, {
           method: "PATCH",
-          body: JSON.stringify({ status: "approved" }),
+          body: JSON.stringify({
+            status: newStatus,
+            note: "Approved by system",
+          }),
         });
-        this.#showToast("Inquiry approved");
-        await this.#refreshAfterAction(id);
+        console.log("📥 Response:", response);
+
+        if (response?.success !== false) {
+          this.#showToast(`✅ Inquiry from ${inquiry.customer_name} approved!`);
+          await this.#refreshAfterAction(id);
+        } else {
+          throw new Error(response?.message || "Failed to approve inquiry");
+        }
       } catch (err) {
-        this.#showToast("Failed to approve: " + err.message, true);
+        console.error("❌ Approve error:", err);
+        this.#showToast(`❌ ${err.message || "Failed to approve"}`, true);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     }
 
     async #handleQuoteSubmit(e) {
       e.preventDefault();
-      const cost = parseFloat(this.#dom.quoteCost?.value);
-      const revenue = parseFloat(this.#dom.quoteRevenue?.value);
-      if (isNaN(cost) || isNaN(revenue) || cost < 0 || revenue < 0) {
-        this.#showToast("Please enter valid numbers", true);
+
+      const costInput = this.#dom.quoteCost;
+      const notesInput = this.#dom.quoteNotes;
+
+      const cost = parseFloat(costInput?.value);
+      const notes = notesInput?.value.trim() || "";
+
+      if (isNaN(cost) || cost < 0) {
+        this.#showToast("Masukkan estimasi biaya yang valid", true);
         return;
       }
 
       const id = this.#state.currentInquiryId;
+      if (!id) {
+        this.#showToast("No inquiry selected", true);
+        return;
+      }
+
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      const originalText = submitBtn?.textContent || "Send Quote";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Sending...";
+      }
+
       try {
-        await this.#fetchJSON(`${API.INQUIRIES}/${id}/quote`, {
+        // 🔥 Kirim estimated_cost DAN notes sesuai schema InquirySendQuotation
+        const payload = {
+          estimated_cost: cost,
+          notes: notes || undefined, // jika kosong, kirim undefined
+        };
+
+        const response = await this.#fetchJSON(`${API_BASE}/${id}/quote`, {
           method: "POST",
-          body: JSON.stringify({
-            estimated_cost: cost,
-            estimated_revenue: revenue,
-          }),
+          body: JSON.stringify(payload),
         });
-        this.#showToast("Quotation sent");
-        this.#closeQuoteModal();
-        await this.#refreshAfterAction(id);
+
+        if (response?.success !== false) {
+          this.#showToast(
+            `✅ Quotation sent: Rp ${cost.toLocaleString("id-ID")}`,
+          );
+          this.#closeQuoteModal();
+          await this.#refreshAfterAction(id);
+        } else {
+          throw new Error(response?.message || "Failed to send quotation");
+        }
       } catch (err) {
-        this.#showToast("Failed to send quote: " + err.message, true);
+        console.error("Quote error:", err);
+        this.#showToast(
+          `❌ ${err.message || "Failed to send quotation"}`,
+          true,
+        );
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     }
 
@@ -1052,9 +1376,9 @@
       const reason = this.#dom.rejectReason?.value.trim();
       const id = this.#state.currentInquiryId;
       try {
-        await this.#fetchJSON(`${API.INQUIRIES}/${id}/reject`, {
+        await this.#fetchJSON(`${API_BASE}/${id}/reject`, {
           method: "POST",
-          body: JSON.stringify({ reason }),
+          body: JSON.stringify({ reason: reason || "No reason provided" }),
         });
         this.#showToast("Inquiry rejected");
         this.#closeRejectModal();
@@ -1064,16 +1388,16 @@
       }
     }
 
-    #convertInquiry(id) {
-      const inquiry = this.#state.inquiries.find((i) => i.id === id);
-      if (inquiry) {
-        const status = (inquiry.status || "").toLowerCase();
-        if (["converted", "rejected", "completed"].includes(status)) {
-          this.#showToast("Inquiry cannot be converted", true);
-          return;
-        }
+    #openConvertModal(id) {
+      this.#state.currentInquiryId = id;
+      const modal = this.#modals.convert;
+      if (modal) {
+        modal.classList.add("active");
+        document.body.style.overflow = "hidden";
+        if (this.#dom.convertStartDate) this.#dom.convertStartDate.value = "";
+        if (this.#dom.convertTargetDelivery)
+          this.#dom.convertTargetDelivery.value = "";
       }
-      this.#openConvertModal(id);
     }
 
     async #handleConvertSubmit(e) {
@@ -1092,16 +1416,13 @@
       }
 
       try {
-        const response = await this.#fetchJSON(
-          `${API.INQUIRIES}/${id}/convert`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              start_date: startDate,
-              target_delivery: targetDelivery,
-            }),
-          },
-        );
+        const response = await this.#fetchJSON(`${API_BASE}/${id}/convert`, {
+          method: "POST",
+          body: JSON.stringify({
+            project_start_date: startDate,
+            project_target_delivery: targetDelivery,
+          }),
+        });
         if (response?.data?.project_id) {
           this.#showToast(
             `✅ Inquiry converted to project! ID: ${response.data.project_id.slice(0, 8)}`,
@@ -1122,45 +1443,17 @@
       }
     }
 
-    #openWhatsApp(id) {
-      const inquiry = this.#state.inquiries.find((i) => i.id === id);
-      if (!inquiry?.customer_phone_number) {
-        this.#showToast("No phone number available", true);
-        return;
-      }
-
-      let phone = inquiry.customer_phone_number.replace(/\D/g, "");
-      if (!phone.startsWith("62") && phone.startsWith("0")) {
-        phone = "62" + phone.slice(1);
-      } else if (!phone.startsWith("62")) {
-        phone = "62" + phone;
-      }
-      window.open(`https://wa.me/${phone}`, "_blank");
-    }
-
-    async #saveNotes(value) {
-      const id = this.#state.currentInquiryId;
-      if (!id) return;
-      try {
-        await this.#fetchJSON(`${API.INQUIRIES}/${id}/notes`, {
-          method: "PATCH",
-          body: JSON.stringify({ note: value }),
-        });
-      } catch (err) {
-        console.warn("Failed to save notes:", err);
-      }
-    }
-
-    // ─── Modal Controls ──────────────────────────────────────
-
     #openQuoteModal(id) {
       this.#state.currentInquiryId = id;
       const modal = this.#modals.quote;
       if (modal) {
         modal.classList.add("active");
         document.body.style.overflow = "hidden";
+        // Reset form
         if (this.#dom.quoteCost) this.#dom.quoteCost.value = "";
-        if (this.#dom.quoteRevenue) this.#dom.quoteRevenue.value = "";
+        if (this.#dom.quoteNotes) this.#dom.quoteNotes.value = "";
+        // Focus pada cost input
+        setTimeout(() => this.#dom.quoteCost?.focus(), 100);
       }
     }
 
@@ -1192,18 +1485,6 @@
       this.#state.currentInquiryId = null;
     }
 
-    #openConvertModal(id) {
-      this.#state.currentInquiryId = id;
-      const modal = this.#modals.convert;
-      if (modal) {
-        modal.classList.add("active");
-        document.body.style.overflow = "hidden";
-        if (this.#dom.convertStartDate) this.#dom.convertStartDate.value = "";
-        if (this.#dom.convertTargetDelivery)
-          this.#dom.convertTargetDelivery.value = "";
-      }
-    }
-
     #closeConvertModal() {
       const modal = this.#modals.convert;
       if (modal) {
@@ -1213,6 +1494,36 @@
       this.#state.currentInquiryId = null;
     }
 
+    #openWhatsApp(id) {
+      const inquiry = this.#state.inquiries.find((i) => i.id === id);
+      if (!inquiry?.customer_phone_number) {
+        this.#showToast("No phone number available", true);
+        return;
+      }
+
+      let phone = inquiry.customer_phone_number.replace(/\D/g, "");
+      if (!phone.startsWith("62") && phone.startsWith("0")) {
+        phone = "62" + phone.slice(1);
+      } else if (!phone.startsWith("62")) {
+        phone = "62" + phone;
+      }
+      window.open(`https://wa.me/${phone}`, "_blank");
+    }
+
+    async #saveNotes(value) {
+      const id = this.#state.currentInquiryId;
+      if (!id) return;
+      try {
+        await this.#fetchJSON(`${API_BASE}/${id}/notes`, {
+          method: "PATCH",
+          body: JSON.stringify({ note: value }),
+        });
+      } catch (err) {
+        console.warn("Failed to save notes:", err);
+      }
+    }
+
+    // ─── Modal Controls ──────────────────────────────────────
     // ─── Helpers ──────────────────────────────────────────────
 
     #formatCurrency(amount) {
@@ -1238,34 +1549,31 @@
       return PROJECT_STATUS_MAP[status?.toLowerCase()] || status || "—";
     }
 
+    // inquiries.js - #getStatusBadgeClass
+
     #getStatusBadgeClass(status) {
       const s = status?.toLowerCase() || "new";
+      // Tambahkan mapping untuk status yang valid
+      const validStatuses = [
+        "new",
+        "under_review",
+        "contacted",
+        "quoted",
+        "approved",
+        "converted",
+        "rejected",
+        "closed",
+        "completed",
+      ];
+      if (!validStatuses.includes(s)) {
+        return "new"; // fallback
+      }
       return s === "completed" ? "completed" : s;
     }
 
     #setText(elementId, value) {
       const el = this.#dom[elementId];
       if (el) el.textContent = value;
-    }
-
-    #showToast(message, isError = false) {
-      if (typeof window.showToast === "function") {
-        window.showToast(message, isError ? "error" : "success");
-        return;
-      }
-
-      let toast = document.querySelector(".app-toast");
-      if (!toast) {
-        toast = document.createElement("div");
-        toast.className = "app-toast";
-        document.body.appendChild(toast);
-      }
-
-      toast.textContent = message;
-      toast.className = "app-toast" + (isError ? " error" : "");
-      clearTimeout(toast._timeout);
-      requestAnimationFrame(() => toast.classList.add("show"));
-      toast._timeout = setTimeout(() => toast.classList.remove("show"), 3000);
     }
 
     async #refreshAfterAction(id) {
@@ -1280,8 +1588,7 @@
   }
 
   // ─── Instantiate ─────────────────────────────────────────────
-
   document.addEventListener("DOMContentLoaded", () => {
-    new InquiryManager(); // ✅ No external call to private method
+    new InquiryManager();
   });
 })();

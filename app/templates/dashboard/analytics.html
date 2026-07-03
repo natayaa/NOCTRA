@@ -37,24 +37,7 @@
      ============================================================ -->
 <section aria-label="Key insights">
     <div class="insight-grid" id="insightGrid">
-        <div class="insight-card positive">
-            <div class="insight-icon"><i class="fas fa-arrow-up" aria-hidden="true"></i></div>
-            <div class="insight-content">
-                <p>Revenue <strong>+18.2%</strong> vs last period</p>
-            </div>
-        </div>
-        <div class="insight-card warning">
-            <div class="insight-icon"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i></div>
-            <div class="insight-content">
-                <p>8 items <strong>low stock</strong> – reorder soon</p>
-            </div>
-        </div>
-        <div class="insight-card neutral">
-            <div class="insight-icon"><i class="fas fa-chart-pie" aria-hidden="true"></i></div>
-            <div class="insight-content">
-                <p>Top service: <strong>Full Restoration</strong> (38%)</p>
-            </div>
-        </div>
+        <!-- Dynamic content from API -->
     </div>
 </section>
 
@@ -97,8 +80,8 @@
         </div>
     </div>
 
-    <!-- Loading Skeleton (hidden by default) -->
-    <div class="loading-skeleton" id="loadingSkeleton" role="status" aria-label="Loading analytics data">
+    <!-- Loading Skeleton -->
+    <div class="loading-skeleton" id="loadingSkeleton" role="status" aria-label="Loading analytics data" style="display:none;">
         <div class="skeleton-card"></div>
         <div class="skeleton-card"></div>
         <div class="skeleton-card"></div>

@@ -1,3 +1,4 @@
+# repositories/base.py
 from typing import Any, Generic, TypeVar
 
 from sqlalchemy import func, select
