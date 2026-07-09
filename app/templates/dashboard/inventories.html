@@ -1,796 +1,443 @@
 {% extends "base.html" %}
 
-{% block title %}Inquiries | NOCTRA{% endblock %}
+{% block title %}Inventory | NOCTRA{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', path='includes/css/pages/inquiries.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/pages/inventories.css') }}" />
 {% endblock %}
 
-{% block page_title %}Customer Inquiries{% endblock %}
-{% block page_subtitle %}Manage incoming requests and convert them to projects{% endblock %}
+{% block page_title %}Inventory Management{% endblock %}
+{% block page_subtitle %}Track materials, parts, tools, and chemicals stock{% endblock %}
 
 {% block content %}
 
 <!-- ============================================================
      DASHBOARD / OVERVIEW CARDS
      ============================================================ -->
-<div class="inquiry-dashboard">
-    <div class="overview-card">
-        <div class="overview-icon"><i class="ph ph-file-text"></i></div>
-        <div>
-            <span>Total Inquiries</span>
-            <h2 id="totalCount">0</h2>
-            <small>All time</small>
+<div class="inventory-overview">
+    <div class="overview-card value">
+        <div class="overview-icon"><i class="fas fa-wallet"></i></div>
+        <div class="overview-content">
+            <span>Total Value</span>
+            <h2 id="totalValue">Rp 0</h2>
+            <small>All inventory</small>
         </div>
     </div>
-    <div class="overview-card">
-        <div class="overview-icon"><i class="ph ph-newspaper"></i></div>
-        <div>
-            <span>New Requests</span>
-            <h2 id="newCount">0</h2>
-            <small>Awaiting review</small>
+    <div class="overview-card stock">
+        <div class="overview-icon"><i class="fas fa-boxes"></i></div>
+        <div class="overview-content">
+            <span>Total Items</span>
+            <h2 id="totalItems">0</h2>
+            <small>Active stock</small>
         </div>
     </div>
-    <div class="overview-card">
-        <div class="overview-icon"><i class="ph ph-file-text"></i></div>
-        <div>
-            <span>Quoted</span>
-            <h2 id="quotedCount">0</h2>
-            <small>Awaiting approval</small>
+    <div class="overview-card warning">
+        <div class="overview-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="overview-content">
+            <span>Low Stock</span>
+            <h2 id="lowStockCount">0</h2>
+            <small>Need reorder</small>
         </div>
     </div>
-    <div class="overview-card">
-        <div class="overview-icon"><i class="ph ph-check-circle"></i></div>
-        <div>
-            <span>Converted</span>
-            <h2 id="convertedCount">0</h2>
-            <small>Became projects</small>
+    <div class="overview-card usage">
+        <div class="overview-icon"><i class="fas fa-chart-line"></i></div>
+        <div class="overview-content">
+            <span>Monthly Usage</span>
+            <h2 id="monthlyUsage">Rp 0</h2>
+            <small>Last 30 days</small>
         </div>
     </div>
 </div>
 
 <!-- ============================================================
-     TOOLBAR
+     ALERTS
      ============================================================ -->
-<section class="inquiries-toolbar glass">
-    <div class="toolbar-left">
-        <div class="search-box">
-            <i class="ph ph-magnifying-glass"></i>
-            <input type="search" id="searchInquiry" placeholder="Search customer, vehicle, or phone..." />
-        </div>
-        <select id="statusFilter">
-            <option value="">All Status</option>
-            <option value="new">New</option>
-            <option value="under_review">Under Review</option>
-            <option value="contacted">Contacted</option>
-            <option value="quoted">Quoted</option>
-            <option value="approved">Approved</option>
-            <option value="converted">Converted</option>
-            <option value="rejected">Rejected</option>
-            <option value="closed">Closed</option>
-            <option value="completed">Completed</option>
-            <option value="has_project">Has Project</option>
-            <option value="no_project">No Project</option>
-            <option value="project_completed">Project Completed</option>
-        </select>
-    </div>
-    <div class="toolbar-right">
-        <button class="btn-secondary" id="exportInquiriesBtn">
-            <i class="ph ph-file-arrow-down"></i> Export
+<div class="inventory-alerts">
+    <div class="section-header">
+        <h3><i class="fas fa-bell"></i> Stock Alerts</h3>
+        <button class="btn-secondary btn-sm" id="refreshAlertsBtn">
+            <i class="fas fa-rotate"></i> Refresh
         </button>
     </div>
-</section>
-
-<!-- ============================================================
-     TABLE
-     ============================================================ -->
-<section class="table-wrapper">
-    <div class="table-container">
-        <table id="inquiriesTable">
-            <thead>
-                <tr>
-                    <th>Customer</th>
-                    <th>Vehicle</th>
-                    <th>Project Type</th>
-                    <th>Status</th>
-                    <th>Project Status</th>
-                    <th>Created</th>
-                    <th style="text-align:center;">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="inquiriesBody">
-                <tr><td colspan="7" class="loading-placeholder">Loading inquiries...</td></tr>
-            </tbody>
-        </table>
-    </div>
-    <div class="table-pagination">
-        <button class="page-btn" id="prevPage" disabled>Prev</button>
-        <span id="pageInfo">Page 1 of 1</span>
-        <button class="page-btn" id="nextPage" disabled>Next</button>
-    </div>
-</section>
-
-<!-- ============================================================
-     DRAWER (Detail) - FULL VERSION
-     ============================================================ -->
-<aside class="drawer" id="inquiryDrawer">
-    <div class="drawer-header">
-        <div>
-            <h2 id="drawerCustomerName">Customer Name</h2>
-            <span id="drawerStatusBadge" class="status-badge">New</span>
-        </div>
-        <button id="closeDrawer">×</button>
-    </div>
-
-    <div class="drawer-content">
-
-        <!-- Customer Info -->
-        <section class="detail-card">
-            <h3>Customer</h3>
-            <div class="detail-grid">
-                <div class="detail-item"><label>Name</label><p id="drawerName">-</p></div>
-                <div class="detail-item"><label>Phone</label><p id="drawerPhone">-</p></div>
-                <div class="detail-item"><label>Email</label><p id="drawerEmail">-</p></div>
-                <div class="detail-item"><label>Province</label><p id="drawerProvince">-</p></div>
-                <div class="detail-item"><label>City</label><p id="drawerCity">-</p></div>
-            </div>
-        </section>
-
-        <!-- Vehicle & Project -->
-        <section class="detail-card">
-            <h3>Vehicle &amp; Project</h3>
-            <div class="detail-grid">
-                <div class="detail-item"><label>Brand</label><p id="drawerBrand">-</p></div>
-                <div class="detail-item"><label>Model</label><p id="drawerModel">-</p></div>
-                <div class="detail-item"><label>Year</label><p id="drawerYear">-</p></div>
-                <div class="detail-item"><label>License Plate</label><p id="drawerPlate">-</p></div>
-                <div class="detail-item"><label>Previous Repaint</label><p id="drawerPrevRepaint">-</p></div>
-                <div class="detail-item"><label>Bike Modified</label><p id="drawerBikeModified">-</p></div>
-                <div class="detail-item"><label>Condition</label><p id="drawerCondition">-</p></div>
-                <div class="detail-item"><label>Project Type</label><p id="drawerType">-</p></div>
-                <div class="detail-item"><label>Services</label><p id="drawerServices">-</p></div>
-                <div class="detail-item"><label>Desired Finish</label><p id="drawerFinish">-</p></div>
-                <div class="detail-item"><label>Desired Color</label><p id="drawerColor">-</p></div>
-                <div class="detail-item"><label>Estimated Budget</label><p id="drawerBudget">-</p></div>
-                <div class="detail-item"><label>Deadline</label><p id="drawerDeadline">-</p></div>
-                <div class="detail-item"><label>Priority</label><p id="drawerPriority">-</p></div>
-            </div>
-        </section>
-
-        <!-- Requirements -->
-        <section class="detail-card">
-            <h3>Requirements</h3>
-            <div class="request-box" id="drawerDescription">No description provided.</div>
-            <div style="margin-top: 12px;">
-                <a href="#" id="drawerReference" target="_blank">🔗 View Reference Link</a>
-            </div>
-        </section>
-
-        <!-- Financial Summary -->
-        <section class="detail-card" id="drawerFinancialSection">
-            <h3>Financial Summary</h3>
-            <div class="financial-summary-grid">
-                <div class="financial-summary-item">
-                    <span class="label">Estimated Cost</span>
-                    <span class="value" id="drawerEstCost">-</span>
-                </div>
-                <div class="financial-summary-item">
-                    <span class="label">Actual Cost</span>
-                    <span class="value" id="drawerActualCost">-</span>
-                </div>
-                <div class="financial-summary-item">
-                    <span class="label">Estimated Revenue</span>
-                    <span class="value" id="drawerEstRevenue">-</span>
-                </div>
-                <div class="financial-summary-item">
-                    <span class="label">Actual Revenue</span>
-                    <span class="value" id="drawerActualRevenue">-</span>
-                </div>
-                <div class="financial-summary-item">
-                    <span class="label">Deposit Amount</span>
-                    <span class="value" id="drawerDeposit">-</span>
-                </div>
-                <div class="financial-summary-item">
-                    <span class="label">Deposit Status</span>
-                    <span class="value" id="drawerDepositStatus">-</span>
-                </div>
-                <div class="financial-summary-item highlight">
-                    <span class="label">Profit / Loss</span>
-                    <span class="value" id="drawerProfit">-</span>
-                </div>
-                <div class="financial-summary-item highlight">
-                    <span class="label">Margin</span>
-                    <span class="value" id="drawerMargin">-</span>
-                </div>
-            </div>
-
-            <!-- Cost Breakdown -->
-            <div class="financial-breakdown">
-                <h4>Cost Breakdown</h4>
-                <div class="breakdown-grid">
-                    <div class="breakdown-item">
-                        <span class="label">Material Cost</span>
-                        <span class="value" id="drawerMaterialCost">-</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span class="label">Labor Cost</span>
-                        <span class="value" id="drawerLaborCost">-</span>
-                    </div>
-                    <div class="breakdown-item">
-                        <span class="label">Other Expenses</span>
-                        <span class="value" id="drawerOtherExpenses">-</span>
-                    </div>
-                    <div class="breakdown-item total">
-                        <span class="label">Total Cost</span>
-                        <span class="value" id="drawerTotalCost">-</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Budget Progress -->
-            <div class="budget-progress">
-                <div class="budget-progress-header">
-                    <span>Budget Usage</span>
-                    <span id="budgetPercentage">0%</span>
-                </div>
-                <div class="budget-progress-bar">
-                    <div class="budget-progress-fill" id="budgetProgressFill" style="width:0%;"></div>
-                </div>
-                <div class="budget-progress-labels">
-                    <span>Rp 0</span>
-                    <span>Rp 0</span>
-                </div>
-            </div>
-        </section>
-
-        <!-- Labor Items -->
-        <section class="detail-card" id="drawerLaborSection">
-            <h3>Labor Items</h3>
-            <div id="drawerLaborItems">
-                <p class="no-data">No labor items</p>
-            </div>
-        </section>
-
-        <!-- Material Usages -->
-        <section class="detail-card" id="drawerMaterialSection">
-            <h3>Material Usage</h3>
-            <div id="drawerMaterialUsages">
-                <p class="no-data">No material usage</p>
-            </div>
-        </section>
-
-        <!-- Payment Summary -->
-        <section class="detail-card" id="drawerPaymentSection">
-            <h3>Payment Summary</h3>
-            <div class="payment-summary-grid">
-                <div class="payment-item">
-                    <span class="label">Total Deposit</span>
-                    <span class="value" id="drawerTotalDeposit">Rp 0</span>
-                </div>
-                <div class="payment-item">
-                    <span class="label">Total Paid</span>
-                    <span class="value" id="drawerTotalPaid">Rp 0</span>
-                </div>
-                <div class="payment-item">
-                    <span class="label">Pending</span>
-                    <span class="value" id="drawerTotalPending">Rp 0</span>
-                </div>
-                <div class="payment-item highlight">
-                    <span class="label">Remaining</span>
-                    <span class="value" id="drawerRemaining">Rp 0</span>
-                </div>
-            </div>
-
-            <div class="payment-actions">
-                <button class="btn-success" id="addDepositBtn"><i class="ph ph-plus"></i> Add Deposit</button>
-                <button class="btn-primary" id="addPaymentBtn"><i class="ph ph-plus"></i> Add Payment</button>
-                <button class="btn-secondary" id="viewInvoicesBtn"><i class="ph ph-file-text"></i> Invoices</button>
-            </div>
-
-            <!-- Payment History -->
-            <div class="payment-history">
-                <h4>Payment History</h4>
-                <div id="drawerPaymentHistory">
-                    <p class="no-data">No payments recorded</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Timeline -->
-        <section class="detail-card">
-            <h3>Activity Timeline</h3>
-            <div class="timeline" id="drawerTimeline">
-                <div class="timeline-item"><span>—</span><p>No activity yet</p></div>
-            </div>
-        </section>
-
-        <!-- Notes -->
-        <section class="detail-card">
-            <h3>Internal Notes</h3>
-            <textarea id="drawerNotes" rows="5" placeholder="Add internal notes…"></textarea>
-            <div style="text-align:right; font-size:0.8rem; color:var(--muted); margin-top:4px;">
-                <span id="noteCounter">0</span> / 500
-            </div>
-        </section>
-
-        <!-- Before & After -->
-        <section class="detail-card" id="drawerBeforeAfterSection">
-            <h3>Before &amp; After</h3>
-            <div class="before-after-grid">
-                <div class="ba-column">
-                    <h4>Before</h4>
-                    <div class="carousel-container" id="drawerBeforeCarousel">
-                        <div class="carousel-track" id="beforeTrack"></div>
-                        <button class="carousel-btn prev" data-carousel="before">‹</button>
-                        <button class="carousel-btn next" data-carousel="before">›</button>
-                    </div>
-                </div>
-                <div class="ba-column">
-                    <h4>After</h4>
-                    <div class="carousel-container" id="drawerAfterCarousel">
-                        <div class="carousel-track" id="afterTrack"></div>
-                        <button class="carousel-btn prev" data-carousel="after">‹</button>
-                        <button class="carousel-btn next" data-carousel="after">›</button>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Actions -->
-        <section class="detail-card">
-            <h3>Actions</h3>
-            <div class="action-section">
-                <button class="btn-success" id="drawerApproveBtn">Approve</button>
-                <button class="btn-primary" id="drawerQuoteBtn">Send Quote</button>
-                <button class="btn-danger" id="drawerRejectBtn">Reject</button>
-                <button class="btn-secondary" id="drawerWhatsappBtn">WhatsApp</button>
-                <button class="btn-primary" id="drawerConvertBtn">Convert to Project</button>
-                <a href="#" id="drawerViewProjectBtn" class="btn-secondary" style="display:none;">View Project</a>
-            </div>
-        </section>
-    </div>
-</aside>
-
-<!-- ============================================================
-     MODAL: Convert to Project
-     ============================================================ -->
-<div class="modal-overlay" id="convertModal">
-    <div class="modal modal-md">
-        <div class="modal-header">
-            <div>
-                <h2>Convert to Project</h2>
-                <p>Set project start date and target delivery</p>
-            </div>
-            <button id="closeConvertModal">×</button>
-        </div>
-        <form id="convertForm">
-            <div class="form-group">
-                <label for="convertStartDate">Start Date</label>
-                <input type="date" id="convertStartDate" />
-            </div>
-            <div class="form-group">
-                <label for="convertTargetDelivery">Target Delivery</label>
-                <input type="date" id="convertTargetDelivery" />
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn-secondary" id="cancelConvertBtn">Cancel</button>
-                <button type="submit" class="btn-primary">Convert</button>
-            </div>
-        </form>
+    <div class="alert-list" id="alertList">
+        <div class="loading-placeholder-sm">Loading alerts...</div>
     </div>
 </div>
 
 <!-- ============================================================
-     MODAL: Send Quotation
+     MAIN LAYOUT
      ============================================================ -->
-<div class="modal-overlay" id="quoteModal">
-    <div class="modal modal-sm">
-        <div class="modal-header">
-            <div>
-                <h2>Send Quotation</h2>
-                <p>Enter estimated cost and notes</p>
+<div class="inventory-layout">
+    <!-- Sidebar -->
+    <aside class="inventory-sidebar">
+        <!-- Search -->
+        <div class="sidebar-card">
+            <h4>Search</h4>
+            <div class="search-bar">
+                <input type="text" id="searchInventory" placeholder="Search items..." />
+                <i class="fas fa-search"></i>
             </div>
-            <button id="closeQuoteModal">×</button>
         </div>
-        <form id="quoteForm">
-            <div class="form-group">
-                <label for="quoteCost">Estimated Cost (Rp) *</label>
-                <input type="number" id="quoteCost" step="1000" min="0" placeholder="e.g. 5000000" required />
+
+        <!-- Filters -->
+        <div class="sidebar-card">
+            <h4>Filters</h4>
+            <div class="filter-group">
+                <select id="categoryFilter" class="filter-select">
+                    <option value="">All Categories</option>
+                </select>
+                <select id="stockFilter" class="filter-select">
+                    <option value="">All Stock</option>
+                    <option value="normal">Normal</option>
+                    <option value="low">Low Stock</option>
+                    <option value="critical">Critical</option>
+                    <option value="out">Out of Stock</option>
+                </select>
+                <select id="statusFilter" class="filter-select">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="out_of_stock">Out of Stock</option>
+                </select>
             </div>
-            <div class="form-group">
-                <label for="quoteNotes">Notes (Optional)</label>
-                <textarea id="quoteNotes" rows="4" placeholder="Add quotation notes, breakdown, or special conditions..."></textarea>
+        </div>
+
+        <!-- Categories -->
+        <div class="sidebar-card">
+            <h4>Categories</h4>
+            <div class="category-list" id="categoryList">
+                <div class="loading-placeholder-sm">Loading categories...</div>
             </div>
-            <div class="modal-actions">
-                <button type="button" class="btn-secondary" id="cancelQuoteBtn">Cancel</button>
-                <button type="submit" class="btn-primary">Send Quote</button>
+        </div>
+
+        <!-- Recent Movements -->
+        <div class="sidebar-card">
+            <h4>Recent Movements</h4>
+            <div class="movement-list" id="recentMovements">
+                <div class="loading-placeholder-sm">Loading movements...</div>
             </div>
-        </form>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="inventory-content">
+        <!-- Table Header -->
+        <div class="content-header">
+            <div>
+                <h3>Inventory Items</h3>
+                <p>Manage all inventory items and stock levels</p>
+            </div>
+            <div class="content-actions">
+                <button class="btn-secondary" id="exportInventoryBtn">
+                    <i class="fas fa-file-export"></i> Export
+                </button>
+                <button class="btn-add-item" id="addItemBtn">
+                    <i class="fas fa-plus"></i> Add Item
+                </button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="inventory-table-wrapper">
+            <table class="inventory-table">
+                <thead>
+                    <tr>
+                        <th>Item Name</th>
+                        <th>Category</th>
+                        <th>Stock</th>
+                        <th>Unit</th>
+                        <th>Status</th>
+                        <th>Value</th>
+                        <th style="text-align:center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryItemsList">
+                    <tr><td colspan="7" class="loading-placeholder">Loading inventory...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-container">
+            <button class="pagination-btn" id="prevPageBtn" disabled>
+                <i class="fas fa-chevron-left"></i> Previous
+            </button>
+            <span id="pageInfo">Page 1 of 1</span>
+            <button class="pagination-btn" id="nextPageBtn" disabled>
+                Next <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+
+        <!-- Detail Panel -->
+        <div class="item-detail-panel">
+            <div class="detail-header">
+                <h3><i class="fas fa-info-circle"></i> Item Details</h3>
+                <div class="detail-actions">
+                    <button class="action-icon edit-item" id="editItemBtn" title="Edit Item" style="display:none;">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="action-icon delete-item" id="deleteItemBtn" title="Delete Item" style="display:none;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="detail-content" id="itemDetailContent">
+                <div class="empty-state">
+                    <i class="fas fa-box-open"></i>
+                    <h4>No Item Selected</h4>
+                    <p>Select an inventory item from the table to view detailed information.</p>
+                </div>
+            </div>
+            <div class="detail-actions-bottom" id="detailActionsBottom" style="display:none;">
+                <button class="btn btn-reorder" id="reorderBtn">
+                    <i class="fas fa-shopping-cart"></i> Reorder
+                </button>
+                <button class="btn btn-history" id="historyBtn">
+                    <i class="fas fa-clock-rotate-left"></i> History
+                </button>
+                <button class="btn btn-adjust" id="adjustStockBtn">
+                    <i class="fas fa-pencil"></i> Adjust Stock
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
 <!-- ============================================================
-     MODAL: Reject
+     MODAL: Create/Edit Item
      ============================================================ -->
-<div class="modal-overlay" id="rejectModal">
-    <div class="modal modal-sm">
-        <div class="modal-header">
-            <div>
-                <h2>Reject Inquiry</h2>
-                <p>Provide a reason (optional)</p>
-            </div>
-            <button id="closeRejectModal">×</button>
-        </div>
-        <form id="rejectForm">
-            <div class="form-group">
-                <label for="rejectReason">Reason</label>
-                <textarea id="rejectReason" rows="4" placeholder="Why is this inquiry being rejected?"></textarea>
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn-secondary" id="cancelRejectBtn">Cancel</button>
-                <button type="submit" class="btn-danger">Reject</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ============================================================
-     ✅ MODAL: Add Payment (BARU)
-     ============================================================ -->
-<div class="modal-overlay" id="paymentModal">
-    <div class="modal modal-md">
-        <div class="modal-header">
-            <div>
-                <h2>Add Payment</h2>
-                <p>Record a new payment transaction</p>
-            </div>
-            <button id="closePaymentModal">&times;</button>
-        </div>
-        <form id="paymentForm">
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>Inquiry ID *</label>
-                    <input type="text" id="paymentInquiryId" placeholder="Inquiry UUID" required />
-                    <small style="color:var(--text-muted);font-size:0.7rem;">Required for linking payment</small>
-                </div>
-                <div class="form-group">
-                    <label>Project ID (optional)</label>
-                    <input type="text" id="paymentProjectId" placeholder="Project UUID" />
-                </div>
-                <div class="form-group">
-                    <label>Payment Type *</label>
-                    <select id="paymentType" required>
-                        <option value="deposit">Deposit</option>
-                        <option value="payment">Payment</option>
-                        <option value="refund">Refund</option>
-                        <option value="installment">Installment</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Amount *</label>
-                    <input type="number" id="paymentAmount" step="1000" min="0" placeholder="e.g. 5000000" required />
-                </div>
-                <div class="form-group">
-                    <label>Payment Method *</label>
-                    <select id="paymentMethod" required>
-                        <option value="bank_transfer">Bank Transfer</option>
-                        <option value="cash">Cash</option>
-                        <option value="credit_card">Credit Card</option>
-                        <option value="e_wallet">E-Wallet</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Reference Number</label>
-                    <input type="text" id="paymentReference" placeholder="e.g. TRX-001" />
-                </div>
-                <div class="form-group">
-                    <label>Payment Date</label>
-                    <input type="date" id="paymentDate" />
-                </div>
-                <div class="form-group">
-                    <label>Due Date</label>
-                    <input type="date" id="paymentDueDate" />
-                </div>
-                <div class="form-group full-width">
-                    <label>Notes</label>
-                    <textarea id="paymentNotes" rows="3" placeholder="Additional notes..."></textarea>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn-secondary" id="cancelPaymentBtn">Cancel</button>
-                <button type="submit" class="btn-primary">Save Payment</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ============================================================
-     ✅ MODAL: Create Invoice (BARU)
-     ============================================================ -->
-<div class="modal-overlay" id="invoiceModal">
+<div class="modal-overlay" id="inventoryModal">
     <div class="modal modal-lg">
         <div class="modal-header">
             <div>
-                <h2>Create Invoice</h2>
-                <p>Generate a new invoice for a customer</p>
+                <h2 id="modalTitle">Add Inventory Item</h2>
+                <p id="modalSubtitle">Create a new inventory item</p>
             </div>
-            <button id="closeInvoiceModal">&times;</button>
+            <button id="closeInventoryModal">&times;</button>
         </div>
-        <form id="invoiceForm">
+        <form id="inventoryForm">
+            <input type="hidden" id="editId" value="" />
             <div class="form-grid">
-                <!-- Invoice Header -->
                 <div class="form-group">
-                    <label>Inquiry ID *</label>
-                    <input type="text" id="invoiceInquiryId" placeholder="Inquiry UUID" required />
+                    <label for="itemName">Item Name *</label>
+                    <input type="text" id="itemName" required placeholder="e.g. Epoxy Primer" />
                 </div>
                 <div class="form-group">
-                    <label>Project ID (optional)</label>
-                    <input type="text" id="invoiceProjectId" placeholder="Project UUID" />
+                    <label for="itemCategory">Category *</label>
+                    <input type="text" id="itemCategory" required placeholder="e.g. Paint, Material" list="categoryOptions" />
+                    <datalist id="categoryOptions">
+                        <option value="paint">
+                        <option value="material">
+                        <option value="tool">
+                        <option value="chemical">
+                        <option value="accessory">
+                        <option value="part">
+                    </datalist>
                 </div>
                 <div class="form-group">
-                    <label>Invoice Number *</label>
-                    <input type="text" id="invoiceNumber" placeholder="e.g. INV-2024-001" required />
-                    <small style="color:var(--text-muted);font-size:0.7rem;">Auto-generate available</small>
+                    <label for="itemSubCategory">Sub Category</label>
+                    <input type="text" id="itemSubCategory" placeholder="e.g. Primer, Clear Coat" />
                 </div>
                 <div class="form-group">
-                    <label>Payment Terms</label>
-                    <input type="text" id="invoicePaymentTerms" placeholder="e.g. Net 30" />
+                    <label for="itemUnit">Unit *</label>
+                    <select id="itemUnit" required>
+                        <option value="">Select Unit</option>
+                        <option value="pcs">PCS</option>
+                        <option value="liter">Liter</option>
+                        <option value="ml">ml</option>
+                        <option value="kg">KG</option>
+                        <option value="gram">Gram</option>
+                        <option value="meter">Meter</option>
+                        <option value="roll">Roll</option>
+                        <option value="set">Set</option>
+                        <option value="box">Box</option>
+                        <option value="pack">Pack</option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label>Invoice Date</label>
-                    <input type="date" id="invoiceDate" />
+                    <label for="itemStock">Current Stock</label>
+                    <input type="number" id="itemStock" step="0.1" min="0" value="0" placeholder="0" />
                 </div>
                 <div class="form-group">
-                    <label>Due Date</label>
-                    <input type="date" id="invoiceDueDate" />
+                    <label for="reorderLevel">Reorder Level</label>
+                    <input type="number" id="reorderLevel" step="1" min="0" value="5" placeholder="5" />
+                </div>
+                <div class="form-group">
+                    <label for="itemCost">Cost Price (Rp)</label>
+                    <input type="number" id="itemCost" step="10" min="0" placeholder="e.g. 50000" />
+                </div>
+                <div class="form-group">
+                    <label for="itemSellingPrice">Selling Price (Rp)</label>
+                    <input type="number" id="itemSellingPrice" step="10" min="0" placeholder="e.g. 75000" />
+                </div>
+                <div class="form-group">
+                    <label for="itemSku">SKU</label>
+                    <input type="text" id="itemSku" placeholder="e.g. PAINT-001" />
+                </div>
+                <div class="form-group">
+                    <label for="itemBarcode">Barcode</label>
+                    <input type="text" id="itemBarcode" placeholder="e.g. 1234567890" />
+                </div>
+                <div class="form-group">
+                    <label for="itemLocation">Location</label>
+                    <input type="text" id="itemLocation" placeholder="e.g. Shelf A-1, Rack 3" />
+                </div>
+                <div class="form-group">
+                    <label for="itemSupplier">Supplier</label>
+                    <select id="itemSupplier">
+                        <option value="">Select Supplier</option>
+                    </select>
                 </div>
                 <div class="form-group full-width">
-                    <label>Notes</label>
-                    <textarea id="invoiceNotes" rows="3" placeholder="Invoice notes..."></textarea>
-                </div>
-
-                <!-- Invoice Items -->
-                <div class="form-group full-width">
-                    <label>Invoice Items</label>
-                    <div id="invoiceItemsContainer">
-                        <div class="invoice-item-row">
-                            <input type="text" class="item-description" placeholder="Description *" />
-                            <input type="number" class="item-quantity" placeholder="Qty" value="1" min="1" />
-                            <input type="text" class="item-unit" placeholder="Unit" />
-                            <input type="number" class="item-unit-price" placeholder="Unit Price *" step="1000" min="0" />
-                            <button type="button" class="btn-danger btn-sm remove-item-btn" title="Remove item">&times;</button>
-                        </div>
-                    </div>
-                    <button type="button" class="btn-secondary btn-sm" id="addInvoiceItemBtn">
-                        <i class="ph ph-plus"></i> Add Item
-                    </button>
-                </div>
-
-                <!-- Invoice Summary -->
-                <div class="form-group full-width" style="background:var(--bg-input);padding:0.75rem 1rem;border-radius:var(--radius-sm);">
-                    <div style="display:flex;justify-content:space-between;font-weight:600;padding:0.25rem 0;">
-                        <span>Subtotal:</span>
-                        <span id="invoiceSubtotal">Rp 0</span>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;font-weight:700;font-size:1.1rem;padding:0.25rem 0;border-top:1px solid var(--border);">
-                        <span>Total:</span>
-                        <span id="invoiceTotal">Rp 0</span>
-                    </div>
+                    <label for="itemDescription">Description</label>
+                    <textarea id="itemDescription" rows="3" placeholder="Additional details about this item..."></textarea>
                 </div>
             </div>
             <div class="modal-actions">
-                <button type="button" class="btn-secondary" id="cancelInvoiceBtn">Cancel</button>
-                <button type="submit" class="btn-success">Create Invoice</button>
+                <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+                <button type="submit" class="btn-primary" id="submitBtn">Create Item</button>
             </div>
         </form>
     </div>
 </div>
 
 <!-- ============================================================
-     LIGHTBOX
+     MODAL: Stock Adjust
      ============================================================ -->
-<div class="lightbox-overlay" id="lightboxOverlay" style="display:none;">
-    <button class="lightbox-close" id="lightboxClose">&times;</button>
-    <button class="lightbox-prev" id="lightboxPrev">&#10094;</button>
-    <button class="lightbox-next" id="lightboxNext">&#10095;</button>
-    <div class="lightbox-content">
-        <img id="lightboxImage" src="" alt="Full size photo" />
+<div class="modal-overlay" id="stockAdjustModal">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <div>
+                <h2>Adjust Stock</h2>
+                <p>Update stock quantity for selected item</p>
+            </div>
+            <button id="closeStockAdjustModal">&times;</button>
+        </div>
+        <form id="stockAdjustForm">
+            <input type="hidden" id="adjustItemId" value="" />
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label>Current Stock</label>
+                    <p id="adjustCurrentStock" style="font-size:1.2rem;font-weight:700;color:var(--text-primary);">0</p>
+                </div>
+                <div class="form-group full-width">
+                    <label for="adjustNewStock">New Stock *</label>
+                    <input type="number" id="adjustNewStock" step="0.1" min="0" required placeholder="Enter new stock quantity" />
+                </div>
+                <div class="form-group full-width">
+                    <label for="adjustReasonSelect">Reason *</label>
+                    <select id="adjustReasonSelect" required>
+                        <option value="">Select Reason</option>
+                        <option value="stock_in">Stock In (Purchase)</option>
+                        <option value="stock_out">Stock Out (Usage)</option>
+                        <option value="adjustment">Manual Adjustment</option>
+                        <option value="return">Return</option>
+                        <option value="waste">Waste / Damaged</option>
+                    </select>
+                </div>
+                <div class="form-group full-width">
+                    <label for="adjustNotes">Notes</label>
+                    <textarea id="adjustNotes" rows="3" placeholder="Additional notes..."></textarea>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelStockAdjustBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Update Stock</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: History
+     ============================================================ -->
+<div class="modal-overlay" id="historyModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <div>
+                <h2>Movement History</h2>
+                <p>Stock movements for <strong id="historyItemName">Item</strong></p>
+            </div>
+            <button id="closeHistoryModal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Quantity</th>
+                            <th>Previous</th>
+                            <th>New</th>
+                            <th>By</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                        <tr><td colspan="6" class="loading-placeholder">Loading history...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="closeHistoryModalBtn">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Reorder
+     ============================================================ -->
+<div class="modal-overlay" id="reorderModal">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <div>
+                <h2>Create Purchase Order</h2>
+                <p>Reorder <strong id="reorderItemName">Item</strong></p>
+            </div>
+            <button id="closeReorderModal">&times;</button>
+        </div>
+        <form id="reorderForm">
+            <input type="hidden" id="reorderItemId" value="" />
+            <div class="form-grid">
+                <div class="form-group full-width">
+                    <label>Current Stock</label>
+                    <p id="reorderCurrentStock" style="font-size:1.2rem;font-weight:700;color:var(--text-primary);">0</p>
+                </div>
+                <div class="form-group full-width">
+                    <label>Reorder Level</label>
+                    <p id="reorderThreshold" style="color:var(--text-secondary);">5</p>
+                </div>
+                <div class="form-group full-width">
+                    <label for="reorderQuantity">Quantity to Order *</label>
+                    <input type="number" id="reorderQuantity" step="1" min="1" required placeholder="e.g. 10" />
+                </div>
+                <div class="form-group full-width">
+                    <label for="reorderSupplier">Supplier</label>
+                    <select id="reorderSupplier">
+                        <option value="">Select Supplier</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelReorderBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Create Purchase Order</button>
+            </div>
+        </form>
     </div>
 </div>
 
 <!-- Toast -->
 <div id="toastContainer"></div>
 
-<!-- ============================================================
-     STYLES TAMBAHAN UNTUK MODAL PAYMENT
-     ============================================================ -->
-<style>
-    /* Payment Modal Styles */
-    .modal-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(4px);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-    }
-    .modal-overlay.active {
-        display: flex;
-    }
-    .modal {
-        background: var(--bg-body);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        max-width: 90vw;
-        width: 100%;
-        max-height: 90vh;
-        overflow-y: auto;
-        padding: 0;
-    }
-    .modal-md { max-width: 640px; }
-    .modal-lg { max-width: 820px; }
-    .modal-sm { max-width: 480px; }
-    
-    .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        padding: 1.25rem 1.5rem 1rem;
-        border-bottom: 1px solid var(--border);
-        position: sticky;
-        top: 0;
-        background: var(--bg-body);
-        z-index: 1;
-        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    }
-    .modal-header h2 {
-        font-size: 1.2rem;
-        margin: 0 0 0.25rem;
-        font-weight: 700;
-    }
-    .modal-header p {
-        color: var(--text-muted);
-        font-size: 0.85rem;
-        margin: 0;
-    }
-    .modal-header button {
-        width: 36px;
-        height: 36px;
-        border: none;
-        border-radius: var(--radius-md);
-        background: transparent;
-        color: var(--text-secondary);
-        font-size: 1.3rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .modal-header button:hover {
-        background: var(--bg-input);
-        color: var(--text-primary);
-    }
-
-    .modal .form-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-        padding: 1.25rem 1.5rem;
-    }
-    .modal .form-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.3rem;
-    }
-    .modal .form-group label {
-        font-size: 0.8rem;
-        font-weight: 500;
-        color: var(--text-secondary);
-    }
-    .modal .form-group input,
-    .modal .form-group select,
-    .modal .form-group textarea {
-        padding: 0.5rem 0.75rem;
-        background: var(--bg-input);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        color: var(--text-primary);
-        font-size: 0.85rem;
-        font-family: inherit;
-        outline: none;
-        transition: all 0.2s ease;
-        width: 100%;
-    }
-    .modal .form-group input:focus,
-    .modal .form-group select:focus,
-    .modal .form-group textarea:focus {
-        border-color: var(--primary);
-        box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.06);
-        background: var(--bg-input-hover);
-    }
-    .modal .form-group .full-width {
-        grid-column: span 2;
-    }
-
-    .modal-actions {
-        display: flex;
-        gap: 0.75rem;
-        justify-content: flex-end;
-        padding: 1rem 1.5rem 1.5rem;
-        border-top: 1px solid var(--border);
-    }
-
-    /* Invoice item row */
-    .invoice-item-row {
-        display: grid;
-        grid-template-columns: 2fr 0.8fr 0.8fr 1fr auto;
-        gap: 0.5rem;
-        align-items: center;
-        margin-bottom: 0.5rem;
-    }
-    .invoice-item-row input {
-        padding: 0.35rem 0.6rem;
-        background: var(--bg-input);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        color: var(--text-primary);
-        font-size: 0.85rem;
-        outline: none;
-        transition: all 0.2s ease;
-        width: 100%;
-    }
-    .invoice-item-row input:focus {
-        border-color: var(--primary);
-        box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.06);
-    }
-    .invoice-item-row .remove-item-btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 1rem;
-    }
-
-    @media (max-width: 768px) {
-        .modal .form-grid {
-            grid-template-columns: 1fr;
-        }
-        .modal .form-group .full-width {
-            grid-column: span 1;
-        }
-        .invoice-item-row {
-            grid-template-columns: 1fr 1fr;
-        }
-        .invoice-item-row .remove-item-btn {
-            grid-column: span 2;
-        }
-        .modal-lg, .modal-md {
-            max-width: 95vw;
-        }
-        .modal-actions {
-            flex-direction: column;
-        }
-        .modal-actions button {
-            width: 100%;
-            justify-content: center;
-        }
-    }
-
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-</style>
-
 {% endblock %}
 
 {% block extra_js %}
-<script type="module"> 
-    import { initInquiries } from "{{ url_for('static', path='includes/js/pages/inquiries/index.js') }}"
-
+<script type="module">
+    import { initInventory } from "{{ url_for('static', path='includes/js/pages/inventories/index.js') }}";
+    
     document.addEventListener('DOMContentLoaded', () => {
-        initInquiries();
+        initInventory();
     });
 </script>
 {% endblock %}

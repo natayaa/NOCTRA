@@ -35,55 +35,48 @@ export async function loadPriceItems() {
     const body = DOM.priceTableBody();
     if (body) {
       body.innerHTML = `
-                <tr>
-                    <td colspan="8" class="no-data">
-                        <i class="fas fa-exclamation-triangle" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
-                        Failed to load price items. Please try again.
-                        <br><br>
-                        <button class="btn-primary" onclick="window.loadPriceItems()">
-                            <i class="fas fa-rotate"></i> Retry
-                        </button>
-                    </td>
-                </tr>
-            `;
+        <tr>
+          <td colspan="8" class="no-data">
+            <i class="fas fa-exclamation-triangle" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
+            Failed to load price items. Please try again.
+            <br><br>
+            <button class="btn-primary" onclick="window.loadPriceItems()">
+              <i class="fas fa-rotate"></i> Retry
+            </button>
+          </td>
+        </tr>
+      `;
     }
     updatePagination(1, 1, 0);
     return;
   }
 
-  // Handle different response structures
+  // ✅ Response dari backend: { items, total, page, page_size, total_pages }
   let items = [];
   let totalPages = 1;
   let totalItems = 0;
 
-  if (data.data) {
-    items = Array.isArray(data.data) ? data.data : [data.data];
-    totalItems =
-      data.total || data.total_items || data.totalItems || items.length;
+  if (data.items && Array.isArray(data.items)) {
+    items = data.items;
+    totalItems = data.total || data.total_items || items.length;
     totalPages =
-      data.total_pages ||
-      data.totalPages ||
-      data.pages ||
-      Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE);
+      data.total_pages || Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE) || 1;
   } else if (Array.isArray(data)) {
     items = data;
     totalItems = items.length;
-    totalPages = Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE);
-  } else if (data.items) {
-    items = Array.isArray(data.items) ? data.items : [data.items];
-    totalItems =
-      data.total || data.total_items || data.totalItems || items.length;
+    totalPages = Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE) || 1;
+  } else if (data.data && Array.isArray(data.data)) {
+    items = data.data;
+    totalItems = data.total || data.total_items || items.length;
     totalPages =
-      data.total_pages ||
-      data.totalPages ||
-      Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE);
+      data.total_pages || Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE) || 1;
   } else {
-    items = Array.isArray(data) ? data : [];
-    totalItems = items.length;
-    totalPages = Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE);
+    items = [];
+    totalItems = 0;
+    totalPages = 1;
   }
 
-  state.items = items || [];
+  state.items = items;
   state.totalPages = Math.max(1, totalPages);
   state.totalItems = totalItems;
 
@@ -97,9 +90,11 @@ export async function loadPriceItems() {
   ]);
 
   updateDashboard(stats);
-  if (categories) updateCategoryFilter(categories);
+  if (categories && Array.isArray(categories)) {
+    updateCategoryFilter(categories);
+  }
 
-  console.log("✅ Price items loaded successfully");
+  console.log("✅ Price items loaded successfully, total:", totalItems);
 }
 
 // ============================================================

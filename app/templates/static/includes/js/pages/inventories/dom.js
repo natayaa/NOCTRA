@@ -102,6 +102,10 @@ export const DOM = {
   cancelReorderBtn: () => $("cancelReorderBtn"),
   closeReorderModal: () => $("closeReorderModal"),
 
+  // payment modal
+  paymentModal: () => $("paymentModal"),
+  invoiceModal: () => $("invoiceModal"),
+
   // Toast
   toastContainer: () => $("toastContainer"),
 };

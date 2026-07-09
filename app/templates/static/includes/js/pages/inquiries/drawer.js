@@ -1,6 +1,4 @@
-// ============================================================
-// inquiries/drawer.js - Drawer Functions
-// ============================================================
+// inquiries/drawer.js
 
 import { DOM, drawerBackdrop } from "./dom.js";
 import { state } from "./config.js";
@@ -21,12 +19,16 @@ import { renderDrawerNotes } from "./renderers/notes.js";
 import { renderDrawerBeforeAfter } from "./renderers/carousel.js";
 import { updateActionButtons } from "./renderers/drawer-actions.js";
 
+// ============================================================
+// LOAD INQUIRY DETAIL
+// ============================================================
 export async function loadInquiryDetail(inquiryId) {
   state.currentInquiryId = inquiryId;
 
   const inquiry = await InquiryAPI.fetchDetail(inquiryId);
   if (!inquiry) return;
 
+  // Load inventory items untuk enrichment
   try {
     state.inventoryItems = await InquiryAPI.fetchInventoryItems();
     console.log("📦 Loaded inventory items:", state.inventoryItems.length);
@@ -35,6 +37,7 @@ export async function loadInquiryDetail(inquiryId) {
     state.inventoryItems = [];
   }
 
+  // Load semua data terkait
   const [payments, activities, notes, photos] = await Promise.all([
     PaymentAPI.getByInquiry(inquiryId).catch(() => []),
     InquiryAPI.fetchActivities(inquiryId).catch(() => []),
@@ -42,33 +45,39 @@ export async function loadInquiryDetail(inquiryId) {
     InquiryAPI.fetchPhotos(inquiryId).catch(() => []),
   ]);
 
-  console.log("📊 Final payments data:", payments);
+  console.log("📊 Payments data:", payments);
 
+  // Load labor dan materials jika ada project
   let labor = [];
   let materials = [];
   let financial = null;
 
   if (inquiry.project && inquiry.project.id) {
     const projectId = inquiry.project.id;
+    console.log("📌 Project found:", projectId);
+
     [labor, materials] = await Promise.all([
-      InquiryAPI.fetchProjectLabor(projectId).catch(() => []),
-      InquiryAPI.fetchProjectMaterialUsage(projectId).catch(() => []),
+      InquiryAPI.fetchProjectLabor(projectId).catch(() => {
+        console.warn("Failed to load labor for project:", projectId);
+        return [];
+      }),
+      InquiryAPI.fetchProjectMaterialUsage(projectId).catch(() => {
+        console.warn("Failed to load materials for project:", projectId);
+        return [];
+      }),
     ]);
-    financial = calculateFinancialFromData(inquiry, labor, materials, payments);
+
+    console.log("👷 Labor items:", labor);
+    console.log("📦 Material usages:", materials);
   } else {
-    financial = {
-      estimated_cost: 0,
-      actual_cost: 0,
-      estimated_revenue: 0,
-      actual_revenue: 0,
-      deposit_amount: 0,
-      deposit_paid: false,
-      material_cost: 0,
-      labor_cost: 0,
-      other_expenses: 0,
-    };
+    console.log("📌 No project found for inquiry:", inquiryId);
   }
 
+  // Hitung financial dengan data yang ada
+  financial = calculateFinancialFromData(inquiry, labor, materials, payments);
+  console.log("📊 Final financial data:", financial);
+
+  // Render semua section
   renderDrawerCustomer(inquiry);
   renderDrawerVehicle(inquiry);
   renderDrawerFinancial(financial);
@@ -87,13 +96,30 @@ export async function loadInquiryDetail(inquiryId) {
   document.body.style.overflow = "hidden";
 }
 
+// ============================================================
+// ✅ CLOSE DRAWER - PASTIKAN DI-EXPORT
+// ============================================================
 export function closeDrawer() {
-  if (DOM.drawer()) DOM.drawer().classList.remove("active");
-  if (drawerBackdrop) drawerBackdrop.classList.remove("active");
+  console.log("🔒 Closing drawer...");
+
+  const drawer = DOM.drawer();
+  if (drawer) {
+    drawer.classList.remove("active");
+  }
+
+  if (drawerBackdrop) {
+    drawerBackdrop.classList.remove("active");
+  }
+
   document.body.style.overflow = "";
   state.currentInquiryId = null;
+  state._currentInquiry = null;
 }
 
+// ============================================================
+// ✅ OPEN INQUIRY DRAWER
+// ============================================================
 export async function openInquiryDrawer(inquiryId) {
+  console.log("🔓 Opening inquiry drawer:", inquiryId);
   await loadInquiryDetail(inquiryId);
 }

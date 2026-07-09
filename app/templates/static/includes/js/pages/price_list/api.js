@@ -21,9 +21,14 @@ export async function apiFetch(endpoint, options = {}) {
   try {
     const response = await fetch(url, config);
     const data = await response.json();
+
     if (!response.ok) {
-      throw new Error(data.message || `HTTP ${response.status}`);
+      // ✅ Backend menggunakan 'detail' untuk error
+      const errorMsg = data.detail || data.message || `HTTP ${response.status}`;
+      throw new Error(errorMsg);
     }
+
+    // ✅ Backend menggunakan BaseResponse: { success, message, data }
     return data;
   } catch (error) {
     console.error("API Error:", error);
@@ -48,24 +53,16 @@ export const PriceAPI = {
       params.set("vehicle_brand", filters.vehicle_brand);
     if (filters.vehicle_model)
       params.set("vehicle_model", filters.vehicle_model);
-
-    // Handle status filter
-    if (filters.status) {
-      if (filters.status === "active") {
-        params.set("active_only", "true");
-      } else if (filters.status === "inactive") {
-        params.set("active_only", "false");
-      }
-      if (filters.status === "") {
-        params.delete("active_only");
-      }
+    if (filters.active_only !== undefined && filters.active_only !== null) {
+      params.set("active_only", filters.active_only.toString());
     }
 
     try {
       const response = await apiFetch(
         `/price-list/items/?${params.toString()}`,
       );
-      return response;
+      // ✅ Response: { success, message, data: { items, total, page, page_size, total_pages } }
+      return response.data || response;
     } catch (error) {
       showToast("Failed to load price items: " + error.message, "error");
       return null;
@@ -77,7 +74,7 @@ export const PriceAPI = {
   fetchItemDetail: async (itemId) => {
     try {
       const response = await apiFetch(`/price-list/items/${itemId}`);
-      return response.data;
+      return response.data || response;
     } catch (error) {
       showToast("Failed to load item details: " + error.message, "error");
       return null;
@@ -90,7 +87,7 @@ export const PriceAPI = {
         method: "POST",
         body: JSON.stringify(data),
       });
-      return response.data;
+      return response.data || response;
     } catch (error) {
       showToast("Failed to create price item: " + error.message, "error");
       return null;
@@ -103,7 +100,7 @@ export const PriceAPI = {
         method: "PATCH",
         body: JSON.stringify(data),
       });
-      return response.data;
+      return response.data || response;
     } catch (error) {
       showToast("Failed to update price item: " + error.message, "error");
       return null;
@@ -115,7 +112,7 @@ export const PriceAPI = {
       const response = await apiFetch(`/price-list/items/${itemId}`, {
         method: "DELETE",
       });
-      return response.data;
+      return response.data || response;
     } catch (error) {
       showToast("Failed to delete price item: " + error.message, "error");
       return null;
@@ -127,7 +124,7 @@ export const PriceAPI = {
       const response = await apiFetch(`/price-list/items/${itemId}/toggle`, {
         method: "POST",
       });
-      return response.data;
+      return response.data || response;
     } catch (error) {
       showToast("Failed to toggle item status: " + error.message, "error");
       return null;
@@ -141,8 +138,21 @@ export const PriceAPI = {
       );
       console.log("📦 Price history response:", response);
 
-      // ✅ Return the data directly, let the caller handle array conversion
-      return response.data || response || [];
+      // ✅ Response dari backend: { success, message, data: [...] }
+      const result = response.data || response;
+
+      // ✅ Pastikan return array
+      if (Array.isArray(result)) {
+        return result;
+      } else if (result && typeof result === "object") {
+        // Jika result adalah object, cek apakah ada property yang berisi array
+        if (Array.isArray(result.items)) return result.items;
+        if (Array.isArray(result.history)) return result.history;
+        if (Array.isArray(result.data)) return result.data;
+        // Jika single object, wrap ke array
+        return [result];
+      }
+      return [];
     } catch (error) {
       console.error("Failed to load price history:", error);
       showToast("Failed to load price history: " + error.message, "error");
@@ -157,12 +167,12 @@ export const PriceAPI = {
         {
           method: "POST",
           body: JSON.stringify({
-            request: { new_price: newPrice, reason },
-            changed_by: "admin",
+            new_price: newPrice,
+            reason,
           }),
         },
       );
-      return response.data;
+      return response.data || response;
     } catch (error) {
       showToast("Failed to change price: " + error.message, "error");
       return null;
@@ -172,7 +182,7 @@ export const PriceAPI = {
   fetchStatistics: async () => {
     try {
       const response = await apiFetch("/price-list/stats");
-      return response.data;
+      return response.data || response;
     } catch (error) {
       console.error("Failed to load statistics:", error);
       return null;
@@ -182,7 +192,7 @@ export const PriceAPI = {
   fetchCategories: async () => {
     try {
       const response = await apiFetch("/price-list/categories/with-counts");
-      return response.data;
+      return response.data || response;
     } catch (error) {
       console.error("Failed to load categories:", error);
       return null;
@@ -195,7 +205,7 @@ export const PriceAPI = {
         method: "POST",
         body: JSON.stringify(data),
       });
-      return response.data;
+      return response.data || response;
     } catch (error) {
       showToast("Failed to bulk update prices: " + error.message, "error");
       return null;

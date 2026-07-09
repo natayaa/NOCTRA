@@ -142,6 +142,16 @@ export async function loadInventoryItems() {
   console.log("✅ Inventory loaded successfully");
 }
 
+window.openPaymentModal = function () {
+  const modal = document.getElementById("paymentModal");
+  if (modal) modal.classList.add("active");
+};
+
+window.openInvoiceModal = function () {
+  const modal = document.getElementById("invoiceModal");
+  if (modal) modal.classList.add("active");
+};
+
 // ============================================================
 // KEYBOARD SHORTCUTS
 // ============================================================
