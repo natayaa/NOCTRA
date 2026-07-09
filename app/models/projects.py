@@ -132,6 +132,18 @@ class Project(Base, UUIDMixin, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="ProjectActivity.created_at.desc()",
     )
+    
+    inquiry_payments = relationship(
+        "InquiryPayment",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    
+    inquiry_invoices = relationship(
+        "InquiryInvoice",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self):
         return f"<Project {self.id} - {self.name} - {self.customer_name}>"

@@ -1,37 +1,156 @@
+/* ============================================================
+   notifications.css - NOCTRA Notifications
+   ============================================================ */
+
 .notification-settings {
   display: grid;
-
-  grid-template-columns: repeat(3, 1fr);
-
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 24px;
-
   margin-bottom: 24px;
 }
 
 .settings-card {
-  background: var(--card);
-
-  border: 1px solid var(--border);
-
-  border-radius: 24px;
-
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   padding: 24px;
 }
 
+.settings-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.switch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.switch-row:not(:last-child) {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.switch-row label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.switch-row input[type="checkbox"] {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+
+.switch-row input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: all var(--transition);
+}
+
+.switch-row input[type="checkbox"]:checked {
+  background: var(--primary);
+}
+
+.switch-row input[type="checkbox"]:checked::after {
+  left: 22px;
+  background: #fff;
+}
+
 .notification-history {
-  background: var(--card);
-
-  border: 1px solid var(--border);
-
-  border-radius: 24px;
-
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
-.switch {
-  display: flex;
+.notification-history .card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
 
-  gap: 12px;
+.notification-history .card-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+}
 
-  margin-top: 16px;
+.notification-history .table-responsive {
+  overflow-x: auto;
+}
+
+.notification-history table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.notification-history thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.notification-history tbody td {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.notification-history tbody tr:hover td {
+  background: var(--bg-input);
+}
+
+/* Notification status */
+.notif-status {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.notif-status.delivered {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.notif-status.failed {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.notif-status.pending {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.notif-status.read {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .notification-settings {
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,23 +1,19 @@
-<!---------------------------------------------
- FILE: dashboard.html (main template)
----------------------------------------------->
 {% extends "base.html" %}
 
-{% block title %}
-Dashboard | NOCTRA
-{% endblock %}
-
-{% block page_title %}
-Dashboard
-{% endblock %}
+{% block title %}Dashboard | NOCTRA{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', path='css/dashboard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/dashboard.css') }}" />
 {% endblock %}
+
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Workshop Overview &amp; Performance{% endblock %}
 
 {% block content %}
 
-<!-- Stats Cards Row -->
+<!-- ============================================================
+     STATS CARDS
+     ============================================================ -->
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-icon">
@@ -25,8 +21,8 @@ Dashboard
         </div>
         <div class="stat-info">
             <span class="stat-label">Revenue</span>
-            <h2 class="stat-value">Rp 48.2M</h2>
-            <small class="stat-trend positive">
+            <h2 class="stat-value" id="statRevenue">Rp 48.2M</h2>
+            <small class="stat-trend positive" id="statRevenueTrend">
                 <i class="fas fa-arrow-up"></i> +18.2%
             </small>
         </div>
@@ -38,8 +34,8 @@ Dashboard
         </div>
         <div class="stat-info">
             <span class="stat-label">Profit</span>
-            <h2 class="stat-value">Rp 16.8M</h2>
-            <small class="stat-trend positive">
+            <h2 class="stat-value" id="statProfit">Rp 16.8M</h2>
+            <small class="stat-trend positive" id="statProfitTrend">
                 <i class="fas fa-arrow-up"></i> +7.3%
             </small>
         </div>
@@ -51,8 +47,8 @@ Dashboard
         </div>
         <div class="stat-info">
             <span class="stat-label">Projects</span>
-            <h2 class="stat-value">12</h2>
-            <small class="stat-sub">4 Active</small>
+            <h2 class="stat-value" id="statProjects">12</h2>
+            <small class="stat-sub" id="statProjectsSub">4 Active</small>
         </div>
     </div>
 
@@ -62,19 +58,21 @@ Dashboard
         </div>
         <div class="stat-info">
             <span class="stat-label">Inquiries</span>
-            <h2 class="stat-value">6</h2>
-            <small class="stat-sub">2 New</small>
+            <h2 class="stat-value" id="statInquiries">6</h2>
+            <small class="stat-sub" id="statInquiriesSub">2 New</small>
         </div>
     </div>
 </div>
 
-<!-- Chart Section -->
+<!-- ============================================================
+     CHART SECTION
+     ============================================================ -->
 <div class="chart-card">
     <div class="card-header">
         <h3>
-            <i class="fas fa-chart-simple"></i> Revenue & Profit
+            <i class="fas fa-chart-simple"></i> Revenue &amp; Profit
         </h3>
-        <div class="chart-controls">
+        <div class="chart-controls" data-chart="revenueProfit">
             <button class="chart-period active" data-period="week">Week</button>
             <button class="chart-period" data-period="month">Month</button>
             <button class="chart-period" data-period="year">Year</button>
@@ -85,17 +83,22 @@ Dashboard
     </div>
 </div>
 
-<!-- Bottom Grid: Projects + Alerts -->
+<!-- ============================================================
+     BOTTOM GRID: Projects + Alerts
+     ============================================================ -->
 <div class="bottom-grid">
-    <!-- Recent Projects Card -->
+    <!-- Recent Projects -->
     <div class="card">
         <div class="card-header">
             <h3>
                 <i class="fas fa-paintbrush"></i> Recent Projects
             </h3>
-            <a href="#" class="view-all-link">View All <i class="fas fa-arrow-right"></i></a>
+            <a href="/management/projects" class="view-all-link">
+                View All <i class="fas fa-arrow-right"></i>
+            </a>
         </div>
-        <div class="project-list">
+        <div class="project-list" id="recentProjects">
+            <!-- Rendered by JS -->
             <div class="project-item">
                 <div class="project-info">
                     <span class="project-name">Mio Sporty Restoration</span>
@@ -120,15 +123,15 @@ Dashboard
         </div>
     </div>
 
-    <!-- Inventory Alerts Card -->
+    <!-- Inventory Alerts -->
     <div class="card">
         <div class="card-header">
             <h3>
                 <i class="fas fa-exclamation-triangle"></i> Inventory Alerts
             </h3>
-            <span class="alert-badge">3 Alerts</span>
+            <span class="alert-badge" id="alertCount">3 Alerts</span>
         </div>
-        <div class="alert-list">
+        <div class="alert-list" id="inventoryAlerts">
             <div class="alert-item warning">
                 <i class="fas fa-fill-drip"></i>
                 <div class="alert-content">
@@ -157,8 +160,29 @@ Dashboard
     </div>
 </div>
 
+<!-- ============================================================
+     QUICK ACTIONS
+     ============================================================ -->
+<div class="quick-actions-bar">
+    <h4>Quick Actions</h4>
+    <div class="quick-actions-grid">
+        <button class="quick-btn" data-action="new-project">
+            <i class="fas fa-plus-circle"></i> New Project
+        </button>
+        <button class="quick-btn" data-action="new-inquiry">
+            <i class="fas fa-envelope"></i> New Inquiry
+        </button>
+        <button class="quick-btn" data-action="add-inventory">
+            <i class="fas fa-box"></i> Add Inventory
+        </button>
+        <button class="quick-btn" data-action="view-analytics">
+            <i class="fas fa-chart-bar"></i> View Analytics
+        </button>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', path='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', path='js/pages/dashboard.js') }}"></script>
 {% endblock %}

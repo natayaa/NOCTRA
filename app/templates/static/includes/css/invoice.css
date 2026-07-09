@@ -1,33 +1,1077 @@
-.invoice-card {
-  background: var(--card);
+/* ============================================================
+   invoice.css - NOCTRA Invoice Management
+   HANYA style spesifik untuk halaman invoice
+   ============================================================ */
 
+/* ============================================================
+   INVOICE STATS
+   ============================================================ */
+.invoice-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+.invoice-stats .stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--bg-card);
   border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition);
+  will-change: transform, box-shadow, border-color;
+  backface-visibility: hidden;
+  text-align: center;
+}
 
-  border-radius: 24px;
+.invoice-stats .stat-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
 
+.invoice-stats .stat-card span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  display: block;
+}
+
+.invoice-stats .stat-card h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-top: 0.1rem;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.invoice-stats .stat-card h2.danger {
+  color: #ef4444;
+}
+
+/* ============================================================
+   INVOICE TOOLBAR
+   ============================================================ */
+.invoice-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+
+.invoice-toolbar .toolbar-left,
+.invoice-toolbar .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ===== Search Box ===== */
+.invoice-toolbar .search-box {
+  position: relative;
+  min-width: 280px;
+  flex-shrink: 1;
+}
+
+.invoice-toolbar .search-box i {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.invoice-toolbar .search-box input {
+  width: 100%;
+  padding: 0.5rem 0.5rem 0.5rem 42px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  height: 42px;
+  outline: none;
+  transition: border var(--transition);
+  box-sizing: border-box;
+}
+
+.invoice-toolbar .search-box input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
+}
+
+.invoice-toolbar select {
+  padding: 0.5rem 2rem 0.5rem 1rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+  min-width: 150px;
+  height: 42px;
+  transition: border var(--transition);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.invoice-toolbar select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
+}
+
+.invoice-toolbar select option {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ============================================================
+   INVOICE TABLE
+   ============================================================ */
+.invoice-table-wrapper {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
-.status {
-  padding: 8px 14px;
-
-  border-radius: 20px;
+.invoice-table-wrapper .table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.pending {
-  background: rgba(255, 166, 0, 0.2);
-
-  color: orange;
+.invoice-table-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1000px;
 }
 
-.paid {
-  background: rgba(0, 255, 128, 0.2);
-
-  color: #00ff80;
+.invoice-table-wrapper thead {
+  border-bottom: 1px solid var(--border);
 }
 
-.overdue {
-  background: rgba(255, 0, 0, 0.2);
+.invoice-table-wrapper thead th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
 
-  color: #ff5050;
+.invoice-table-wrapper thead th:last-child {
+  text-align: center;
+}
+
+.invoice-table-wrapper tbody td {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.invoice-table-wrapper tbody tr {
+  transition: background var(--transition);
+}
+
+.invoice-table-wrapper tbody tr:hover {
+  background: rgba(255, 107, 0, 0.03);
+}
+
+.invoice-table-wrapper tbody td:last-child {
+  text-align: center;
+}
+
+.invoice-table-wrapper .loading-placeholder {
+  text-align: center;
+  padding: 2rem 0;
+  color: var(--text-muted);
+}
+
+.invoice-table-wrapper .loading-placeholder i {
+  font-size: 1.5rem;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+/* ============================================================
+   INVOICE STATUS BADGE
+   ============================================================ */
+.invoice-status {
+  display: inline-flex;
+  padding: 0.2rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.invoice-status.draft {
+  background: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+}
+
+.invoice-status.sent {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
+.invoice-status.viewed {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.invoice-status.partial {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.invoice-status.paid {
+  background: rgba(0, 213, 120, 0.12);
+  color: #00d578;
+}
+
+.invoice-status.overdue {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.invoice-status.cancelled {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   INVOICE ACTIONS
+   ============================================================ */
+.invoice-actions {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.invoice-actions button {
+  padding: 0.25rem 0.7rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.invoice-actions .btn-view {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+.invoice-actions .btn-view:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.invoice-actions .btn-pay {
+  background: rgba(0, 213, 120, 0.12);
+  color: #00d578;
+}
+.invoice-actions .btn-pay:hover {
+  background: rgba(0, 213, 120, 0.2);
+}
+
+.invoice-actions .btn-remind {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+.invoice-actions .btn-remind:hover {
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.invoice-actions .btn-cancel {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+.invoice-actions .btn-cancel:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* ============================================================
+   PAGINATION
+   ============================================================ */
+.table-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.table-pagination .page-btn {
+  padding: 0.3rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all var(--transition);
+}
+
+.table-pagination .page-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--text-primary);
+  background: rgba(255, 107, 0, 0.06);
+}
+
+.table-pagination .page-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.table-pagination span {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   MODAL OVERLAY
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal {
+  background: var(--bg-body);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  max-width: 90vw;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.modal-lg {
+  max-width: 750px;
+}
+.modal-md {
+  max-width: 580px;
+}
+.modal-sm {
+  max-width: 480px;
+}
+
+/* ============================================================
+   MODAL HEADER
+   ============================================================ */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h2 {
+  font-size: 1.25rem;
+  margin: 0 0 0.25rem;
+}
+
+.modal-header p {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.modal-header button {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: background var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-header button:hover {
+  background: var(--bg-input);
+}
+
+/* ============================================================
+   MODAL BODY
+   ============================================================ */
+.modal-body {
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+/* ============================================================
+   INVOICE FORM
+   ============================================================ */
+#invoiceForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+#invoiceForm .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding: 0 1.5rem;
+}
+
+#invoiceForm .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+#invoiceForm .form-group label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+#invoiceForm .form-group input,
+#invoiceForm .form-group select,
+#invoiceForm .form-group textarea {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+  transition: all var(--transition);
+  width: 100%;
+}
+
+#invoiceForm .form-group input:focus,
+#invoiceForm .form-group select:focus,
+#invoiceForm .form-group textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
+  background: var(--bg-input-hover);
+}
+
+#invoiceForm .form-group input::placeholder,
+#invoiceForm .form-group textarea::placeholder {
+  color: var(--text-muted);
+}
+
+#invoiceForm .form-group select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+#invoiceForm .form-group select option {
+  background: var(--bg);
+  color: var(--text);
+}
+
+#invoiceForm .form-group textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+/* ============================================================
+   INVOICE ITEMS
+   ============================================================ */
+.invoice-items {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin: 0 1.5rem;
+}
+
+.invoice-items h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.invoice-item-row {
+  display: grid;
+  grid-template-columns: 2fr 80px 120px 80px 40px;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.invoice-item-row input {
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border var(--transition);
+  width: 100%;
+}
+
+.invoice-item-row input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.08);
+}
+
+.invoice-item-row input[type="number"] {
+  width: 100%;
+}
+
+.invoice-item-row .remove-item-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.invoice-item-row .remove-item-btn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* ============================================================
+   INVOICE TOTALS
+   ============================================================ */
+.invoice-totals {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  margin: 0 1.5rem;
+}
+
+.invoice-totals .total-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.invoice-totals .total-row.total {
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+  padding-top: 0.75rem;
+  margin-top: 0.25rem;
+  color: var(--text-primary);
+}
+
+.invoice-totals .total-row.total span:last-child {
+  color: var(--primary);
+}
+
+/* ===== Detail Invoice Totals ===== */
+.invoice-totals.detail {
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin: 0.75rem 0;
+  border: 1px solid var(--border);
+}
+
+.invoice-totals.detail .total-row {
+  font-size: 0.9rem;
+  padding: 0.3rem 0;
+}
+
+.invoice-totals.detail .total-row.paid {
+  color: #00d578;
+}
+
+.invoice-totals.detail .total-row.remaining {
+  color: #f59e0b;
+}
+
+/* ============================================================
+   MODAL ACTIONS
+   ============================================================ */
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 1rem 1.5rem 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================================
+   INVOICE DETAIL MODAL
+   ============================================================ */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.detail-grid label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.detail-grid p {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+/* ===== Table Responsive ===== */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0.75rem 0;
+}
+
+.table-responsive table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.table-responsive thead th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.table-responsive tbody td {
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.table-responsive tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============================================================
+   DETAIL ACTIONS
+   ============================================================ */
+.detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.detail-actions button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.85rem;
+  transition: all var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.detail-actions .btn-success {
+  background: #00d578;
+  color: #fff;
+}
+.detail-actions .btn-success:hover {
+  background: #00b866;
+}
+
+.detail-actions .btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+.detail-actions .btn-primary:hover {
+  background: var(--primary-dark);
+}
+
+.detail-actions .btn-secondary {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.detail-actions .btn-secondary:hover {
+  background: var(--bg-input-hover);
+  color: var(--text-primary);
+}
+
+.detail-actions .btn-danger {
+  background: #ef4444;
+  color: #fff;
+}
+.detail-actions .btn-danger:hover {
+  background: #dc2626;
+}
+
+/* ============================================================
+   LOADING PLACEHOLDER
+   ============================================================ */
+.loading-placeholder {
+  text-align: center;
+  padding: 2rem 0;
+  color: var(--text-muted);
+}
+
+.loading-placeholder i {
+  font-size: 1.5rem;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.loading-placeholder i.fa-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-overlay.active .modal {
+  animation: modalIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+/* Tablets */
+@media (max-width: 1024px) {
+  .invoice-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 992px) {
+  #invoiceForm .form-grid {
+    grid-template-columns: 1fr;
+    padding: 0 1rem;
+  }
+
+  .invoice-items {
+    margin: 0 1rem;
+  }
+
+  .invoice-item-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .invoice-item-row .remove-item-btn {
+    grid-column: span 2;
+    width: 100%;
+  }
+
+  .invoice-totals {
+    margin: 0 1rem;
+  }
+
+  .modal-actions {
+    padding: 0.75rem 1rem 1rem;
+  }
+
+  .modal-lg {
+    max-width: 95vw;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .invoice-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .invoice-stats .stat-card {
+    padding: 0.75rem;
+  }
+
+  .invoice-stats .stat-card h2 {
+    font-size: 1.2rem;
+  }
+
+  .invoice-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.75rem;
+  }
+
+  .invoice-toolbar .toolbar-left {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .invoice-toolbar .search-box {
+    min-width: 100%;
+  }
+
+  .invoice-toolbar .toolbar-left select {
+    width: 100%;
+  }
+
+  .invoice-toolbar .toolbar-right {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .invoice-toolbar .toolbar-right button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .invoice-table-wrapper table {
+    min-width: 800px;
+  }
+
+  .modal {
+    max-width: 95vw;
+    margin: 0.5rem;
+    max-height: 95vh;
+    border-radius: var(--radius-lg);
+  }
+
+  .modal-header {
+    padding: 1rem 1.25rem;
+    flex-wrap: wrap;
+  }
+
+  .modal-body {
+    padding: 1rem 1.25rem 1.25rem;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-actions {
+    flex-direction: column;
+  }
+
+  .detail-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .invoice-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .invoice-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .table-pagination {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .table-pagination .page-btn {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+  }
+}
+
+/* Small Mobile */
+@media (max-width: 480px) {
+  .invoice-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-stats .stat-card {
+    padding: 0.75rem;
+  }
+
+  .invoice-stats .stat-card h2 {
+    font-size: 1.4rem;
+  }
+
+  .invoice-table-wrapper thead th,
+  .invoice-table-wrapper tbody td {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  .invoice-item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-item-row input {
+    width: 100%;
+  }
+
+  .invoice-item-row .remove-item-btn {
+    width: 100%;
+    height: 36px;
+  }
+
+  .modal {
+    max-width: 98vw;
+  }
+
+  .modal-header h2 {
+    font-size: 1rem;
+  }
+
+  .modal-header p {
+    font-size: 0.75rem;
+  }
+
+  #invoiceForm .form-grid {
+    padding: 0 0.75rem;
+  }
+
+  .invoice-items {
+    margin: 0 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .invoice-totals {
+    margin: 0 0.75rem;
+  }
+
+  .modal-actions {
+    padding: 0.75rem;
+  }
+
+  .invoice-totals .total-row {
+    font-size: 0.8rem;
+  }
+
+  .invoice-totals .total-row.total {
+    font-size: 1rem;
+  }
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+.modal::-webkit-scrollbar {
+  width: 4px;
+}
+
+.modal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.modal::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.invoice-table-wrapper .table-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.invoice-table-wrapper .table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.invoice-table-wrapper .table-container::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.invoice-table-wrapper .table-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }

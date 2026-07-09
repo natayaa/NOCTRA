@@ -1,148 +1,392 @@
-{% extends "base.html" %} {% block title %} Customers | NOCTRA {% endblock
-%} {% block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('static', path='css/customers.css') }}"
-/>
-{% endblock %} {% block page_title %} Customers CRM {% endblock %} {% block
-page_subtitle %} Customer Relationship Management {% endblock %} {% block
-content %}
+{% extends "base.html" %}
 
+{% block title %}Customers | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/customers.css') }}" />
+{% endblock %}
+
+{% block page_title %}Customer Relationship Management{% endblock %}
+{% block page_subtitle %}Manage customers, vehicles, and service history{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     CUSTOMER OVERVIEW CARDS
+     ============================================================ -->
+<section class="customer-overview">
+    <div class="overview-card">
+        <div class="overview-icon"><i class="fas fa-users"></i></div>
+        <div class="overview-content">
+            <span>Total Customers</span>
+            <h2 id="totalCustomers">0</h2>
+            <small>Active customers</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="fas fa-motorcycle"></i></div>
+        <div class="overview-content">
+            <span>Total Vehicles</span>
+            <h2 id="totalVehicles">0</h2>
+            <small>Registered vehicles</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="fas fa-rupiah-sign"></i></div>
+        <div class="overview-content">
+            <span>Total Spending</span>
+            <h2 id="totalSpending">Rp 0</h2>
+            <small>All time</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="fas fa-star"></i></div>
+        <div class="overview-content">
+            <span>Loyal Customers</span>
+            <h2 id="loyalCustomers">0</h2>
+            <small>3+ projects</small>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     TOOLBAR
+     ============================================================ -->
+<section class="customers-toolbar glass">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="search" id="searchCustomer" placeholder="Search by name, phone, or email..." />
+        </div>
+        <select id="sortFilter">
+            <option value="name">Sort by Name</option>
+            <option value="recent">Sort by Recent</option>
+            <option value="spending">Sort by Spending</option>
+            <option value="projects">Sort by Projects</option>
+        </select>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn-secondary" id="exportCustomersBtn">
+            <i class="fas fa-file-export"></i> Export
+        </button>
+        <button class="btn-primary" id="addCustomerBtn">
+            <i class="fas fa-user-plus"></i> Add Customer
+        </button>
+    </div>
+</section>
+
+<!-- ============================================================
+     MAIN LAYOUT: Customer List + Detail
+     ============================================================ -->
 <div class="customers-layout">
-  <div class="customer-list">
-    <div class="panel-header">
-      <h3>Customers</h3>
 
-      <input
-        type="search"
-        id="customerSearch"
-        placeholder="Search customer..."
-      />
-    </div>
-
-    <div id="customerContainer">
-      <div class="customer-card active" data-customer="Ivan">
-        <h4>Ivan</h4>
-
-        <p>3 Vehicles</p>
-      </div>
-
-      <div class="customer-card" data-customer="Budi">
-        <h4>Budi</h4>
-
-        <p>1 Vehicle</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="customer-detail">
-    <div class="customer-header">
-      <div>
-        <h2 id="customerName">Ivan</h2>
-
-        <p id="customerPhone">08123456789</p>
-      </div>
-
-      <button class="btn-primary" id="addVehicleBtn">Add Vehicle</button>
-    </div>
-
-    <div class="customer-kpis">
-      <div class="stat-card">
-        <span>Total Projects</span>
-
-        <h2>12</h2>
-      </div>
-
-      <div class="stat-card">
-        <span>Total Spending</span>
-
-        <h2>Rp 42M</h2>
-      </div>
-
-      <div class="stat-card">
-        <span>Vehicles</span>
-
-        <h2>3</h2>
-      </div>
-    </div>
-
-    <div class="tabs">
-      <button class="tab active" data-tab="vehicles">Vehicles</button>
-
-      <button class="tab" data-tab="history">Service History</button>
-
-      <button class="tab" data-tab="gallery">Gallery</button>
-
-      <button class="tab" data-tab="notes">Notes</button>
-    </div>
-
-    <!-- VEHICLES -->
-
-    <div class="tab-content active" id="vehicles">
-      <div class="vehicle-grid">
-        <div class="vehicle-card">
-          <h3>Yamaha Mio Sporty</h3>
-
-          <p>B 1234 XYZ</p>
-
-          <span> 2010 </span>
+    <!-- ============================================================
+         LEFT: CUSTOMER LIST
+         ============================================================ -->
+    <aside class="customer-list">
+        <div class="list-header">
+            <h3>Customers</h3>
+            <span id="customerCount">0</span>
         </div>
 
-        <div class="vehicle-card">
-          <h3>Ninja 250R</h3>
-
-          <p>D 9876 ABC</p>
-
-          <span> 2011 </span>
+        <div class="list-body" id="customerListBody">
+            <!-- JS akan render customer cards di sini -->
+            <div class="loading-placeholder">
+                <i class="fas fa-spinner fa-spin"></i> Loading customers...
+            </div>
         </div>
-      </div>
-    </div>
 
-    <!-- SERVICE HISTORY -->
+        <!-- Pagination -->
+        <div class="list-pagination" id="customerPagination">
+            <button class="page-btn" id="prevPageBtn" disabled>
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <span id="pageInfo">1 of 1</span>
+            <button class="page-btn" id="nextPageBtn" disabled>
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </aside>
 
-    <div class="tab-content" id="history">
-      <table>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Service</th>
-            <th>Vehicle</th>
-            <th>Cost</th>
-          </tr>
-        </thead>
+    <!-- ============================================================
+         RIGHT: CUSTOMER DETAIL
+         ============================================================ -->
+    <main class="customer-detail" id="customerDetail">
 
-        <tbody>
-          <tr>
-            <td>2026-05-01</td>
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState">
+            <i class="fas fa-user-circle"></i>
+            <h3>Select a Customer</h3>
+            <p>Choose a customer from the list to view their details, vehicles, and service history.</p>
+        </div>
 
-            <td>Full Restoration</td>
+        <!-- Detail Content (hidden by default) -->
+        <div class="detail-content" id="detailContent" style="display:none;">
 
-            <td>Mio Sporty</td>
+            <!-- Customer Header -->
+            <div class="customer-header">
+                <div class="customer-avatar" id="customerAvatar">
+                    <span id="avatarInitial">A</span>
+                </div>
+                <div class="customer-info">
+                    <h2 id="detailName">Customer Name</h2>
+                    <p id="detailPhone">-</p>
+                    <p id="detailEmail">-</p>
+                    <div class="customer-badges">
+                        <span class="badge" id="detailBadge">New</span>
+                        <span class="badge" id="detailProjectCount">0 Projects</span>
+                    </div>
+                </div>
+                <div class="customer-actions">
+                    <button class="btn-secondary btn-sm" id="editCustomerBtn">
+                        <i class="fas fa-pen"></i> Edit
+                    </button>
+                    <button class="btn-primary btn-sm" id="addVehicleBtn">
+                        <i class="fas fa-plus"></i> Vehicle
+                    </button>
+                </div>
+            </div>
 
-            <td>Rp 7.500.000</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+            <!-- KPIs -->
+            <div class="customer-kpis">
+                <div class="kpi-card">
+                    <span>Total Projects</span>
+                    <h3 id="kpiProjects">0</h3>
+                </div>
+                <div class="kpi-card">
+                    <span>Total Spending</span>
+                    <h3 id="kpiSpending">Rp 0</h3>
+                </div>
+                <div class="kpi-card">
+                    <span>Vehicles</span>
+                    <h3 id="kpiVehicles">0</h3>
+                </div>
+                <div class="kpi-card">
+                    <span>Last Visit</span>
+                    <h3 id="kpiLastVisit">-</h3>
+                </div>
+            </div>
 
-    <!-- GALLERY -->
+            <!-- Tabs -->
+            <div class="tabs" role="tablist">
+                <button class="tab active" data-tab="vehicles" role="tab" aria-selected="true">
+                    <i class="fas fa-motorcycle"></i> Vehicles
+                </button>
+                <button class="tab" data-tab="history" role="tab" aria-selected="false">
+                    <i class="fas fa-clock-rotate-left"></i> Service History
+                </button>
+                <button class="tab" data-tab="projects" role="tab" aria-selected="false">
+                    <i class="fas fa-tasks"></i> Projects
+                </button>
+                <button class="tab" data-tab="payments" role="tab" aria-selected="false">
+                    <i class="fas fa-credit-card"></i> Payments
+                </button>
+                <button class="tab" data-tab="notes" role="tab" aria-selected="false">
+                    <i class="fas fa-sticky-note"></i> Notes
+                </button>
+            </div>
 
-    <div class="tab-content" id="gallery">
-      <div class="gallery-grid">
-        <div class="gallery-item">Before</div>
+            <!-- ============================================================
+                 TAB 1: VEHICLES
+                 ============================================================ -->
+            <div class="tab-content active" id="vehicles">
+                <div class="vehicle-grid" id="vehicleGrid">
+                    <!-- JS akan render vehicles -->
+                    <div class="loading-placeholder-sm">Loading vehicles...</div>
+                </div>
+            </div>
 
-        <div class="gallery-item">After</div>
-      </div>
-    </div>
+            <!-- ============================================================
+                 TAB 2: SERVICE HISTORY
+                 ============================================================ -->
+            <div class="tab-content" id="history">
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Service</th>
+                                <th>Vehicle</th>
+                                <th>Cost</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody">
+                            <tr><td colspan="5" class="loading-placeholder">No service history</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-    <!-- NOTES -->
+            <!-- ============================================================
+                 TAB 3: PROJECTS
+                 ============================================================ -->
+            <div class="tab-content" id="projects">
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th>Vehicle</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th>Amount</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerProjectsBody">
+                            <tr><td colspan="6" class="loading-placeholder">No projects</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-    <div class="tab-content" id="notes">
-      <textarea rows="10" placeholder="Customer notes..."></textarea>
-    </div>
-  </div>
+            <!-- ============================================================
+                 TAB 4: PAYMENTS
+                 ============================================================ -->
+            <div class="tab-content" id="payments">
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Invoice</th>
+                                <th>Type</th>
+                                <th>Amount</th>
+                                <th>Method</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerPaymentsBody">
+                            <tr><td colspan="6" class="loading-placeholder">No payments</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 TAB 5: NOTES
+                 ============================================================ -->
+            <div class="tab-content" id="notes">
+                <div class="notes-section">
+                    <div class="notes-input">
+                        <textarea id="customerNotes" rows="6" placeholder="Add notes about this customer..."></textarea>
+                        <button class="btn-primary btn-sm" id="saveNotesBtn">
+                            <i class="fas fa-save"></i> Save Notes
+                        </button>
+                    </div>
+                    <div class="notes-history" id="notesHistory">
+                        <p class="no-data">No notes yet</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
 </div>
 
-{% endblock %} {% block extra_js %}
-<script src="{{ url_for('static', path='js/customers.js') }}"></script>
+<!-- ============================================================
+     MODAL: Add / Edit Customer
+     ============================================================ -->
+<div class="modal-overlay" id="customerModal">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <div>
+                <h2 id="customerModalTitle">Add Customer</h2>
+                <p>Create a new customer profile</p>
+            </div>
+            <button id="closeCustomerModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="customerForm">
+            <input type="hidden" id="editCustomerId" />
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Full Name *</label>
+                    <input type="text" id="custName" required placeholder="e.g. Budi Santoso" />
+                </div>
+                <div class="form-group">
+                    <label>Phone Number *</label>
+                    <input type="text" id="custPhone" required placeholder="e.g. 08123456789" />
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="custEmail" placeholder="customer@email.com" />
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <textarea id="custAddress" rows="3" placeholder="Customer address..."></textarea>
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Notes</label>
+                    <textarea id="custNotes" rows="3" placeholder="Additional notes..."></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelCustomerBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Save Customer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Add Vehicle
+     ============================================================ -->
+<div class="modal-overlay" id="vehicleModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h2>Add Vehicle</h2>
+            <button id="closeVehicleModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="vehicleForm">
+            <input type="hidden" id="vehicleCustomerId" />
+
+            <div class="form-group">
+                <label>Brand *</label>
+                <select id="vehicleBrand" required>
+                    <option value="">Select Brand</option>
+                    <option value="Honda">Honda</option>
+                    <option value="Yamaha">Yamaha</option>
+                    <option value="Kawasaki">Kawasaki</option>
+                    <option value="Suzuki">Suzuki</option>
+                    <option value="Ducati">Ducati</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Model *</label>
+                <input type="text" id="vehicleModel" required placeholder="e.g. CBR 150R" />
+            </div>
+            <div class="form-group">
+                <label>Year</label>
+                <input type="number" id="vehicleYear" placeholder="e.g. 2021" min="1950" max="2035" />
+            </div>
+            <div class="form-group">
+                <label>License Plate</label>
+                <input type="text" id="vehiclePlate" placeholder="e.g. B 1234 XYZ" />
+            </div>
+            <div class="form-group">
+                <label>Color</label>
+                <input type="text" id="vehicleColor" placeholder="e.g. Red, Black" />
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelVehicleBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Add Vehicle</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='js/pages/customers.js') }}"></script>
 {% endblock %}

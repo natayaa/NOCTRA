@@ -1,73 +1,186 @@
-import uvicorn
-
-from fastapi import FastAPI
+# main.py
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import uvicorn
 
-from pathlib import Path
-from contextlib import asynccontextmanager
+from core import (
+    settings,
+    app_exception_handler,
+    generic_exception_handler,
+    AppException,
+    check_db_connection,
+)
+from core.database import engine
+from core.base import Base
 
-# Configuration
-from dependencies.server_config import settings
+# =============================================================================
+# Import Routers
+# =============================================================================
+from modules.inquiry.router import inquiry_router
+from modules.projects.router import project_router
+from modules.payment.router import payment_router
+from modules.price_list.router import price_list_router
+from modules.inventory.router import inventory_router
+from modules.auth.router import auth_router
+from modules.jinja_render.managements import html as management_router
 
-from database.session import session_manager
+# =============================================================================
+# Lifespan
+# =============================================================================
 
-# Routes Import
-from routes.pages.pages import pages
-from routes.pages.dashboard import dashboard
-from routes.api.v1.customer_inquiry import customer_inquiry
-from routes.api.v1.inventories import inventory_router
-from routes.api.v1.projects import project_router
-from routes.api.v1.price_list import price_list
-from routes.api.v1.analytics import analytics
-from routes.api.v1.budgeting import budgeting
-
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    session_manager.init(
-        db_url=settings.DATABASE_URL,
-        echo=settings.DB_ECHO,
-        pool_size=settings.DB_POOL_SIZE,
-        max_overflow=settings.DB_MAX_OVERFLOW
-    )
+    """Lifespan context manager for startup/shutdown events."""
+    # Startup
+    print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    print(f"Environment: {settings.ENVIRONMENT}")
+    print(f"Database: {settings.DATABASE_URL}")
+
+    # Check database connection
+    if not await check_db_connection():
+        print("WARNING: Database connection failed!")
+
+    # Create tables (optional - use migrations in production)
+    if settings.ENVIRONMENT == "development":
+        async with engine.begin() as conn:
+            # await conn.run_sync(Base.metadata.create_all)
+            pass
+
     yield
-    await session_manager.close()
 
-# initialize server config first
+    # Shutdown
+    print("Shutting down...")
+    await engine.dispose()
+
+
+# =============================================================================
+# App
+# =============================================================================
+
 app = FastAPI(
-    description=settings.API_DESCRIPTION,
-    version=settings.API_VERSION,
-    title=settings.API_NAME,
-    lifespan=lifespan
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="Workshop Project Management System API",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
-app.mount("/static", StaticFiles(directory="templates/static/includes"), name="static")
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR.absolute())), name="uploads")
-templates = Jinja2Templates(directory="templates/static")
 
-app.include_router(pages)
+# ============================================================================
+# Static Files & Templates
+# ============================================================================
+app.mount("/static", StaticFiles(directory="templates/static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
-# dashboard
-app.include_router(dashboard)
+# =============================================================================
+# Exception Handlers
+# =============================================================================
 
-app.include_router(customer_inquiry)
+app.add_exception_handler(AppException, app_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
-app.include_router(inventory_router)
 
-app.include_router(project_router)
+# =============================================================================
+# CORS
+# =============================================================================
 
-app.include_router(price_list)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-app.include_router(analytics)
 
-app.include_router(budgeting)
+# =============================================================================
+# Include Routers
+# =============================================================================
 
+app.include_router(inquiry_router, prefix=settings.API_PREFIX)
+app.include_router(project_router, prefix=settings.API_PREFIX)
+app.include_router(payment_router, prefix=settings.API_PREFIX)
+app.include_router(price_list_router, prefix=settings.API_PREFIX)
+app.include_router(inventory_router, prefix=settings.API_PREFIX)
+app.include_router(management_router)
+
+# ============================================================================
+# PAGE ROUTES (Templates)
+# ============================================================================
+
+# ===== PUBLIC PAGES =====
+
+
+@app.get("/")
+async def landing_page(request: Request):
+    budget_values = ["1000000", "2000000", "3000000", "4000000", "5000000"]
+    budget_formatted = []
+    for value in budget_values:
+        num = int(value)
+        if num >= 1000000:
+            if num % 1000000 == 0:
+                formatted = f"Rp. {num//1000000} Juta"
+            else:
+                formatted = f"Rp. {num/1000000:.1f} Juta"
+        else:
+            formatted = f"Rp. {num:,}".replace(",", ".")
+        budget_formatted.append({"value": value, "label": formatted})
+
+    konteks = {
+        "request": request, "page_title": "NOKTRA AUTOWORKS",
+        "page_content": "Premium motorcycle restoration, repaint and custom build workshop",
+        "target_result": ["OEM Standard", "Custom", "Restorasi"],
+        "estimasi_budget": budget_formatted,
+        "motorcycle_data": {
+            "Honda": [
+                "Astrea Grand", "Supra", "Supra X", "Revo", "Blade", "Beat",
+                "Scoopy", "Genio", "Vario 125", "Vario 160", "PCX 160", "ADV 160",
+                "CB150R", "Verza", "Mega Pro", "Tiger", "CBR 150R", "CBR 250R(RR)", "CRF 150L"
+            ],
+            "Yamaha": [
+                "Mio (Sporty/Smile/Old)", "Mio Soul", "Fino", "Xeon", "Lexi",
+                "Aerox", "NMAX", "XMAX", "Jupiter Z", "Jupiter MX", "Vega",
+                "Vixion (Old, New, NVL, Etc)", "Byson", "R15", "R25", "MT-15", "XSR 155"
+            ],
+            "Suzuki": [
+                "Crystal", "Shogun", "Satria 2Tax", "Satria F150 4Tax", "Nex", "Address",
+                "Burgman Street", "GSX 150R", "GSX S150"
+            ],
+            "Kawasaki": [
+                "Kaze", "Athlete", "Ninja 150R/RR", "Ninja 250R (Karbu/FI)",
+                "Ninja ZX-25R", "KLX 150", "D-Tracker", "W175", "Versys X250"
+            ]
+        }
+    }
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context=konteks,
+        status_code=status.HTTP_200_OK
+    )
+
+
+# ============================================================================
+# Health Check
+# ============================================================================
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "service": settings.APP_NAME}
+
+
+# ============================================================================
+# Run
+# ============================================================================
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(
         "main:app",
-        host=settings.HOSTNAME,
+        host="0.0.0.0",
         port=80,
-        reload=settings.API_ENABLE_DOCS
+        reload=settings.DEBUG,
     )

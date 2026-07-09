@@ -1,0 +1,147 @@
+================================================================================
+                    PROJECTS MODULE - QUICK REFERENCE
+================================================================================
+
+🔹 COMMANDS
+-----------
+| Tujuan                      | Command / Function                        |
+|-----------------------------|-------------------------------------------|
+| Reload data                 | window.loadProjects()                     |
+| Buka drawer                 | window.openProjectDrawer('{id}')          |
+| Create project              | window.openCreateProjectModal()           |
+| Edit project                | window.openEditProjectModal('{id}')       |
+| Delete project              | window.confirmDeleteProject('{id}')       |
+| Update progress             | window.openProgressPopup('{id}')          |
+| Add task                    | (klik Add Task di drawer)                 |
+| Complete task               | window.handleCompleteTask('{id}')         |
+| Consume material            | (klik Consume di drawer)                  |
+| Add labor                   | (klik Add di drawer)                      |
+| Delete material             | window.handleDeleteMaterial('{id}')       |
+| Delete labor                | window.handleDeleteLabor('{id}')          |
+
+🔹 DATA STRUCTURES
+------------------
+Project:
+{
+  id: string (UUID),
+  name: string,
+  customer_name: string,
+  customer_phone: string,
+  customer_email: string,
+  vehicle_brand: string,
+  vehicle_model: string,
+  vehicle_year: number,
+  vehicle_license_plate: string,
+  status: 'draft' | 'active' | 'in_progress' | 'on_hold' | 'completed' | 'cancelled',
+  priority: 'low' | 'medium' | 'high' | 'urgent',
+  progress: number (0-100),
+  estimated_cost: number,
+  actual_cost: number,
+  estimated_revenue: number,
+  actual_revenue: number,
+  project_start_date: string (ISO date),
+  project_target_delivery: string (ISO date),
+  actual_delivery_date: string (ISO date),
+  completed_at: string (ISO date),
+  notes: string,
+  created_at: string (ISO date),
+  updated_at: string (ISO date)
+}
+
+Task:
+{
+  id: string (UUID),
+  title: string,
+  description: string,
+  assigned_to: string,
+  priority: 'low' | 'medium' | 'high',
+  status: 'pending' | 'in_progress' | 'completed',
+  due_date: string (ISO date),
+  created_at: string (ISO date)
+}
+
+Labor:
+{
+  id: string (UUID),
+  labor_type: string,
+  hours: number,
+  rate_per_hour: number,
+  technician_name: string,
+  description: string,
+  date_performed: string (ISO date),
+  created_at: string (ISO date)
+}
+
+Material Usage:
+{
+  id: string (UUID),
+  item_id: string (UUID),
+  item_name: string,
+  quantity: number,
+  unit: string,
+  total_cost: number,
+  created_at: string (ISO date)
+}
+
+🔹 API ENDPOINTS
+----------------
+# Projects
+GET    /projects/                           # List with filters
+GET    /projects/statistics                 # Dashboard stats
+GET    /projects/{id}                      # Detail
+POST   /projects/                           # Create
+PATCH  /projects/{id}                      # Update
+DELETE /projects/{id}                      # Delete
+PATCH  /projects/{id}/progress             # Update progress
+POST   /projects/{id}/complete             # Complete
+
+# Tasks
+GET    /projects/{id}/tasks                # List
+POST   /projects/{id}/tasks                # Add
+POST   /projects/tasks/{id}/complete       # Complete
+
+# Labor
+GET    /projects/{id}/labor                # List
+POST   /projects/{id}/labor                # Add
+DELETE /projects/labor/{id}                # Delete
+
+# Materials
+POST   /inventory/usage                    # Consume
+DELETE /inventory/usage/{id}               # Delete
+
+# Dropdowns
+GET    /inventory/items                    # Materials list
+GET    /price-list/items                   # Labor types
+GET    /inventory/items/{id}               # Check item
+
+🔹 FOLDER STRUCTURE
+-------------------
+projects/
+├── index.js
+├── config.js
+├── dom.js
+├── api.js
+├── formatters.js
+├── toast.js
+├── utils.js
+├── drawer.js
+├── renderers/
+│   ├── cards.js
+│   ├── dashboard.js
+│   └── detail/
+│       ├── overview.js
+│       ├── materials.js
+│       ├── labor.js
+│       ├── timeline.js
+│       └── tasks.js
+└── handlers/
+    ├── actions.js
+    ├── modals.js
+    ├── progress.js
+    ├── tasks.js
+    ├── materials.js
+    ├── labor.js
+    ├── dropdowns.js
+    └── events.js
+
+================================================================================

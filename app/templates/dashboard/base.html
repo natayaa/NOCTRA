@@ -1,146 +1,280 @@
 <!doctype html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{% block title %}NOCTRA{% endblock %}</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link
-      href="https://cdn.jsdelivr.net/npm/remixicon@4.6.0/fonts/remixicon.css"
-      rel="stylesheet"
-    />
+    <title>{% block title %}NOCTRA | Workshop Management{% endblock %}</title>
+
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- Remix Icon -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.6.0/fonts/remixicon.css" />
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+    <!-- Phosphor Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" />
-    <link rel="stylesheet" href="{{ url_for('static', path='css/base.css') }}" />
-    {% block extra_css %}{% endblock %}
-  </head>
 
-  <body>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- AOS -->
+    <link rel="stylesheet" href="https://unpkg.com/aos@2.3.4/dist/aos.css" />
+
+    <!-- ============================================================
+         CSS - URUTAN PENTING!
+         ============================================================ -->
+    <!-- 1. Base CSS (variabel, reset, utility) -->
+    <link rel="stylesheet" href="{{ url_for('static', path='includes/css/base.css') }}" />
+
+    <!-- 2. Components CSS (reusable components) -->
+    <link rel="stylesheet" href="{{ url_for('static', path='includes/css/components.css') }}" />
+
+    <!-- 3. Page Specific CSS (akan ditambahkan oleh child template) -->
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body>
     <div class="app">
 
-      <!-- SIDEBAR OVERLAY (mobile) -->
-      <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-      <!-- SIDEBAR -->
-      <aside class="sidebar" id="sidebar">
-        <div class="brand">
-          <div class="brand-logo">N</div>
-          <div>
-            <h2>NOCTRA</h2>
-            <span>Workshop OS</span>
-          </div>
-        </div>
-
-        <nav class="sidebar-nav">
-          <a href="/management/">
-            <i class="ri-dashboard-line"></i>
-            Dashboard
-          </a>
-          <a href="/management/projects">
-            <i class="ri-tools-line"></i>
-            Projects
-          </a>
-          <a href="/management/inquiries">
-            <i class="ri-question-answer-line"></i>
-            Inquiries & Invoicing
-          </a>
-          <a href="/management/budgeting">
-            <i class="ri-wallet-3-line"></i>
-            Budgeting
-          </a>
-          <a href="/management/analytics">
-            <i class="ri-line-chart-line"></i>
-            Analytics
-          </a>
-          <a href="/management/inventories">
-            <i class="ri-box-3-line"></i>
-            Inventory
-          </a>
-          <a href="/management/customers">
-            <i class="ri-group-line"></i>
-            Customers
-          </a>
-          <a href="/management/price-list">
-            <i class="ri-file-list-3-line"></i>
-            Price lists
-          </a>
-          <a href="/management/invoices">
-            <i class="ri-bill-line"></i>
-            Operationals
-          </a>
-          <a href="/management/calendars">
-            <i class="ri-calendar-line"></i>
-            Calendar
-          </a>
-          <a href="/management/documents">
-            <i class="ri-folder-line"></i>
-            Documents
-          </a>
-          <a href="/management/reports">
-            <i class="ri-bar-chart-box-line"></i>
-            Reports
-          </a>
-
-          <div class="sidebar-divider"></div>
-
-          <a href="/management/settings">
-            <i class="ri-settings-3-line"></i>
-            Settings
-          </a>
-        </nav>
-      </aside>
-
-      <!-- MAIN -->
-      <main class="main">
-
-        <!-- TOPBAR -->
-        <header class="topbar">
-          <div class="topbar-left">
-            <!-- Mobile menu toggle -->
-            <button class="menu-btn" id="menuBtn" aria-label="Toggle menu">
-              <i class="ri-menu-line"></i>
-            </button>
-
-            <div>
-              <h1>{% block page_title %}Dashboard{% endblock %}</h1>
-              <p>{% block page_subtitle %}Workshop management system{% endblock %}</p>
+        <!-- ============================================================
+             SIDEBAR
+             ============================================================ -->
+        <aside class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
+            <!-- Brand -->
+            <div class="brand">
+                <div class="brand-logo">N</div>
+                <div>
+                    <h2>NOCTRA</h2>
+                    <span>Workshop OS</span>
+                </div>
             </div>
-          </div>
 
-          <div class="topbar-actions">
-            <!--div class="search-box">
-              <i class="ri-search-line"></i>
-              <input type="text" placeholder="Search..." />
-            </div-->
+            <!-- Navigation -->
+            <nav class="sidebar-nav">
+                <!-- MAIN -->
+                <div class="nav-section">
+                    <span class="nav-label">MAIN</span>
+                    <a href="/management/" class="nav-link" data-page="dashboard">
+                        <i class="ri-dashboard-line"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="/management/projects" class="nav-link" data-page="projects">
+                        <i class="ri-tools-line"></i>
+                        <span>Projects</span>
+                        <span class="nav-badge" id="projectBadge">0</span>
+                    </a>
+                    <a href="/management/inquiries" class="nav-link" data-page="inquiries">
+                        <i class="ri-question-answer-line"></i>
+                        <span>Inquiries</span>
+                        <span class="nav-badge" id="inquiryBadge">0</span>
+                    </a>
+                    <a href="/management/budgeting" class="nav-link" data-page="budgeting">
+                        <i class="ri-wallet-3-line"></i>
+                        <span>Budgeting</span>
+                    </a>
+                </div>
 
-            <button class="notification-btn" aria-label="Notifications">
-              <i class="ri-notification-3-line"></i>
-              <span class="notif-dot"></span>
-            </button>
+                <!-- OPERATIONS -->
+                <div class="nav-section">
+                    <span class="nav-label">OPERATIONS</span>
+                    <a href="/management/inventories" class="nav-link" data-page="inventories">
+                        <i class="ri-box-3-line"></i>
+                        <span>Inventory</span>
+                        <span class="nav-badge warning" id="inventoryBadge">0</span>
+                    </a>
+                    <a href="/management/price-list" class="nav-link" data-page="price-list">
+                        <i class="ri-file-list-3-line"></i>
+                        <span>Price Lists</span>
+                    </a>
+                    <a href="/management/customers" class="nav-link" data-page="customers">
+                        <i class="ri-group-line"></i>
+                        <span>Customers</span>
+                    </a>
+                    <a href="/management/invoices" class="nav-link" data-page="invoices">
+                        <i class="ri-bill-line"></i>
+                        <span>Invoices</span>
+                    </a>
+                    <a href="/management/calendars" class="nav-link" data-page="calendars">
+                        <i class="ri-calendar-line"></i>
+                        <span>Calendar</span>
+                    </a>
+                    <a href="/management/documents" class="nav-link" data-page="documents">
+                        <i class="ri-folder-line"></i>
+                        <span>Documents</span>
+                    </a>
+                    <a href="/management/work-orders" class="nav-link" data-page="work-orders">
+                        <i class="ri-clipboard-line"></i>
+                        <span>Work Orders</span>
+                    </a>
+                    <a href="/management/quotations" class="nav-link" data-page="quotations">
+                        <i class="ri-file-text-line"></i>
+                        <span>Quotations</span>
+                    </a>
+                </div>
 
-            <div class="profile">
-              <div class="avatar">A</div>
+                <!-- ANALYTICS -->
+                <div class="nav-section">
+                    <span class="nav-label">ANALYTICS</span>
+                    <a href="/management/analytics" class="nav-link" data-page="analytics">
+                        <i class="ri-line-chart-line"></i>
+                        <span>Analytics</span>
+                    </a>
+                    <a href="/management/reports" class="nav-link" data-page="reports">
+                        <i class="ri-bar-chart-box-line"></i>
+                        <span>Reports</span>
+                    </a>
+                </div>
+
+                <!-- SYSTEM -->
+                <div class="nav-section">
+                    <span class="nav-label">SYSTEM</span>
+                    <a href="/management/settings" class="nav-link" data-page="settings">
+                        <i class="ri-settings-3-line"></i>
+                        <span>Settings</span>
+                    </a>
+                    <a href="/management/notifications" class="nav-link" data-page="notifications">
+                        <i class="ri-notification-3-line"></i>
+                        <span>Notifications</span>
+                    </a>
+                </div>
+
+                <div class="sidebar-divider"></div>
+
+                <!-- Logout -->
+                <a href="#" class="nav-link logout" id="logoutBtn">
+                    <i class="ri-logout-box-r-line"></i>
+                    <span>Logout</span>
+                </a>
+            </nav>
+
+            <!-- Footer -->
+            <div class="sidebar-footer">
+                <span class="user-name" id="userName">Guest</span>
+                <span class="user-role" id="userRole">-</span>
             </div>
-          </div>
-        </header>
+        </aside>
 
-        <!-- PAGE CONTENT -->
-        <section class="page-content">
-          {% block content %}{% endblock %}
-        </section>
+        <!-- ============================================================
+             SIDEBAR OVERLAY (mobile)
+             ============================================================ -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-      </main>
+        <!-- ============================================================
+             MAIN CONTENT
+             ============================================================ -->
+        <main class="main">
+
+            <!-- ============================================================
+                 TOPBAR
+                 ============================================================ -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button class="menu-btn" id="menuBtn" aria-label="Toggle menu">
+                        <i class="ri-menu-line"></i>
+                    </button>
+
+                    <div>
+                        <h1 id="pageTitle">{% block page_title %}Dashboard{% endblock %}</h1>
+                        <p id="pageSubtitle">{% block page_subtitle %}Workshop management system{% endblock %}</p>
+                    </div>
+                </div>
+
+                <div class="topbar-actions">
+                    <!-- Refresh -->
+                    <button class="topbar-btn" id="refreshBtn" title="Refresh data">
+                        <i class="ri-refresh-line"></i>
+                    </button>
+
+                    <!-- Notifications -->
+                    <button class="topbar-btn" id="notifBtn" title="Notifications">
+                        <i class="ri-notification-3-line"></i>
+                        <span class="notif-dot" id="notifDot"></span>
+                    </button>
+
+                    <!-- Profile -->
+                    <div class="profile" id="profileMenu">
+                        <div class="avatar" id="userAvatar">A</div>
+                        <div class="profile-dropdown" id="profileDropdown">
+                            <a href="/management/profile"><i class="ri-user-line"></i> Profile</a>
+                            <a href="/management/settings"><i class="ri-settings-line"></i> Settings</a>
+                            <hr />
+                            <a href="#" id="logoutDropdown"><i class="ri-logout-box-r-line"></i> Logout</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- ============================================================
+                 PAGE CONTENT
+                 ============================================================ -->
+            <section class="page-content" id="pageContent">
+                {% block content %}{% endblock %}
+            </section>
+
+        </main>
     </div>
 
-    <!-- TOAST CONTAINER -->
+    <!-- ============================================================
+         TOAST CONTAINER
+         ============================================================ -->
     <div id="toastContainer" class="toast-container"></div>
 
+    <!-- ============================================================
+         JAVASCRIPT
+         ============================================================ -->
+    <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
+
+    <!-- API Client -->
+    <!--script src="{{ url_for('static', path='js/api/client.js') }}"></script>
+    <script src="{{ url_for('static', path='js/api/auth.js') }}"></script>
+    <script src="{{ url_for('static', path='js/api/projects.js') }}"></script>
+    <script src="{{ url_for('static', path='js/api/inquiries.js') }}"></script>
+    <script src="{{ url_for('static', path='js/api/payments.js') }}"></script>
+    <script src="{{ url_for('static', path='js/api/inventory.js') }}"></script>
+    <script src="{{ url_for('static', path='js/api/price-list.js') }}"></script-->
+
+    <!-- Services -->
+    <!--script src="{{ url_for('static', path='js/services/auth.service.js') }}"></script-->
+
+    <!-- Utils -->
+    <script src="{{ url_for('static', path='js/utils/helpers.js') }}"></script>
+
+    <!-- Base JS -->
     <script src="{{ url_for('static', path='js/base.js') }}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Page Specific JS -->
     {% block extra_js %}{% endblock %}
-  </body>
+
+    <script>
+        // Initialize AOS
+        AOS.init({
+            duration: 700,
+            once: true,
+        });
+
+        // Profile dropdown toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const profile = document.getElementById('profileMenu');
+            const dropdown = document.getElementById('profileDropdown');
+
+            if (profile && dropdown) {
+                profile.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    dropdown.classList.toggle('open');
+                });
+
+                document.addEventListener('click', function() {
+                    dropdown.classList.remove('open');
+                });
+            }
+        });
+    </script>
+</body>
 </html>

@@ -1,5 +1,6 @@
 # models/customer_inquiry.py
-from sqlalchemy import String, Text, ForeignKey, Integer, JSON, DateTime, func
+from decimal import Decimal
+from sqlalchemy import String, Text, ForeignKey, Integer, JSON, DateTime, func, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base, UUIDMixin, TimestampMixin, UUID
@@ -51,6 +52,17 @@ class CustomerInquiry(Base, UUIDMixin, TimestampMixin):
     contacted_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
     quoted_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
     converted_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    
+    # ============ Financial Fields ============
+    estimated_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    deposit_required: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    deposit_paid: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True, default=0)
+    total_paid: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True, default=0)
+
+    # ============ Relationships ============
+    payments = relationship("InquiryPayment", back_populates="inquiry", cascade="all, delete-orphan")
+    financial_history = relationship("InquiryFinancialHistory", back_populates="inquiry", cascade="all, delete-orphan")
+    invoices = relationship("InquiryInvoice", back_populates="inquiry", cascade="all, delete-orphan")
 
     # ============ Relationships ============
     photos = relationship(
@@ -76,6 +88,24 @@ class CustomerInquiry(Base, UUIDMixin, TimestampMixin):
         "Project",
         back_populates="inquiry",
         uselist=False,
+    )
+    
+    payments = relationship(
+        "InquiryPayment",
+        back_populates="inquiry",
+        cascade="all, delete-orphan",
+    )
+    
+    financial_history = relationship(
+        "InquiryFinancialHistory",
+        back_populates="inquiry",
+        cascade="all, delete-orphan",
+    )
+    
+    invoices = relationship(
+        "InquiryInvoice",
+        back_populates="inquiry",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self):

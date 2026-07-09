@@ -1,253 +1,295 @@
-{% extends "base.html" %} {% block title %} Settings | NOCTRA {% endblock %} {%
-block extra_css %}
-<link
-  rel="stylesheet"
-  href="{{ url_for('static', path='css/settings.css') }}"
-/>
-{% endblock %} {% block page_title %} Settings {% endblock %} {% block
-page_subtitle %} Business Configuration {% endblock %} {% block content %}
+{% extends "base.html" %}
 
+{% block title %}Settings | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/settings.css') }}" />
+{% endblock %}
+
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}Business Configuration &amp; Preferences{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     SETTINGS TOOLBAR
+     ============================================================ -->
 <div class="settings-toolbar">
-  <div class="settings-toolbar-info">
-    <h2>Configuration Center</h2>
-    <p>
-      Manage workshop operations, pricing rules, users, security and application
-      preferences.
-    </p>
-  </div>
-
-  <div class="settings-toolbar-actions">
-    <button type="button" class="btn-secondary" id="resetSettings">
-      Reset
-    </button>
-
-    <button type="button" class="btn-primary" id="saveSettings">
-      Save Changes
-    </button>
-  </div>
+    <div class="settings-toolbar-info">
+        <h2>Configuration Center</h2>
+        <p>Manage workshop operations, pricing rules, users, security and application preferences.</p>
+    </div>
+    <div class="settings-toolbar-actions">
+        <button type="button" class="btn-secondary" id="resetSettings">
+            <i class="fas fa-undo"></i> Reset
+        </button>
+        <button type="button" class="btn-primary" id="saveSettings">
+            <i class="fas fa-save"></i> Save Changes
+        </button>
+    </div>
 </div>
 
-<form id="settingsForm">
-  <div class="settings-grid">
-    <!-- WORKSHOP -->
+<!-- ============================================================
+     SETTINGS GRID
+     ============================================================ -->
+<form id="settingsForm" class="settings-grid">
 
+    <!-- ============================================================
+         WORKSHOP SETTINGS
+         ============================================================ -->
     <section class="settings-card">
-      <div class="card-header">
-        <h3>Workshop</h3>
-        <span>Business information and contact details</span>
-      </div>
-
-      <div class="form-group">
-        <label for="workshop_name"> Workshop Name </label>
-
-        <input
-          id="workshop_name"
-          name="workshop_name"
-          type="text"
-          value="NOCTRA"
-          required
-        />
-      </div>
-
-      <div class="form-group">
-        <label for="workshop_address"> Address </label>
-
-        <textarea
-          id="workshop_address"
-          name="workshop_address"
-          rows="4"
-        ></textarea>
-      </div>
-
-      <div class="form-group">
-        <label for="workshop_phone"> Phone </label>
-
-        <input id="workshop_phone" name="workshop_phone" type="text" />
-      </div>
-
-      <div class="form-group">
-        <label for="workshop_email"> Email </label>
-
-        <input id="workshop_email" name="workshop_email" type="email" />
-      </div>
-    </section>
-
-    <!-- PRICING -->
-
-    <section class="settings-card">
-      <div class="card-header">
-        <h3>Pricing</h3>
-        <span>Base service pricing engine</span>
-      </div>
-
-      <div class="form-group">
-        <label for="paint_base_price"> Paint Job Base Price </label>
-
-        <input
-          id="paint_base_price"
-          name="paint_base_price"
-          type="number"
-          value="2500000"
-        />
-      </div>
-
-      <div class="form-group">
-        <label for="restoration_base_price"> Restoration Base Price </label>
-
-        <input
-          id="restoration_base_price"
-          name="restoration_base_price"
-          type="number"
-          value="5000000"
-        />
-      </div>
-
-      <div class="form-group">
-        <label for="detailing_base_price"> Detailing Base Price </label>
-
-        <input
-          id="detailing_base_price"
-          name="detailing_base_price"
-          type="number"
-          value="500000"
-        />
-      </div>
-    </section>
-
-    <!-- LABOR -->
-
-    <section class="settings-card">
-      <div class="card-header">
-        <h3>Labor</h3>
-        <span>Labor and manpower costs</span>
-      </div>
-
-      <div class="form-group">
-        <label for="labor_painter"> Painter / Day </label>
-
-        <input
-          id="labor_painter"
-          name="labor_painter"
-          type="number"
-          value="200000"
-        />
-      </div>
-
-      <div class="form-group">
-        <label for="labor_body"> Body Repair / Day </label>
-
-        <input id="labor_body" name="labor_body" type="number" value="250000" />
-      </div>
-
-      <div class="form-group">
-        <label for="labor_assembly"> Assembly / Day </label>
-
-        <input
-          id="labor_assembly"
-          name="labor_assembly"
-          type="number"
-          value="150000"
-        />
-      </div>
-    </section>
-
-    <!-- USERS -->
-
-    <section class="settings-card">
-      <div class="card-header">
-        <h3>Users</h3>
-        <span>Manage workshop personnel</span>
-      </div>
-
-      <button type="button" class="btn-primary add-user-btn">Add User</button>
-
-      <div class="user-list">
-        <div class="user-item">
-          <div>
-            <strong>Admin</strong>
-            <small>Owner</small>
-          </div>
-
-          <button type="button" class="btn-icon">⋮</button>
+        <div class="card-header">
+            <h3><i class="fas fa-store"></i> Workshop</h3>
+            <span>Business information and contact details</span>
         </div>
 
-        <div class="user-item">
-          <div>
-            <strong>Painter01</strong>
-            <small>Staff</small>
-          </div>
-
-          <button type="button" class="btn-icon">⋮</button>
+        <div class="form-group">
+            <label for="workshop_name">Workshop Name</label>
+            <input id="workshop_name" name="workshop_name" type="text" value="NOCTRA Autoworks" required />
         </div>
-      </div>
+
+        <div class="form-group">
+            <label for="workshop_address">Address</label>
+            <textarea id="workshop_address" name="workshop_address" rows="3" placeholder="Jl. Workshop No. 1, Jakarta"></textarea>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="workshop_phone">Phone</label>
+                <input id="workshop_phone" name="workshop_phone" type="text" placeholder="021-555-1234" />
+            </div>
+            <div class="form-group">
+                <label for="workshop_email">Email</label>
+                <input id="workshop_email" name="workshop_email" type="email" placeholder="info@noctra.com" />
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="workshop_website">Website</label>
+            <input id="workshop_website" name="workshop_website" type="url" placeholder="https://noctra.com" />
+        </div>
     </section>
 
-    <!-- SECURITY -->
-
+    <!-- ============================================================
+         PRICING SETTINGS
+         ============================================================ -->
     <section class="settings-card">
-      <div class="card-header">
-        <h3>Security</h3>
-        <span>Authentication and protection settings</span>
-      </div>
+        <div class="card-header">
+            <h3><i class="fas fa-tags"></i> Pricing</h3>
+            <span>Base service pricing engine</span>
+        </div>
 
-      <div class="switch-row">
-        <label> Require MFA For Admin Users </label>
+        <div class="form-group">
+            <label for="paint_base_price">Paint Job Base Price</label>
+            <input id="paint_base_price" name="paint_base_price" type="number" value="2500000" step="100000" />
+        </div>
 
-        <input type="checkbox" name="require_mfa" />
-      </div>
+        <div class="form-group">
+            <label for="restoration_base_price">Restoration Base Price</label>
+            <input id="restoration_base_price" name="restoration_base_price" type="number" value="5000000" step="100000" />
+        </div>
 
-      <div class="switch-row">
-        <label> Allow Session Remember Me </label>
+        <div class="form-group">
+            <label for="detailing_base_price">Detailing Base Price</label>
+            <input id="detailing_base_price" name="detailing_base_price" type="number" value="500000" step="50000" />
+        </div>
 
-        <input type="checkbox" name="remember_me" checked />
-      </div>
-
-      <div class="form-group">
-        <label> Session Timeout (Minutes) </label>
-
-        <input type="number" name="session_timeout" value="60" />
-      </div>
+        <div class="form-group">
+            <label for="custom_color_price">Custom Color Surcharge</label>
+            <input id="custom_color_price" name="custom_color_price" type="number" value="500000" step="50000" />
+        </div>
     </section>
 
-    <!-- SYSTEM -->
-
+    <!-- ============================================================
+         LABOR SETTINGS
+         ============================================================ -->
     <section class="settings-card">
-      <div class="card-header">
-        <h3>System Preferences</h3>
-        <span>Application behavior and defaults</span>
-      </div>
+        <div class="card-header">
+            <h3><i class="fas fa-user-gear"></i> Labor</h3>
+            <span>Labor and manpower costs</span>
+        </div>
 
-      <div class="form-group">
-        <label> Currency </label>
+        <div class="form-group">
+            <label for="labor_painter">Painter / Day</label>
+            <input id="labor_painter" name="labor_painter" type="number" value="200000" step="10000" />
+        </div>
 
-        <select name="currency">
-          <option value="IDR">Indonesian Rupiah</option>
-        </select>
-      </div>
+        <div class="form-group">
+            <label for="labor_body">Body Repair / Day</label>
+            <input id="labor_body" name="labor_body" type="number" value="250000" step="10000" />
+        </div>
 
-      <div class="form-group">
-        <label> Tax % </label>
+        <div class="form-group">
+            <label for="labor_assembly">Assembly / Day</label>
+            <input id="labor_assembly" name="labor_assembly" type="number" value="150000" step="10000" />
+        </div>
 
-        <input type="number" name="tax_percent" value="11" />
-      </div>
-
-      <div class="form-group">
-        <label> Default Margin % </label>
-
-        <input type="number" name="default_margin" value="40" />
-      </div>
-
-      <div class="switch-row">
-        <label> Enable Email Notifications </label>
-
-        <input type="checkbox" name="email_notifications" checked />
-      </div>
+        <div class="form-group">
+            <label for="labor_supervisor">Supervisor / Day</label>
+            <input id="labor_supervisor" name="labor_supervisor" type="number" value="300000" step="10000" />
+        </div>
     </section>
-  </div>
+
+    <!-- ============================================================
+         USERS SETTINGS
+         ============================================================ -->
+    <section class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-users"></i> Users</h3>
+            <span>Manage workshop personnel</span>
+        </div>
+
+        <button type="button" class="btn-primary" id="addUserBtn">
+            <i class="fas fa-user-plus"></i> Add User
+        </button>
+
+        <div class="user-list" id="userList">
+            <!-- JS akan render user list -->
+            <div class="loading-placeholder-sm">Loading users...</div>
+        </div>
+    </section>
+
+    <!-- ============================================================
+         SECURITY SETTINGS
+         ============================================================ -->
+    <section class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-shield-alt"></i> Security</h3>
+            <span>Authentication and protection settings</span>
+        </div>
+
+        <div class="switch-row">
+            <label>Require MFA For Admin Users</label>
+            <input type="checkbox" name="require_mfa" id="require_mfa" />
+        </div>
+
+        <div class="switch-row">
+            <label>Allow Session Remember Me</label>
+            <input type="checkbox" name="remember_me" id="remember_me" checked />
+        </div>
+
+        <div class="switch-row">
+            <label>Force Password Change Every 90 Days</label>
+            <input type="checkbox" name="force_password_change" id="force_password_change" />
+        </div>
+
+        <div class="form-group">
+            <label>Session Timeout (Minutes)</label>
+            <input type="number" name="session_timeout" id="session_timeout" value="60" min="5" max="480" />
+        </div>
+
+        <div class="form-group">
+            <label>Max Login Attempts Before Lockout</label>
+            <input type="number" name="max_login_attempts" id="max_login_attempts" value="5" min="3" max="10" />
+        </div>
+    </section>
+
+    <!-- ============================================================
+         SYSTEM PREFERENCES
+         ============================================================ -->
+    <section class="settings-card">
+        <div class="card-header">
+            <h3><i class="fas fa-gear"></i> System Preferences</h3>
+            <span>Application behavior and defaults</span>
+        </div>
+
+        <div class="form-group">
+            <label>Currency</label>
+            <select name="currency" id="currency">
+                <option value="IDR">Indonesian Rupiah (IDR)</option>
+                <option value="USD">US Dollar (USD)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Tax %</label>
+            <input type="number" name="tax_percent" id="tax_percent" value="11" min="0" max="100" step="0.5" />
+        </div>
+
+        <div class="form-group">
+            <label>Default Margin %</label>
+            <input type="number" name="default_margin" id="default_margin" value="40" min="0" max="100" step="1" />
+        </div>
+
+        <div class="form-group">
+            <label>Default Project Duration (days)</label>
+            <input type="number" name="default_duration" id="default_duration" value="14" min="1" max="90" />
+        </div>
+
+        <div class="switch-row">
+            <label>Enable Email Notifications</label>
+            <input type="checkbox" name="email_notifications" id="email_notifications" checked />
+        </div>
+
+        <div class="switch-row">
+            <label>Enable WhatsApp Notifications</label>
+            <input type="checkbox" name="whatsapp_notifications" id="whatsapp_notifications" checked />
+        </div>
+
+        <div class="switch-row">
+            <label>Auto-generate Invoice Number</label>
+            <input type="checkbox" name="auto_invoice" id="auto_invoice" checked />
+        </div>
+    </section>
+
 </form>
 
+<!-- ============================================================
+     SAVE STATUS
+     ============================================================ -->
 <div class="save-status" id="saveStatus">Ready</div>
 
-{% endblock %} {% block extra_js %}
-<script src="{{ url_for('static', path='js/settings.js') }}"></script>
+<!-- ============================================================
+     MODAL: Add User
+     ============================================================ -->
+<div class="modal-overlay" id="userModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h2>Add User</h2>
+            <button id="closeUserModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="userForm">
+            <div class="form-group">
+                <label>Username *</label>
+                <input type="text" id="userUsername" required placeholder="e.g. john_doe" />
+            </div>
+            <div class="form-group">
+                <label>Email *</label>
+                <input type="email" id="userEmail" required placeholder="john@workshop.com" />
+            </div>
+            <div class="form-group">
+                <label>Full Name *</label>
+                <input type="text" id="userFullName" required placeholder="John Doe" />
+            </div>
+            <div class="form-group">
+                <label>Password *</label>
+                <input type="password" id="userPassword" required placeholder="Min 8 characters" />
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select id="userRole">
+                    <option value="admin">Administrator</option>
+                    <option value="manager">Project Manager</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="technician">Technician</option>
+                    <option value="user">User</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelUserBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Add User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='js/pages/settings.js') }}"></script>
 {% endblock %}
