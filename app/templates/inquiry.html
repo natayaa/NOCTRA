@@ -292,7 +292,7 @@
 
       <div class="input-group">
         <label>Project Photos (Maximum 10)</label>
-        <label class="upload-zone">
+        <div class="upload-zone" id="uploadZone">
           <input
             id="project_photos"
             name="project_photos"
@@ -302,10 +302,10 @@
           />
           <i class="ri-image-add-line"></i>
           <h4>Upload Photos</h4>
-          <p>
+          <p id="uploadParagraph">
             Front • Rear • Left Side • Right Side • Dashboard • Damaged Area
           </p>
-        </label>
+        </div>
       </div>
 
       <div class="photo-preview-grid" id="photoPreviewGrid"></div>
@@ -337,4 +337,8 @@
     </div>
   </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='includes/js/inquiry.js') }}"></script>
 {% endblock %}

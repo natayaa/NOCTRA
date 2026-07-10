@@ -1,6 +1,4 @@
-// ============================================================
-// inquiries/renderers/table.js - Table Rendering
-// ============================================================
+// inquiries/renderers/table.js (FIXED & IMPROVED)
 
 import { DOM } from "../dom.js";
 import { Formatter, escapeHtml } from "../formatters.js";
@@ -25,93 +23,94 @@ export function renderInquiries(inquiries) {
 
   if (!inquiries || inquiries.length === 0) {
     body.innerHTML = `
-            <tr>
-                <td colspan="7" style="text-align:center; padding:2rem; color: var(--text-muted);">
-                    <i class="ph ph-file-text" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
-                    No inquiries found
-                </td>
-            </tr>
-        `;
+      <tr>
+        <td colspan="7" style="text-align:center; padding:2rem; color: var(--text-muted);">
+          <i class="ph ph-file-text" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
+          No inquiries found
+        </td>
+      </tr>
+    `;
     return;
   }
 
   body.innerHTML = inquiries
-    .map(
-      (inquiry) => `
-        <tr class="fade-in">
-            <td>
-                <strong>${escapeHtml(inquiry.customer_name)}</strong><br>
-                <span style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(inquiry.customer_phone_number || "")}</span>
-            </td>
-            <td>
-                <span style="font-weight:500;">${escapeHtml(inquiry.vehicle_brand)}</span>
-                <span style="color:var(--text-muted);">${escapeHtml(inquiry.vehicle_model)}</span>
-            </td>
-            <td><span style="color:var(--text-secondary);">${escapeHtml(inquiry.project_type)}</span></td>
-            <td>
-                <span class="status-badge ${Formatter.statusBadge(inquiry.status)}">
-                    ${Formatter.statusLabel(inquiry.status)}
-                </span>
-            </td>
-            <td>
-                ${
-                  inquiry.project
-                    ? `
-                    <span class="project-status-badge ${Formatter.projectStatusBadge(inquiry.project.status)}">
-                        ${inquiry.project.status || "Active"}
-                    </span>
-                `
-                    : `
-                    <span class="project-status-badge no-project">No Project</span>
-                `
-                }
-            </td>
-            <td style="font-size:0.8rem; color:var(--text-muted);">
-                ${Formatter.date(inquiry.created_at)}
-            </td>
-            <td style="text-align:center;">
-                <div class="actions">
-                    <button class="action-btn view" onclick="window.openInquiryDrawer('${inquiry.id}')" title="View Details">
-                        <i class="ph ph-eye"></i>
-                    </button>
-                    ${
-                      ["new", "under_review"].includes(inquiry.status)
-                        ? `
-                        <button class="action-btn quote" onclick="window.openQuoteModal('${inquiry.id}')" title="Send Quote">
-                            <i class="ph ph-file-text"></i>
-                        </button>
-                        <button class="action-btn approve" onclick="window.handleApprove('${inquiry.id}')" title="Approve">
-                            <i class="ph ph-check-circle"></i>
-                        </button>
-                        <button class="action-btn reject" onclick="window.openRejectModal('${inquiry.id}')" title="Reject">
-                            <i class="ph ph-x-circle"></i>
-                        </button>
-                    `
-                        : ""
-                    }
-                    ${
-                      ["approved", "quoted"].includes(inquiry.status)
-                        ? `
-                        <button class="action-btn convert" onclick="window.openConvertModal('${inquiry.id}')" title="Convert to Project">
-                            <i class="ph ph-arrow-right"></i>
-                        </button>
-                    `
-                        : ""
-                    }
-                    ${
-                      inquiry.project
-                        ? `
-                        <button class="action-btn view" onclick="window.location.href='/projects/${inquiry.project.id}'" title="View Project">
-                            <i class="ph ph-briefcase"></i>
-                        </button>
-                    `
-                        : ""
-                    }
-                </div>
-            </td>
-        </tr>
-    `,
-    )
+    .map((inquiry) => {
+      const hasProject = !!inquiry.project;
+      const projectStatus = inquiry.project?.status || "No Project";
+      const statusBadge = Formatter.statusBadge(inquiry.status);
+      const statusLabel = Formatter.statusLabel(inquiry.status);
+      const projectBadge = hasProject
+        ? Formatter.projectStatusBadge(inquiry.project.status)
+        : "no-project";
+
+      return `
+      <tr class="fade-in" data-inquiry-id="${inquiry.id}">
+        <td>
+          <strong>${escapeHtml(inquiry.customer_name || "Unknown")}</strong>
+          <br>
+          <span style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(inquiry.customer_phone_number || "")}</span>
+        </td>
+        <td>
+          <span style="font-weight:500;">${escapeHtml(inquiry.vehicle_brand || "-")}</span>
+          <span style="color:var(--text-muted);">${escapeHtml(inquiry.vehicle_model || "")}</span>
+        </td>
+        <td><span style="color:var(--text-secondary);">${escapeHtml(inquiry.project_type || "-")}</span></td>
+        <td>
+          <span class="status-badge ${statusBadge}">
+            ${statusLabel}
+          </span>
+        </td>
+        <td>
+          <span class="project-status-badge ${projectBadge}">
+            ${hasProject ? inquiry.project.status || "Active" : "No Project"}
+          </span>
+        </td>
+        <td style="font-size:0.8rem; color:var(--text-muted);">
+          ${Formatter.date(inquiry.created_at)}
+        </td>
+        <td style="text-align:center;">
+          <div class="actions" style="display:flex;gap:0.25rem;justify-content:center;flex-wrap:wrap;">
+            <button class="action-btn view" onclick="window.openInquiryDrawer('${inquiry.id}')" title="View Details">
+              <i class="ph ph-eye"></i>
+            </button>
+            ${
+              ["new", "under_review"].includes(inquiry.status)
+                ? `
+              <button class="action-btn quote" onclick="window.openQuoteModal('${inquiry.id}')" title="Send Quote">
+                <i class="ph ph-file-text"></i>
+              </button>
+              <button class="action-btn approve" onclick="window.handleApprove('${inquiry.id}')" title="Approve">
+                <i class="ph ph-check-circle"></i>
+              </button>
+              <button class="action-btn reject" onclick="window.openRejectModal('${inquiry.id}')" title="Reject">
+                <i class="ph ph-x-circle"></i>
+              </button>
+            `
+                : ""
+            }
+            ${
+              ["approved", "quoted"].includes(inquiry.status)
+                ? `
+              <button class="action-btn convert" onclick="window.openConvertModal('${inquiry.id}')" title="Convert to Project">
+                <i class="ph ph-arrow-right"></i>
+              </button>
+            `
+                : ""
+            }
+            ${
+              hasProject
+                ? `
+              <button class="action-btn view-project" onclick="window.location.href='/projects/${inquiry.project.id}'" title="View Project">
+                <i class="ph ph-briefcase"></i>
+              </button>
+            `
+                : ""
+            }
+          </div>
+        </td>
+      </tr>
+    `;
+    })
     .join("");
 }
 
@@ -120,27 +119,48 @@ export function updatePagination(page, totalPages, totalItems) {
   const prev = DOM.prevPage();
   const next = DOM.nextPage();
 
-  if (info)
+  if (info) {
     info.textContent = `Page ${page} of ${totalPages || 1} (${totalItems} items)`;
-  if (prev) prev.disabled = page <= 1;
-  if (next) next.disabled = page >= totalPages;
+  }
+  if (prev) {
+    prev.disabled = page <= 1;
+    prev.style.opacity = page <= 1 ? "0.5" : "1";
+    prev.style.cursor = page <= 1 ? "not-allowed" : "pointer";
+  }
+  if (next) {
+    const isLast = page >= totalPages || totalPages === 0;
+    next.disabled = isLast;
+    next.style.opacity = isLast ? "0.5" : "1";
+    next.style.cursor = isLast ? "not-allowed" : "pointer";
+  }
 }
 
 export function updateDashboard(stats) {
   if (!stats) return;
+
   const totalCount = DOM.totalCount();
   const newCount = DOM.newCount();
   const quotedCount = DOM.quotedCount();
   const convertedCount = DOM.convertedCount();
 
+  const byStatus = stats.by_status || {};
+
   if (totalCount)
     totalCount.textContent = stats.total || stats.total_count || 0;
-  if (newCount)
-    newCount.textContent = stats.by_status?.new || stats.new_count || 0;
+  if (newCount) newCount.textContent = byStatus.new || stats.new_count || 0;
   if (quotedCount)
-    quotedCount.textContent =
-      stats.by_status?.quoted || stats.quoted_count || 0;
+    quotedCount.textContent = byStatus.quoted || stats.quoted_count || 0;
   if (convertedCount)
     convertedCount.textContent =
-      stats.by_status?.converted || stats.converted_count || 0;
+      byStatus.converted || stats.converted_count || 0;
+}
+
+export function highlightRow(inquiryId) {
+  const rows = document.querySelectorAll("#inquiriesBody tr");
+  rows.forEach((row) => {
+    row.classList.remove("selected");
+    if (row.dataset.inquiryId === inquiryId) {
+      row.classList.add("selected");
+    }
+  });
 }

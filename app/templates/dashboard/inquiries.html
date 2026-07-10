@@ -92,7 +92,7 @@
                     <th>Customer</th>
                     <th>Vehicle</th>
                     <th>Project Type</th>
-                    <th>Status</th>
+                    <th>Inquiry Status</th>
                     <th>Project Status</th>
                     <th>Created</th>
                     <th style="text-align:center;">Actions</th>
@@ -163,6 +163,22 @@
             <div class="request-box" id="drawerDescription">No description provided.</div>
             <div style="margin-top: 12px;">
                 <a href="#" id="drawerReference" target="_blank">🔗 View Reference Link</a>
+            </div>
+        </section>
+
+        <!-- Labor Items -->
+        <section class="detail-card" id="drawerLaborSection">
+            <h3>Labor Items</h3>
+            <div id="drawerLaborItems">
+                <p class="no-data">No labor items</p>
+            </div>
+        </section>
+
+        <!-- Material Usages -->
+        <section class="detail-card" id="drawerMaterialSection">
+            <h3>Material Usage</h3>
+            <div id="drawerMaterialUsages">
+                <p class="no-data">No material usage</p>
             </div>
         </section>
 
@@ -240,22 +256,6 @@
                     <span>Rp 0</span>
                     <span>Rp 0</span>
                 </div>
-            </div>
-        </section>
-
-        <!-- Labor Items -->
-        <section class="detail-card" id="drawerLaborSection">
-            <h3>Labor Items</h3>
-            <div id="drawerLaborItems">
-                <p class="no-data">No labor items</p>
-            </div>
-        </section>
-
-        <!-- Material Usages -->
-        <section class="detail-card" id="drawerMaterialSection">
-            <h3>Material Usage</h3>
-            <div id="drawerMaterialUsages">
-                <p class="no-data">No material usage</p>
             </div>
         </section>
 
@@ -346,6 +346,9 @@
                 <button class="btn-secondary" id="drawerWhatsappBtn">WhatsApp</button>
                 <button class="btn-primary" id="drawerConvertBtn">Convert to Project</button>
                 <a href="#" id="drawerViewProjectBtn" class="btn-secondary" style="display:none;">View Project</a>
+                <button class="btn-success" id="drawerCompleteBtn" style="display:none;">
+                  <i class="ph ph-check-circle"></i> Mark as Completed
+                </button>
             </div>
         </section>
     </div>
@@ -599,6 +602,72 @@
                 <button type="submit" class="btn-success">Create Invoice</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- inquiries.html - Tambahkan di bawah modals yang ada -->
+
+<!-- ============================================================
+     MODAL: Confirm Payment
+     ============================================================ -->
+<div class="modal-overlay" id="confirmPaymentModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <div>
+                <h2>Confirm Payment</h2>
+                <p>Are you sure you want to confirm this payment?</p>
+            </div>
+            <button id="closeConfirmPaymentModal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="confirmPaymentDetails" style="padding:0.5rem 0;">
+                <!-- Rendered by JS -->
+            </div>
+            <div style="margin-top:1rem; padding:0.75rem; background:rgba(245,158,11,0.08); border-radius:var(--radius-sm);">
+                <p style="margin:0; font-size:0.85rem; color:var(--text-secondary);">
+                    <i class="ph ph-info" style="color:#f59e0b;"></i>
+                    Once confirmed, this payment cannot be undone.
+                </p>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="cancelConfirmPaymentBtn">Cancel</button>
+            <button type="button" class="btn-primary" id="confirmPaymentBtn" style="background:#10b981;">
+                <i class="ph ph-check"></i> Confirm Payment
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Delete Payment
+     ============================================================ -->
+<div class="modal-overlay" id="deletePaymentModal">
+    <div class="modal modal-sm">
+        <div class="modal-header" style="border-bottom-color:#ef4444;">
+            <div>
+                <h2 style="color:#ef4444;">Delete Payment</h2>
+                <p>Are you sure you want to delete this payment?</p>
+            </div>
+            <button id="closeDeletePaymentModal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="deletePaymentDetails" style="padding:0.5rem 0;">
+                <!-- Rendered by JS -->
+            </div>
+            <div style="margin-top:1rem; padding:0.75rem; background:rgba(239,68,68,0.08); border-radius:var(--radius-sm);">
+                <p style="margin:0; font-size:0.85rem; color:#ef4444;">
+                    <i class="ph ph-warning" style="color:#ef4444;"></i>
+                    This action cannot be undone. The payment will be permanently deleted.
+                </p>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="cancelDeletePaymentBtn">Cancel</button>
+            <button type="button" class="btn-danger" id="deletePaymentBtn">
+                <i class="ph ph-trash"></i> Delete Payment
+            </button>
+        </div>
     </div>
 </div>
 

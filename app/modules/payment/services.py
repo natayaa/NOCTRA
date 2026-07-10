@@ -224,12 +224,23 @@ class PaymentService:
         if not payment_id:
             raise ValidationError("Payment ID is required")
 
-        return await self.update_payment_status(
+        payment = await self.update_payment_status(
             payment_id,
             PaymentStatus.COMPLETED,
             confirmed_by,
             notes
         )
+
+        if payment:
+            # ✅ Update project deposit_paid jika payment type = deposit
+            if payment.project_id and payment.payment_type == PaymentType.DEPOSIT:
+                await self.payment_repo.update_project_financials(payment.project_id)
+
+            # ✅ Update invoice paid amount jika ada
+            if payment.invoice_id:
+                await self.payment_repo.update_invoice_payment(payment.invoice_id)
+
+        return payment
 
     async def cancel_payment(
         self,
@@ -434,14 +445,15 @@ class PaymentService:
         if remaining <= Decimal('0'):
             raise BusinessError("Invoice already fully paid")
 
-        # Create payment record
+        # ✅ FIX: Payment amount harus sesuai dengan remaining
+        # Buat payment dengan amount = remaining (bukan dari luar)
         payment = await self.create_payment(
             PaymentCreate(
                 inquiry_id=invoice.inquiry_id,
                 project_id=invoice.project_id,
                 invoice_id=invoice.id,
                 payment_type=PaymentType.PAYMENT,
-                amount=remaining,  # ✅ Sudah Decimal
+                amount=remaining,  # ✅ Pakai remaining, bukan input dari user
                 payment_method=payment_method,
                 reference_number=reference_number,
                 notes=notes or f"Payment for invoice {invoice.invoice_number}",
@@ -566,10 +578,7 @@ class PaymentService:
     # Financial Summary
     # =========================================================================
 
-    async def get_inquiry_financial_summary(
-        self,
-        inquiry_id: UUID
-    ) -> dict:
+    async def get_inquiry_financial_summary(self, inquiry_id: UUID) -> dict:
         """Get comprehensive financial summary for an inquiry."""
         if not inquiry_id:
             raise ValidationError("Inquiry ID is required")
@@ -584,7 +593,7 @@ class PaymentService:
         # Get invoices
         invoices = await self.invoice_repo.get_by_inquiry(inquiry_id)
 
-        # Calculate totals with Decimal
+        # Calculate totals
         total_deposit = Decimal('0')
         total_paid = Decimal('0')
         total_pending = Decimal('0')
@@ -599,8 +608,7 @@ class PaymentService:
             elif p.status == PaymentStatus.PENDING:
                 total_pending += amount
 
-        estimated_budget = self._to_decimal(inquiry.estimated_budget)
-
+        # ✅ Project cost
         total_cost = Decimal('0')
         if inquiry.project:
             total_cost = self._to_decimal(inquiry.project.actual_cost)
@@ -611,7 +619,7 @@ class PaymentService:
             "inquiry_id": str(inquiry.id),
             "customer_name": inquiry.customer_name,
             "vehicle_info": f"{inquiry.vehicle_brand} {inquiry.vehicle_model}",
-            "estimated_budget": float(estimated_budget),
+            "estimated_budget": float(self._to_decimal(inquiry.estimated_budget)),
             "total_cost": float(total_cost),
             "total_deposit": float(total_deposit),
             "total_paid": float(total_paid),
@@ -620,8 +628,29 @@ class PaymentService:
             "deposit_paid": total_deposit > Decimal('0'),
             "is_paid_off": (total_paid + total_deposit) >= total_cost if total_cost > Decimal('0') else False,
             "has_invoices": len(invoices) > 0,
-            "payments": [self._serialize_payment(p) for p in payments],
-            "invoices": [self._serialize_invoice(inv) for inv in invoices]
+            "payments": [
+                {
+                    "id": str(p.id),
+                    "payment_type": p.payment_type,
+                    "amount": float(p.amount),
+                    "payment_method": p.payment_method,
+                    "status": p.status,
+                    "paid_at": p.paid_at.isoformat() if p.paid_at else None
+                }
+                for p in payments
+            ],
+            "invoices": [
+                {
+                    "id": str(inv.id),
+                    "invoice_number": inv.invoice_number,
+                    "total_amount": float(inv.total_amount),
+                    "paid_amount": float(inv.paid_amount),
+                    "remaining_amount": float(inv.remaining_amount),
+                    "status": inv.status,
+                    "is_overdue": inv.is_overdue
+                }
+                for inv in invoices
+            ]
         }
 
     async def get_payment_statistics(

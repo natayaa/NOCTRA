@@ -246,14 +246,18 @@ class InvoiceMarkPaid(BaseModel):
         return v
 
 
+# modules/payment/schemas.py - Tambahkan ini di akhir
+
 class InvoiceSendReminder(BaseModel):
     """Schema untuk mengirim reminder invoice."""
-    note: Optional[str] = Field(None, description="Catatan reminder")
-
+    note: Optional[str] = Field(
+        None, description="Catatan tambahan untuk reminder")
+    sent_via: str = Field(default="email", description="email, whatsapp, sms")
 
 # =============================================================================
 # Financial Summary Schemas
 # =============================================================================
+
 
 class PaymentStatisticsResponse(BaseModel):
     """Response untuk statistik payment."""

@@ -1,6 +1,4 @@
-// ============================================================
-// inquiries/index.js - Main Entry Point
-// ============================================================
+// inquiries/index.js - Main Entry Point (FIXED & IMPROVED)
 
 import { state, CONFIG } from "./config.js";
 import { DOM, drawerBackdrop } from "./dom.js";
@@ -12,8 +10,8 @@ import {
   updatePagination,
   updateDashboard,
 } from "./renderers/table.js";
-import { openInquiryDrawer, closeDrawer } from "./drawer.js";
-import { handleApprove } from "./handlers/actions.js";
+import { openInquiryDrawer, closeDrawer, loadInquiryDetail } from "./drawer.js";
+import { handleApprove, handleMarkComplete } from "./handlers/actions.js";
 import {
   openConvertModal,
   closeConvertModal,
@@ -34,67 +32,86 @@ import {
   openInvoiceModal,
 } from "../payments/handlers/modals.js";
 
+// ✅ Import payment modal handlers
+import {
+  confirmPayment,
+  openConfirmPaymentModal,
+  closeConfirmPaymentModal,
+  openDeletePaymentModal,
+  closeDeletePaymentModal,
+} from "./handlers/events.js";
+
 // ============================================================
 // MAIN LOAD FUNCTION
 // ============================================================
 export async function loadInquiries() {
   showLoadingState();
-  const data = await InquiryAPI.fetchInquiries(
-    state.currentPage,
-    state.filters,
-  );
-  if (!data) {
-    const body = DOM.inquiriesBody();
-    if (body) {
-      body.innerHTML = `
-                <tr>
-                    <td colspan="7" style="text-align:center; padding:2rem; color: var(--text-muted);">
-                        <i class="ph ph-warning" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
-                        Failed to load inquiries. Please try again.
-                        <br><br>
-                        <button class="btn-primary" onclick="window.loadInquiries()">
-                            <i class="ph ph-arrow-clockwise"></i> Retry
-                        </button>
-                    </td>
-                </tr>
-            `;
+
+  try {
+    const data = await InquiryAPI.fetchInquiries(
+      state.currentPage,
+      state.filters,
+    );
+
+    if (!data) {
+      renderErrorState("Failed to load inquiries. Please try again.");
+      return;
     }
-    return;
+
+    let inquiries = [],
+      totalPages = 1,
+      totalItems = 0;
+
+    if (data.data && Array.isArray(data.data)) {
+      inquiries = data.data;
+      totalItems = data.total || data.total_items || inquiries.length;
+      totalPages =
+        data.total_pages ||
+        data.totalPages ||
+        Math.ceil(totalItems / CONFIG.INQUIRIES_PER_PAGE);
+    } else if (Array.isArray(data)) {
+      inquiries = data;
+      totalItems = inquiries.length;
+      totalPages = Math.ceil(totalItems / CONFIG.INQUIRIES_PER_PAGE);
+    } else if (data.items && Array.isArray(data.items)) {
+      inquiries = data.items;
+      totalItems = data.total || data.total_items || inquiries.length;
+      totalPages =
+        data.total_pages ||
+        data.totalPages ||
+        Math.ceil(totalItems / CONFIG.INQUIRIES_PER_PAGE);
+    }
+
+    state.inquiries = inquiries;
+    state.totalPages = Math.max(1, totalPages);
+    state.totalItems = totalItems;
+
+    renderInquiries(state.inquiries);
+    updatePagination(state.currentPage, state.totalPages, state.totalItems);
+
+    const stats = await InquiryAPI.fetchStatistics();
+    updateDashboard(stats);
+  } catch (error) {
+    console.error("Error loading inquiries:", error);
+    renderErrorState(error.message || "Failed to load inquiries");
   }
+}
 
-  let inquiries = [],
-    totalPages = 1,
-    totalItems = 0;
-
-  if (data.data && Array.isArray(data.data)) {
-    inquiries = data.data;
-    totalItems = data.total || data.total_items || inquiries.length;
-    totalPages =
-      data.total_pages ||
-      data.totalPages ||
-      Math.ceil(totalItems / CONFIG.INQUIRIES_PER_PAGE);
-  } else if (Array.isArray(data)) {
-    inquiries = data;
-    totalItems = inquiries.length;
-    totalPages = Math.ceil(totalItems / CONFIG.INQUIRIES_PER_PAGE);
-  } else if (data.items && Array.isArray(data.items)) {
-    inquiries = data.items;
-    totalItems = data.total || data.total_items || inquiries.length;
-    totalPages =
-      data.total_pages ||
-      data.totalPages ||
-      Math.ceil(totalItems / CONFIG.INQUIRIES_PER_PAGE);
-  }
-
-  state.inquiries = inquiries;
-  state.totalPages = Math.max(1, totalPages);
-  state.totalItems = totalItems;
-
-  renderInquiries(state.inquiries);
-  updatePagination(state.currentPage, state.totalPages, state.totalItems);
-
-  const stats = await InquiryAPI.fetchStatistics();
-  updateDashboard(stats);
+function renderErrorState(message) {
+  const body = DOM.inquiriesBody();
+  if (!body) return;
+  body.innerHTML = `
+    <tr>
+      <td colspan="7" style="text-align:center; padding:2rem; color: var(--text-muted);">
+        <i class="ph ph-warning" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
+        ${message}
+        <br><br>
+        <button class="btn-primary" onclick="window.loadInquiries()">
+          <i class="ph ph-arrow-clockwise"></i> Retry
+        </button>
+      </td>
+    </tr>
+  `;
 }
 
 // ============================================================
@@ -116,20 +133,32 @@ export function exportInquiries() {
     "Created",
     "Has Project",
   ];
+
   const rows = state.inquiries.map((inq) => [
-    inq.id,
-    inq.customer_name,
-    inq.customer_phone_number,
-    `${inq.vehicle_brand} ${inq.vehicle_model}`,
-    inq.project_type,
+    inq.id || "",
+    inq.customer_name || "",
+    inq.customer_phone_number || "",
+    `${inq.vehicle_brand || ""} ${inq.vehicle_model || ""}`.trim(),
+    inq.project_type || "",
     Formatter.statusLabel(inq.status),
     Formatter.date(inq.created_at),
     inq.project ? "Yes" : "No",
   ]);
 
-  const csv = [headers.join(","), ...rows.map((row) => row.join(","))].join(
-    "\n",
-  );
+  // ✅ Escape CSV values
+  const escapeCsv = (value) => {
+    if (
+      typeof value === "string" &&
+      (value.includes(",") || value.includes('"') || value.includes("\n"))
+    ) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  };
+
+  const csvRows = rows.map((row) => row.map(escapeCsv).join(","));
+  const csv = [headers.map(escapeCsv).join(","), ...csvRows].join("\n");
+
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
@@ -144,6 +173,7 @@ export function exportInquiries() {
 // KEYBOARD SHORTCUTS
 // ============================================================
 document.addEventListener("keydown", (e) => {
+  // ✅ Escape - close all modals
   if (e.key === "Escape") {
     const modals = [
       DOM.convertModal(),
@@ -151,25 +181,44 @@ document.addEventListener("keydown", (e) => {
       DOM.rejectModal(),
       DOM.lightboxOverlay(),
       DOM.drawer(),
+      document.getElementById("confirmPaymentModal"),
+      document.getElementById("deletePaymentModal"),
+      document.getElementById("paymentModal"),
+      document.getElementById("invoiceModal"),
     ];
+
     modals.forEach((modal) => {
-      if (
-        modal?.classList.contains("active") ||
-        modal?.style.display === "flex"
-      ) {
-        if (modal === DOM.lightboxOverlay()) closeLightbox();
-        else if (modal === DOM.drawer()) closeDrawer();
-        else modal.classList.remove("active");
+      if (modal) {
+        if (modal === DOM.lightboxOverlay() && modal.style.display === "flex") {
+          closeLightbox();
+        } else if (
+          modal === DOM.drawer() &&
+          modal.classList.contains("active")
+        ) {
+          closeDrawer();
+        } else if (modal.classList && modal.classList.contains("active")) {
+          modal.classList.remove("active");
+        }
       }
     });
   }
+
+  // ✅ Ctrl+F - Focus search
   if (e.ctrlKey && e.key === "f") {
     e.preventDefault();
     DOM.searchInquiry()?.focus();
   }
+
+  // ✅ Ctrl+E - Export
   if (e.ctrlKey && e.key === "e") {
     e.preventDefault();
     exportInquiries();
+  }
+
+  // ✅ Ctrl+R - Refresh
+  if (e.ctrlKey && e.key === "r" && !e.shiftKey) {
+    e.preventDefault();
+    loadInquiries();
   }
 });
 
@@ -178,9 +227,17 @@ document.addEventListener("keydown", (e) => {
 // ============================================================
 export async function initInquiries() {
   console.log("🚀 Initializing Inquiries page...");
+
   try {
+    // ✅ Bind events pertama
     bindEvents();
+
+    // ✅ Load data
     await loadInquiries();
+
+    // ✅ Set refresh interval (optional)
+    // setInterval(() => { loadInquiries(); }, 60000); // Refresh every minute
+
     console.log("📋 Inquiries page initialized successfully");
   } catch (error) {
     console.error("❌ Failed to initialize inquiries page:", error);
@@ -189,13 +246,30 @@ export async function initInquiries() {
 }
 
 // ============================================================
-// EXPOSE TO GLOBAL (for inline onclick handlers)
+// ✅ REFRESH FUNCTIONS
+// ============================================================
+export async function refreshCurrentInquiry() {
+  if (state.currentInquiryId) {
+    await loadInquiryDetail(state.currentInquiryId);
+  }
+}
+
+export async function refreshAndReload() {
+  await loadInquiries();
+  if (state.currentInquiryId) {
+    await loadInquiryDetail(state.currentInquiryId);
+  }
+}
+
+// ============================================================
+// ✅ EXPOSE TO GLOBAL (for inline onclick handlers)
 // ============================================================
 window.openInquiryDrawer = openInquiryDrawer;
 window.openConvertModal = openConvertModal;
 window.openQuoteModal = openQuoteModal;
 window.openRejectModal = openRejectModal;
 window.handleApprove = handleApprove;
+window.handleMarkComplete = handleMarkComplete;
 window.loadInquiries = loadInquiries;
 window.openLightbox = openLightbox;
 window.closeLightbox = closeLightbox;
@@ -206,5 +280,12 @@ window.closeQuoteModal = closeQuoteModal;
 window.closeRejectModal = closeRejectModal;
 window.openPaymentModal = openPaymentModal;
 window.openInvoiceModal = openInvoiceModal;
+window.confirmPayment = confirmPayment;
+window.openConfirmPaymentModal = openConfirmPaymentModal;
+window.closeConfirmPaymentModal = closeConfirmPaymentModal;
+window.openDeletePaymentModal = openDeletePaymentModal;
+window.closeDeletePaymentModal = closeDeletePaymentModal;
+window.refreshCurrentInquiry = refreshCurrentInquiry;
+window.refreshAndReload = refreshAndReload;
 
 console.log("📋 Inquiries page module ready");

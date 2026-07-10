@@ -324,6 +324,20 @@ class ProjectService:
                 performed_by="system"
             )
 
+            # ✅ Update inquiry status jika ada
+            if project.inquiry_id:
+                from modules.inquiry.repository import InquiryRepository
+                inquiry_repo = InquiryRepository(self.db)
+                inquiry = await inquiry_repo.get(project.inquiry_id)
+                if inquiry and inquiry.status != InquiryStatus.COMPLETED:
+                    inquiry.status = InquiryStatus.COMPLETED
+                    await inquiry_repo.add_activity(
+                        project.inquiry_id,
+                        "Project completed, inquiry auto-updated",
+                        "auto_update",
+                        performed_by="system"
+                    )
+
             await self.db.flush()
             await self.db.refresh(project)
             await self.db.commit()

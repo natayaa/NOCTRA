@@ -1,9 +1,6 @@
-// ============================================================
-// inquiries/renderers/payments.js - Payment Rendering (FIXED)
-// ============================================================
+// inquiries/renderers/payments.js (FIXED)
 
 import { DOM } from "../dom.js";
-// ✅ PATH YANG BENAR: dari inquiries/renderers/ ke shared/payments/
 import { PaymentAPI } from "../../shared/payments/api.js";
 import {
   PaymentFormatter,
@@ -20,7 +17,7 @@ export async function renderDrawerPayments(inquiryId) {
 
   if (!container) return;
 
-  // Show loading state
+  // Show loading
   container.innerHTML = `
     <div style="text-align:center;padding:1rem 0;color:var(--text-muted);">
       <i class="ph ph-spinner" style="font-size:1.5rem;display:block;margin-bottom:0.25rem;animation:spin 1s linear infinite;"></i>
@@ -30,7 +27,7 @@ export async function renderDrawerPayments(inquiryId) {
 
   try {
     const payments = await PaymentAPI.getByInquiry(inquiryId);
-    console.log("🎨 Rendering payments for inquiry:", inquiryId, payments);
+    // console.log("🎨 Rendering payments:", payments);
 
     if (!payments || payments.length === 0) {
       container.innerHTML = `
@@ -39,134 +36,124 @@ export async function renderDrawerPayments(inquiryId) {
           No payments recorded
         </div>
       `;
-      if (totalDepositEl)
-        totalDepositEl.textContent = PaymentFormatter.currency(0);
-      if (totalPaidEl) totalPaidEl.textContent = PaymentFormatter.currency(0);
-      if (totalPendingEl)
-        totalPendingEl.textContent = PaymentFormatter.currency(0);
-      if (remainingEl) {
-        remainingEl.textContent = PaymentFormatter.currency(0);
-        remainingEl.style.color = "var(--text-muted)";
-      }
+      updateSummaryCards(
+        totalDepositEl,
+        totalPaidEl,
+        totalPendingEl,
+        remainingEl,
+        null,
+      );
       return;
     }
 
-    // ✅ FIX: Hitung summary dengan benar berdasarkan payment_type
     const summary = calculatePaymentSummary(payments);
-    console.log("📊 Payment Summary:", summary);
+    //console.log("📊 Payment Summary:", summary);
 
-    // ✅ Update summary cards
-    if (totalDepositEl) {
-      totalDepositEl.textContent = PaymentFormatter.currency(
-        summary.totalDeposit,
-      );
-      totalDepositEl.style.color = "var(--text-primary)";
-    }
-    if (totalPaidEl) {
-      totalPaidEl.textContent = PaymentFormatter.currency(summary.totalPaid);
-      totalPaidEl.style.color = "#10b981";
-    }
-    if (totalPendingEl) {
-      totalPendingEl.textContent = PaymentFormatter.currency(
-        summary.totalPending,
-      );
-      totalPendingEl.style.color = "#f59e0b";
-    }
-    if (remainingEl) {
-      const remainingAmount = summary.remaining > 0 ? summary.remaining : 0;
-      remainingEl.textContent = PaymentFormatter.currency(remainingAmount);
-      remainingEl.style.color = remainingAmount > 0 ? "#f59e0b" : "#10b981";
-    }
+    // Update summary cards
+    updateSummaryCards(
+      totalDepositEl,
+      totalPaidEl,
+      totalPendingEl,
+      remainingEl,
+      summary,
+    );
 
-    // ✅ Render payment history dengan type yang benar
+    // ✅ Render payment history
     container.innerHTML = payments
       .map((p) => {
         const amount = Number(p.amount) || 0;
-
-        // ✅ FIX: Gunakan payment_type atau type
-        const type = p.payment_type || p.type || "Payment";
-        const method = p.payment_method || p.method || "";
+        const type = p.payment_type || p.type || "payment";
+        const method = p.payment_method || p.method || "-";
         const status = p.status || "pending";
-        const reference = p.reference_number || p.reference || "";
-        const date = p.paid_at || p.created_at || p.payment_date || "";
+        const date = p.paid_at || p.created_at || "";
 
-        // ✅ FIX: Tampilkan type dengan benar
-        const typeLower = (type || "").toLowerCase();
-        let typeIcon = "💳";
-        let typeLabel = "Payment";
-        if (typeLower === "deposit") {
-          typeIcon = "🏦";
-          typeLabel = "Deposit";
-        } else if (typeLower === "refund") {
-          typeIcon = "↩️";
-          typeLabel = "Refund";
-        } else if (typeLower === "installment") {
-          typeIcon = "📊";
-          typeLabel = "Installment";
-        }
+        const typeLabel = type === "deposit" ? "Deposit" : "Payment";
+        const typeIcon = type === "deposit" ? "🏦" : "💳";
 
-        // Status badge
-        const statusLower = (status || "").toLowerCase();
-        let statusIcon = "⏳";
-        let statusLabel = "Pending";
         let statusColor = "#f59e0b";
-        let statusBg = "rgba(245,158,11,0.12)";
+        let statusLabel = "Pending";
+        let statusIcon = "⏳";
+        let isPending = true;
+        let isCompleted = false;
 
-        if (
-          ["completed", "confirmed", "paid", "success", "settled"].includes(
-            statusLower,
-          )
-        ) {
-          statusIcon = "✅";
-          statusLabel = "Completed";
+        if (["completed", "confirmed", "paid", "settled"].includes(status)) {
           statusColor = "#10b981";
-          statusBg = "rgba(16,185,129,0.12)";
-        } else if (
-          ["cancelled", "failed", "voided", "rejected"].includes(statusLower)
-        ) {
-          statusIcon = "❌";
-          statusLabel = "Cancelled";
+          statusLabel = "Completed";
+          statusIcon = "✅";
+          isPending = false;
+          isCompleted = true;
+        } else if (["cancelled", "failed", "voided"].includes(status)) {
           statusColor = "#ef4444";
-          statusBg = "rgba(239,68,68,0.12)";
+          statusLabel = "Cancelled";
+          statusIcon = "❌";
+          isPending = false;
+          isCompleted = true;
         }
 
         const dateDisplay = date ? PaymentFormatter.dateTime(date) : "";
 
+        // ✅ Show delete button only for pending payments
+        const showDelete = isPending;
+
         return `
-        <div class="payment-history-item" 
-             style="display:flex;justify-content:space-between;align-items:center;
+        <div class="payment-item" style="display:flex;justify-content:space-between;align-items:center;
                     padding:0.6rem 0.75rem;border-bottom:1px solid var(--border);
                     border-left:3px solid ${statusColor};
-                    background:${statusBg};
+                    background:${isPending ? "rgba(245,158,11,0.04)" : "transparent"};
                     transition:background 0.2s ease;">
-          <div style="display:flex;flex-direction:column;gap:0.1rem;flex:1;min-width:0;">
+          <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-              <span style="font-size:0.9rem;">${typeIcon}</span>
-              <span class="type" style="font-weight:600;color:var(--text-primary);font-size:0.85rem;">
-                ${escapeHtml(typeLabel)}  <!-- ✅ Tampilkan label yang benar -->
+              <span style="font-weight:600;font-size:0.85rem;">
+                ${typeIcon} ${escapeHtml(typeLabel)}
               </span>
-              <span style="font-size:0.6rem;color:${statusColor};font-weight:600;background:${statusBg};padding:0.1rem 0.5rem;border-radius:var(--radius-full);">
+              <span class="payment-status-badge" style="font-size:0.6rem;color:${statusColor};font-weight:600;
+                          background:${statusColor}15;padding:0.1rem 0.5rem;
+                          border-radius:var(--radius-full);">
                 ${statusIcon} ${statusLabel}
               </span>
             </div>
-            <div style="display:flex;flex-wrap:wrap;gap:0.25rem 0.75rem;font-size:0.65rem;color:var(--text-muted);">
+            <div style="display:flex;flex-wrap:wrap;gap:0.25rem 0.75rem;font-size:0.65rem;color:var(--text-muted);margin-top:0.1rem;">
               ${dateDisplay ? `<span>📅 ${dateDisplay}</span>` : ""}
-              ${method ? `<span>💳 ${escapeHtml(method)}</span>` : ""}
-              ${reference ? `<span>📋 Ref: ${escapeHtml(reference)}</span>` : ""}
+              ${method && method !== "-" ? `<span>💳 ${escapeHtml(method)}</span>` : ""}
+              ${p.reference_number ? `<span>📋 Ref: ${escapeHtml(p.reference_number)}</span>` : ""}
               ${p.id ? `<span>🆔 ${escapeHtml(p.id.substring(0, 8))}</span>` : ""}
             </div>
           </div>
-          <div style="text-align:right;flex-shrink:0;margin-left:0.5rem;">
+          <div style="text-align:right;flex-shrink:0;margin-left:0.5rem;display:flex;flex-direction:column;align-items:flex-end;gap:0.25rem;">
             <span style="font-weight:700;font-size:0.95rem;color:${statusColor};">
               ${PaymentFormatter.currency(amount)}
             </span>
+            <div style="display:flex;gap:0.25rem;">
+              ${
+                isPending
+                  ? `
+                <button onclick="event.stopPropagation(); window.openConfirmPaymentModal('${p.id}')" 
+                        class="btn-confirm-payment"
+                        style="font-size:0.6rem;padding:0.15rem 0.5rem;background:#10b981;color:white;border:none;border-radius:var(--radius-sm);cursor:pointer;display:flex;align-items:center;gap:0.15rem;">
+                  <i class="ph ph-check" style="font-size:0.7rem;"></i> Confirm
+                </button>
+              `
+                  : ""
+              }
+              ${
+                showDelete
+                  ? `
+                <button onclick="event.stopPropagation(); window.openDeletePaymentModal('${p.id}')" 
+                        class="btn-delete-payment"
+                        style="font-size:0.6rem;padding:0.15rem 0.5rem;background:transparent;color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;display:flex;align-items:center;gap:0.15rem;">
+                  <i class="ph ph-trash" style="font-size:0.7rem;"></i>
+                </button>
+              `
+                  : ""
+              }
+            </div>
           </div>
         </div>
       `;
       })
       .join("");
 
-    // ✅ Total summary
+    // Total summary
     if (summary.totalAll > 0) {
       container.innerHTML += `
         <div style="display:flex;justify-content:space-between;padding:0.6rem 0.75rem;margin-top:0.5rem;
@@ -182,8 +169,51 @@ export async function renderDrawerPayments(inquiryId) {
     container.innerHTML = `
       <div style="text-align:center;padding:1rem 0;color:#ef4444;">
         <i class="ph ph-warning" style="font-size:1.5rem;display:block;margin-bottom:0.25rem;"></i>
-        Failed to load payments
+        Failed to load payments: ${error.message}
       </div>
     `;
+  }
+}
+
+function updateSummaryCards(
+  totalDepositEl,
+  totalPaidEl,
+  totalPendingEl,
+  remainingEl,
+  summary,
+) {
+  if (!summary) {
+    if (totalDepositEl) totalDepositEl.textContent = "Rp 0";
+    if (totalPaidEl) totalPaidEl.textContent = "Rp 0";
+    if (totalPendingEl) totalPendingEl.textContent = "Rp 0";
+    if (remainingEl) remainingEl.textContent = "Rp 0";
+    return;
+  }
+
+  if (totalDepositEl) {
+    totalDepositEl.textContent = PaymentFormatter.currency(
+      summary.totalDeposit,
+    );
+    totalDepositEl.style.color =
+      summary.totalDeposit > 0 ? "#10b981" : "var(--text-muted)";
+  }
+  if (totalPaidEl) {
+    totalPaidEl.textContent = PaymentFormatter.currency(summary.totalPaid);
+    totalPaidEl.style.color =
+      summary.totalPaid > 0 ? "#10b981" : "var(--text-muted)";
+  }
+  if (totalPendingEl) {
+    totalPendingEl.textContent = PaymentFormatter.currency(
+      summary.totalPending,
+    );
+    totalPendingEl.style.color =
+      summary.totalPending > 0 ? "#f59e0b" : "var(--text-muted)";
+  }
+  if (remainingEl) {
+    const remaining =
+      summary.totalAll - summary.totalPaid - summary.totalDeposit;
+    const displayRemaining = remaining > 0 ? remaining : 0;
+    remainingEl.textContent = PaymentFormatter.currency(displayRemaining);
+    remainingEl.style.color = displayRemaining > 0 ? "#ef4444" : "#10b981";
   }
 }

@@ -1,6 +1,4 @@
-// ============================================================
-// projects/handlers/events.js - Event Bindings
-// ============================================================
+// projects/handlers/events.js (FIXED & IMPROVED - FULL)
 
 import { DOM } from "../dom.js";
 import { state } from "../config.js";
@@ -25,13 +23,14 @@ import {
 } from "./tasks.js";
 import { handleConsumeMaterial, handleDeleteMaterial } from "./materials.js";
 import { handleAddLabor, handleDeleteLabor } from "./labor.js";
-
-// ✅ TAMBAHKAN IMPORT KEYPAD
 import { initHoursKeypad } from "./keypad.js";
 import { initMaterialQtyKeypad } from "./materialKeypad.js";
+import { autoFillLaborRate } from "./dropdowns.js";
 
 export function bindEvents() {
-  // Pagination
+  // ============================================================
+  // 1. PAGINATION
+  // ============================================================
   DOM.prevPageBtn()?.addEventListener("click", () => {
     if (state.currentPage > 1) {
       state.currentPage--;
@@ -45,9 +44,9 @@ export function bindEvents() {
     }
   });
 
-  initHoursKeypad(); // keypad untuk hours
-
-  // Search
+  // ============================================================
+  // 2. SEARCH & FILTER
+  // ============================================================
   let searchTimeout;
   DOM.projectSearch()?.addEventListener("input", (e) => {
     clearTimeout(searchTimeout);
@@ -58,7 +57,6 @@ export function bindEvents() {
     }, 300);
   });
 
-  // Filters
   DOM.statusFilter()?.addEventListener("change", (e) => {
     state.filters.status = e.target.value;
     state.currentPage = 1;
@@ -70,10 +68,14 @@ export function bindEvents() {
     loadProjects();
   });
 
-  // Buttons
+  // ============================================================
+  // 3. BUTTONS
+  // ============================================================
   DOM.createProjectBtn()?.addEventListener("click", openCreateProjectModal);
 
-  // Project Modal
+  // ============================================================
+  // 4. PROJECT MODAL
+  // ============================================================
   DOM.closeModal()?.addEventListener("click", closeProjectModal);
   DOM.cancelModalBtn()?.addEventListener("click", closeProjectModal);
   DOM.projectModal()?.addEventListener("click", (e) => {
@@ -81,11 +83,15 @@ export function bindEvents() {
   });
   DOM.projectForm()?.addEventListener("submit", handleProjectFormSubmit);
 
-  // Drawer
+  // ============================================================
+  // 5. DRAWER
+  // ============================================================
   DOM.closeDrawer()?.addEventListener("click", closeDrawer);
   DOM.drawerBackdrop()?.addEventListener("click", closeDrawer);
 
-  // Progress Popup
+  // ============================================================
+  // 6. PROGRESS POPUP
+  // ============================================================
   DOM.closeProgressPopup()?.addEventListener("click", closeProgressPopup);
   DOM.cancelProgressBtn()?.addEventListener("click", closeProgressPopup);
   DOM.progressPopup()?.addEventListener("click", (e) => {
@@ -93,14 +99,18 @@ export function bindEvents() {
   });
   DOM.saveProgressBtn()?.addEventListener("click", handleSaveProgress);
 
-  // Progress Slider
+  // ============================================================
+  // 7. PROGRESS SLIDER
+  // ============================================================
   DOM.progressPopupSlider()?.addEventListener("input", (e) => {
     const val = e.target.value;
     const valueEl = DOM.progressPopupValue();
     const checkbox = DOM.markCompleteCheckbox();
     const milestones = DOM.progressPopupMilestones();
+
     if (valueEl) valueEl.textContent = val;
     if (checkbox) checkbox.checked = parseInt(val) >= 100;
+
     if (milestones) {
       const items = milestones.querySelectorAll(".milestone-item");
       const progress = parseInt(val);
@@ -115,7 +125,9 @@ export function bindEvents() {
     }
   });
 
-  // Task Modal
+  // ============================================================
+  // 8. TASK MODAL
+  // ============================================================
   DOM.addTaskBtn()?.addEventListener("click", () => {
     if (state.currentProjectId) openTaskModal(state.currentProjectId);
   });
@@ -126,17 +138,18 @@ export function bindEvents() {
   });
   DOM.taskForm()?.addEventListener("submit", handleAddTask);
 
-  // Material & Labor
+  // ============================================================
+  // 9. MATERIAL & LABOR
+  // ============================================================
   DOM.consumeMaterialBtn()?.addEventListener("click", handleConsumeMaterial);
   DOM.addLaborBtn()?.addEventListener("click", handleAddLabor);
-  setTimeout(() => {
-    const laborSelect = DOM.laborTypeSelect();
-    if (laborSelect && laborSelect.value) {
-      autoFillLaborRate();
-    }
-  }, 500);
 
-  // Tabs
+  // Labor type change - auto-fill rate
+  DOM.laborTypeSelect()?.addEventListener("change", autoFillLaborRate);
+
+  // ============================================================
+  // 10. TABS
+  // ============================================================
   const btns = DOM.tabBtns();
   if (btns && btns.length) {
     btns.forEach((btn) => {
@@ -144,38 +157,58 @@ export function bindEvents() {
     });
   }
 
-  // ✅ INISIALISASI KEYPAD
+  // ============================================================
+  // 11. KEYPADS
+  // ============================================================
   initHoursKeypad();
   initMaterialQtyKeypad();
+
+  console.log("✅ All events bound successfully!");
 }
 
 export function bindKeyboardShortcuts() {
   document.addEventListener("keydown", (e) => {
+    // Escape - close modals
     if (e.key === "Escape") {
-      if (DOM.progressPopup()?.classList.contains("active")) {
-        closeProgressPopup();
-        e.preventDefault();
-      }
-      if (DOM.projectModal()?.classList.contains("active")) {
-        closeProjectModal();
-        e.preventDefault();
-      }
-      if (DOM.taskModal()?.classList.contains("active")) {
-        closeTaskModal();
-        e.preventDefault();
-      }
-      if (DOM.drawer()?.classList.contains("active")) {
-        closeDrawer();
-        e.preventDefault();
+      const modals = [
+        { el: DOM.progressPopup(), close: closeProgressPopup },
+        { el: DOM.projectModal(), close: closeProjectModal },
+        { el: DOM.taskModal(), close: closeTaskModal },
+        { el: DOM.drawer(), close: closeDrawer },
+      ];
+
+      for (const modal of modals) {
+        if (modal.el?.classList.contains("active")) {
+          e.preventDefault();
+          modal.close();
+          return;
+        }
       }
     }
+
+    // Ctrl+N - New Project
     if (e.ctrlKey && e.key === "n") {
       e.preventDefault();
       openCreateProjectModal();
     }
+
+    // Ctrl+F - Focus search
     if (e.ctrlKey && e.key === "f") {
       e.preventDefault();
       DOM.projectSearch()?.focus();
     }
+
+    // Ctrl+R - Refresh (without page reload)
+    if (e.ctrlKey && e.key === "r" && !e.shiftKey) {
+      e.preventDefault();
+      loadProjects();
+    }
   });
+
+  console.log("✅ Keyboard shortcuts bound");
 }
+
+// ✅ Export functions for window
+export const closeProgressPopupGlobal = closeProgressPopup;
+export const closeProjectModalGlobal = closeProjectModal;
+export const closeTaskModalGlobal = closeTaskModal;

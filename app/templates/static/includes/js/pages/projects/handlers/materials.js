@@ -1,6 +1,4 @@
-// ============================================================
-// projects/handlers/materials.js - Material Consumption
-// ============================================================
+// projects/handlers/materials.js (FIXED & IMPROVED)
 
 import { DOM } from "../dom.js";
 import { ProjectAPI } from "../api.js";
@@ -30,15 +28,12 @@ export async function handleConsumeMaterial() {
   const quantity = parseFloat(qtyEl.value);
   const unit = unitEl.value;
 
-  // ✅ Validasi: pastikan ada item yang dipilih
+  // Validasi
   if (!itemId) {
     showToast("Please select a material", "error");
     selectEl.focus();
     return;
   }
-
-  // ✅ Hapus pengecekan `startsWith("mat-")` karena ID adalah UUID
-  // ID dari inventory selalu berupa UUID, bukan "mat-xxx"
 
   if (!quantity || quantity <= 0) {
     showToast("Please enter a valid quantity", "error");
@@ -46,56 +41,58 @@ export async function handleConsumeMaterial() {
     return;
   }
 
-  // ✅ Ambil informasi material dari option yang dipilih
+  // Ambil informasi material dari option
   const selectedOption = selectEl.options[selectEl.selectedIndex];
   const materialName =
     selectedOption?.text?.split("(")[0]?.trim() || "Material";
   const stock = parseFloat(selectedOption?.dataset?.stock) || 0;
+  const price = parseFloat(selectedOption?.dataset?.price) || 0;
 
-  // ✅ Cek stok
+  // Cek stok
   if (stock > 0 && quantity > stock) {
     showToast(`⚠️ Insufficient stock! Available: ${stock} ${unit}`, "error");
     return;
   }
 
-  // ✅ Cek apakah item ada di inventory
+  // Cek apakah item ada di inventory
   const inventoryItem = await ProjectAPI.checkInventoryItem(itemId);
   if (!inventoryItem) {
     showToast(`⚠️ Material "${materialName}" not found in inventory.`, "error");
     return;
   }
 
-  // ✅ Konfirmasi sebelum consume
+  const totalCost = quantity * price;
+
+  // Konfirmasi dengan detail lengkap
   if (
     !confirm(
-      `Consume ${quantity} ${unit} of "${materialName}"?\n` +
-        `Stock: ${stock} ${unit}\n` +
-        `Project: ${projectId.substring(0, 8)}`,
+      `Consume ${quantity} ${unit} of "${materialName}"?\n\n` +
+        `📦 Stock: ${stock} ${unit}\n` +
+        `💰 Total Cost: ${formatCurrency(totalCost)}\n` +
+        `📋 Project: ${projectId.substring(0, 8)}`,
     )
   ) {
     return;
   }
 
-  // ✅ Kirim request ke API
+  // Kirim request
   const result = await ProjectAPI.consumeMaterial({
     project_id: projectId,
     item_id: itemId,
     quantity: quantity,
-    note: `Consumed ${quantity} ${unit} of ${materialName}`,
+    note: `Consumed ${quantity} ${unit} of ${materialName} (${formatCurrency(totalCost)})`,
   });
 
   if (result) {
     showToast(`✅ Consumed: ${quantity} ${unit} ${materialName}`, "success");
 
-    // ✅ Reset form
+    // Reset form
     if (qtyEl) qtyEl.value = "";
     if (selectEl) selectEl.value = "";
     if (unitEl) unitEl.value = "pcs";
 
-    // ✅ Refresh material dropdown
+    // Refresh
     await loadMaterialItems();
-
-    // ✅ Refresh project detail
     if (state.currentProjectId) {
       const projectData = await ProjectAPI.fetchDetail(state.currentProjectId);
       if (projectData) {
@@ -122,4 +119,13 @@ export async function handleDeleteMaterial(usageId) {
     }
     await loadProjects();
   }
+}
+
+function formatCurrency(amount) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount || 0);
 }

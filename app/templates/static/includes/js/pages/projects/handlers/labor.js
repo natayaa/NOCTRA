@@ -9,6 +9,7 @@ import { Formatter } from "../formatters.js";
 import { state } from "../config.js";
 import { loadProjects } from "../index.js";
 import { renderLabor } from "../renderers/detail/labor.js";
+import { autoFillLaborRate } from "./dropdowns.js";
 
 export function updateLaborSummary(laborItems) {
   const container = document.getElementById("laborSummaryContainer");

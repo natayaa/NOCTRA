@@ -1,4 +1,4 @@
-// projects/handlers/dropdowns.js
+// projects/handlers/dropdowns.js (FIXED & IMPROVED - FULL)
 
 import { DOM } from "../dom.js";
 import { ProjectAPI } from "../api.js";
@@ -21,7 +21,6 @@ export async function loadMaterialItems() {
     for (const cat of categories) {
       const items = await ProjectAPI.fetchInventoryItems(100, cat);
       if (items && items.length > 0) {
-        // Tambahkan category info ke setiap item
         const itemsWithCategory = items.map((item) => ({
           ...item,
           _category: cat,
@@ -65,7 +64,6 @@ export async function loadMaterialItems() {
     const grouped = {};
     sortedItems.forEach((item) => {
       const cat = item._category || item.category || "Other";
-      // Capitalize category name
       const displayCat = cat.charAt(0).toUpperCase() + cat.slice(1);
       if (!grouped[displayCat]) grouped[displayCat] = [];
       grouped[displayCat].push(item);
@@ -335,3 +333,45 @@ export function autoFillLaborRate() {
     }
   }
 }
+
+// ============================================================
+// SET DEFAULT LABOR OPTIONS (Fallback)
+// ============================================================
+
+export function setDefaultLaborOptions() {
+  const select = DOM.laborTypeSelect();
+  if (!select) return;
+  select.innerHTML = getDefaultLaborOptions();
+  select.removeEventListener("change", autoFillLaborRate);
+  select.addEventListener("change", autoFillLaborRate);
+}
+
+// ============================================================
+// SET DEFAULT MATERIAL OPTIONS (Fallback)
+// ============================================================
+
+export function setDefaultMaterialOptions() {
+  const select = DOM.materialSelect();
+  if (!select) return;
+  select.innerHTML = getDefaultMaterialOptions();
+  select.removeEventListener("change", updateMaterialHint);
+  select.addEventListener("change", updateMaterialHint);
+}
+
+// ============================================================
+// REFRESH DROPDOWNS
+// ============================================================
+
+export async function refreshDropdowns() {
+  await loadMaterialItems();
+  await loadLaborTypes();
+}
+
+// ============================================================
+// EXPOSE TO WINDOW (for debugging)
+// ============================================================
+
+window.loadMaterialItems = loadMaterialItems;
+window.loadLaborTypes = loadLaborTypes;
+window.autoFillLaborRate = autoFillLaborRate;
+window.refreshDropdowns = refreshDropdowns;

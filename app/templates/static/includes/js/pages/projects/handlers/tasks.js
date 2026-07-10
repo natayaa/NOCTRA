@@ -1,6 +1,4 @@
-// ============================================================
-// projects/handlers/tasks.js - Task Management
-// ============================================================
+// projects/handlers/tasks.js (FIXED & IMPROVED)
 
 import { DOM } from "../dom.js";
 import { ProjectAPI } from "../api.js";
@@ -15,10 +13,16 @@ export function openTaskModal(projectId) {
   const modal = DOM.taskModal();
 
   if (projectIdEl) projectIdEl.value = projectId;
-  if (form) form.reset();
+  if (form) {
+    form.reset();
+    // Set default priority
+    const priorityEl = DOM.taskPriority();
+    if (priorityEl) priorityEl.value = "medium";
+  }
   if (modal) {
     modal.classList.add("active");
     document.body.style.overflow = "hidden";
+    setTimeout(() => DOM.taskTitle()?.focus(), 100);
   }
 }
 
@@ -30,6 +34,7 @@ export function closeTaskModal() {
 
 export async function handleAddTask(e) {
   e.preventDefault();
+
   const projectId = DOM.taskProjectId?.value || "";
   if (!projectId) {
     showToast("Project ID missing", "error");
@@ -43,31 +48,72 @@ export async function handleAddTask(e) {
     priority: DOM.taskPriority?.value || "medium",
     due_date: DOM.taskDueDate?.value || null,
   };
+
   if (!data.title) {
     showToast("Task title is required", "error");
+    DOM.taskTitle()?.focus();
     return;
   }
 
-  const result = await ProjectAPI.addTask(projectId, data);
-  if (result) {
-    showToast("Task added successfully", "success");
-    closeTaskModal();
-    if (state.currentProjectId) {
-      const projectData = await ProjectAPI.fetchDetail(state.currentProjectId);
-      if (projectData) {
-        state._currentProjectData = projectData;
-        renderTasks(projectData);
+  // Validasi due date
+  if (data.due_date) {
+    const dueDate = new Date(data.due_date);
+    if (dueDate < new Date()) {
+      if (!confirm("⚠️ Due date is in the past. Continue anyway?")) {
+        return;
       }
     }
-    await loadProjects();
+  }
+
+  const submitBtn = DOM.taskForm()?.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Adding...";
+  }
+
+  try {
+    const result = await ProjectAPI.addTask(projectId, data);
+    if (result) {
+      showToast("✅ Task added successfully", "success");
+      closeTaskModal();
+
+      if (state.currentProjectId) {
+        const projectData = await ProjectAPI.fetchDetail(
+          state.currentProjectId,
+        );
+        if (projectData) {
+          state._currentProjectData = projectData;
+          renderTasks(projectData);
+        }
+      }
+      await loadProjects();
+    } else {
+      showToast("❌ Failed to add task", "error");
+    }
+  } catch (error) {
+    console.error("Add task error:", error);
+    showToast("❌ " + (error.message || "Failed to add task"), "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Add Task";
+    }
   }
 }
 
 export async function handleCompleteTask(taskId) {
-  if (confirm("Mark this task as completed?")) {
+  if (!taskId) {
+    showToast("Task ID missing", "error");
+    return;
+  }
+
+  if (!confirm("Mark this task as completed?")) return;
+
+  try {
     const result = await ProjectAPI.completeTask(taskId);
     if (result) {
-      showToast("Task completed! 🎉", "success");
+      showToast("✅ Task completed! 🎉", "success");
+
       if (state.currentProjectId) {
         const projectData = await ProjectAPI.fetchDetail(
           state.currentProjectId,
@@ -78,6 +124,44 @@ export async function handleCompleteTask(taskId) {
         }
         await loadProjects();
       }
+    } else {
+      showToast("❌ Failed to complete task", "error");
     }
+  } catch (error) {
+    console.error("Complete task error:", error);
+    showToast("❌ " + (error.message || "Failed to complete task"), "error");
+  }
+}
+
+export async function handleDeleteTask(taskId) {
+  if (!taskId) {
+    showToast("Task ID missing", "error");
+    return;
+  }
+
+  if (!confirm("Delete this task?")) return;
+
+  try {
+    // Note: May need to implement deleteTask endpoint
+    const result = await ProjectAPI.deleteTask(taskId);
+    if (result) {
+      showToast("🗑️ Task deleted", "success");
+
+      if (state.currentProjectId) {
+        const projectData = await ProjectAPI.fetchDetail(
+          state.currentProjectId,
+        );
+        if (projectData) {
+          state._currentProjectData = projectData;
+          renderTasks(projectData);
+        }
+        await loadProjects();
+      }
+    } else {
+      showToast("❌ Failed to delete task", "error");
+    }
+  } catch (error) {
+    console.error("Delete task error:", error);
+    showToast("❌ " + (error.message || "Failed to delete task"), "error");
   }
 }

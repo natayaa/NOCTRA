@@ -1,4 +1,4 @@
-// projects/api.js
+// projects/api.js (FIXED)
 
 import { CONFIG, state } from "./config.js";
 import { showToast } from "./toast.js";
@@ -21,11 +21,9 @@ export async function apiFetch(endpoint, options = {}) {
     const response = await fetch(url, config);
     const data = await response.json();
     if (!response.ok) {
-      // Backend menggunakan format error dengan 'detail' atau 'message'
       const errorMsg = data.detail || data.message || `HTTP ${response.status}`;
       throw new Error(errorMsg);
     }
-    // ✅ Backend menggunakan BaseResponse: { success, message, data }
     return data;
   } catch (error) {
     console.error("API Error:", error);
@@ -37,7 +35,6 @@ export async function apiFetch(endpoint, options = {}) {
 // Projects API Services
 // ============================================================
 export const ProjectAPI = {
-  // Fetch projects with pagination and filters
   fetchProjects: async (page = 1, filters = {}) => {
     state.isLoading = true;
     const params = new URLSearchParams({
@@ -50,7 +47,6 @@ export const ProjectAPI = {
 
     try {
       const response = await apiFetch(`/projects/?${params.toString()}`);
-      // ✅ Response dari backend: { success, message, data: { items, total, page, page_size, total_pages } }
       return response.data || response;
     } catch (error) {
       showToast("Failed to load projects: " + error.message, "error");
@@ -60,7 +56,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Fetch project statistics
   fetchStatistics: async () => {
     try {
       const response = await apiFetch("/projects/statistics");
@@ -71,7 +66,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Fetch financial summary
   fetchFinancialSummary: async () => {
     try {
       const response = await apiFetch("/projects/financial-summary");
@@ -82,11 +76,9 @@ export const ProjectAPI = {
     }
   },
 
-  // Fetch project detail
   fetchDetail: async (projectId) => {
     try {
       const response = await apiFetch(`/projects/${projectId}`);
-      // ✅ Response: { success, message, data: { project, financial_summary, tasks, ... } }
       return response.data || response;
     } catch (error) {
       showToast("Failed to load project details: " + error.message, "error");
@@ -94,7 +86,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Create project
   create: async (data) => {
     try {
       const response = await apiFetch("/projects/", {
@@ -108,7 +99,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Update project
   update: async (projectId, data) => {
     try {
       const response = await apiFetch(`/projects/${projectId}`, {
@@ -122,7 +112,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Delete project
   delete: async (projectId) => {
     try {
       const response = await apiFetch(`/projects/${projectId}`, {
@@ -135,7 +124,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Update project progress
   updateProgress: async (projectId, progress, note = "") => {
     try {
       const response = await apiFetch(`/projects/${projectId}/progress`, {
@@ -149,7 +137,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Complete project
   complete: async (projectId) => {
     try {
       const response = await apiFetch(`/projects/${projectId}/complete`, {
@@ -162,7 +149,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Update project status
   updateStatus: async (projectId, status, note = "") => {
     try {
       const response = await apiFetch(`/projects/${projectId}/status`, {
@@ -176,7 +162,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Archive project
   archive: async (projectId) => {
     try {
       const response = await apiFetch(`/projects/${projectId}/archive`, {
@@ -189,7 +174,6 @@ export const ProjectAPI = {
     }
   },
 
-  // Unarchive project
   unarchive: async (projectId) => {
     try {
       const response = await apiFetch(`/projects/${projectId}/unarchive`, {
@@ -228,7 +212,6 @@ export const ProjectAPI = {
 
   completeTask: async (taskId) => {
     try {
-      // ✅ Backend: POST /projects/tasks/{task_id}/complete
       const response = await apiFetch(`/projects/tasks/${taskId}/complete`, {
         method: "POST",
       });
@@ -305,7 +288,6 @@ export const ProjectAPI = {
   // --- Material Usage ---
   consumeMaterial: async (data) => {
     try {
-      // ✅ Endpoint yang benar: POST /inventory/usage
       const response = await apiFetch("/inventory/usage", {
         method: "POST",
         body: JSON.stringify(data),
@@ -319,7 +301,6 @@ export const ProjectAPI = {
 
   deleteMaterialUsage: async (usageId) => {
     try {
-      // ✅ Endpoint yang benar: DELETE /inventory/usage/{usage_id}
       const response = await apiFetch(`/inventory/usage/${usageId}`, {
         method: "DELETE",
       });
@@ -330,17 +311,12 @@ export const ProjectAPI = {
     }
   },
 
-  // --- Inventory & Price List (for dropdowns) ---
+  // --- Inventory & Price List ---
   fetchInventoryItems: async (limit = 100, category = null) => {
     try {
-      // ✅ Tambahkan parameter category untuk filter
       let url = `/inventory/items?limit=${limit}`;
-      if (category) {
-        url += `&category=${encodeURIComponent(category)}`;
-      }
-
+      if (category) url += `&category=${encodeURIComponent(category)}`;
       const response = await apiFetch(url);
-      // Response: { success, message, data: { items, total, ... } }
       const result = response.data || response;
       return result.items || result || [];
     } catch (error) {
@@ -352,10 +328,7 @@ export const ProjectAPI = {
   fetchPriceListItems: async (page = 1, limit = 100, category = null) => {
     try {
       let url = `/price-list/items?page=${page}&limit=${limit}`;
-      if (category) {
-        url += `&category=${encodeURIComponent(category)}`;
-      }
-
+      if (category) url += `&category=${encodeURIComponent(category)}`;
       const response = await apiFetch(url);
       const result = response.data || response;
       return result.items || result || [];
@@ -567,5 +540,10 @@ export const ProjectAPI = {
       showToast("Failed to remove team member: " + error.message, "error");
       return null;
     }
+  },
+
+  // --- Helper ---
+  getProjectById: (projectId) => {
+    return state.projects.find((p) => p.id === projectId) || null;
   },
 };

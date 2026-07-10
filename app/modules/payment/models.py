@@ -5,7 +5,7 @@ Payment Module Models
 from __future__ import annotations
 
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import (
@@ -226,7 +226,15 @@ class InquiryInvoice(Base, UUIDMixin, TimestampMixin):
     def is_overdue(self) -> bool:
         if not self.due_date:
             return False
-        return datetime.now() > self.due_date and self.status != InvoiceStatus.PAID
+        # ✅ FIX: Gunakan timezone-aware untuk comparison
+        now = datetime.now(timezone.utc)
+        # ✅ Pastikan due_date juga timezone-aware
+        if self.due_date.tzinfo is None:
+            # Jika naive, asumsikan UTC
+            due_date = self.due_date.replace(tzinfo=timezone.utc)
+        else:
+            due_date = self.due_date
+        return now > due_date and self.status != InvoiceStatus.PAID
 
     @property
     def is_paid(self) -> bool:

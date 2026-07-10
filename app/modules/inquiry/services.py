@@ -522,3 +522,23 @@ class InquiryService:
     async def get_follow_ups_by_assignee(self, assigned_to: str) -> List[InquiryFollowUp]:
         """Get follow-ups assigned to a specific person."""
         return await self.repo.get_follow_ups_by_assignee(assigned_to)
+
+    async def check_and_update_inquiry_status(self, inquiry_id: UUID) -> bool:
+        """Check if inquiry should be updated based on project status."""
+        inquiry = await self.repo.get_with_details(inquiry_id)
+        if not inquiry or not inquiry.project:
+            return False
+
+        project = inquiry.project
+        if project.status == ProjectStatus.COMPLETED:
+            if inquiry.status != InquiryStatus.COMPLETED:
+                inquiry.status = InquiryStatus.COMPLETED
+                await self.db.flush()
+                await self.repo.add_activity(
+                    inquiry_id,
+                    "Auto-updated: Project completed",
+                    "auto_update",
+                    performed_by="system"
+                )
+                return True
+        return False

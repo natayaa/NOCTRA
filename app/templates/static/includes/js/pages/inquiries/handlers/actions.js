@@ -1,6 +1,4 @@
-// ============================================================
-// inquiries/handlers/actions.js - Action Handlers
-// ============================================================
+// inquiries/handlers/actions.js (FIXED & IMPROVED)
 
 import { InquiryAPI } from "../api.js";
 import { showToast } from "../toast.js";
@@ -11,45 +9,116 @@ import { loadInquiryDetail, closeDrawer } from "../drawer.js";
 import { loadInquiries } from "../index.js";
 
 export async function handleApprove(inquiryId) {
+  if (!inquiryId) {
+    showToast("No inquiry selected", "error");
+    return;
+  }
+
   if (!confirm("Approve this inquiry?")) return;
-  const result = await InquiryAPI.updateStatus(
-    inquiryId,
-    "approved",
-    "Approved by staff",
-  );
-  if (result) {
-    showToast("Inquiry approved!", "success");
-    await loadInquiries();
-    if (DOM.drawer()?.classList.contains("active"))
-      await loadInquiryDetail(inquiryId);
+
+  try {
+    const result = await InquiryAPI.updateStatus(
+      inquiryId,
+      "approved",
+      "Approved by staff",
+    );
+    if (result) {
+      showToast("✅ Inquiry approved!", "success");
+      await loadInquiries();
+      if (DOM.drawer()?.classList.contains("active")) {
+        await loadInquiryDetail(inquiryId);
+      }
+    }
+  } catch (error) {
+    console.error("Approve error:", error);
+    showToast("❌ Failed to approve inquiry: " + error.message, "error");
+  }
+}
+
+export async function handleMarkComplete(inquiryId) {
+  if (!inquiryId) {
+    showToast("No inquiry selected", "error");
+    return;
+  }
+
+  if (!confirm("Mark this inquiry as completed?")) return;
+
+  try {
+    const result = await InquiryAPI.updateStatus(
+      inquiryId,
+      "completed",
+      "Project completed",
+    );
+    if (result) {
+      showToast("✅ Inquiry marked as completed!", "success");
+      await loadInquiries();
+      if (DOM.drawer()?.classList.contains("active")) {
+        await loadInquiryDetail(inquiryId);
+      }
+    }
+  } catch (error) {
+    console.error("Complete error:", error);
+    showToast("❌ Failed to mark as completed: " + error.message, "error");
   }
 }
 
 export async function handleUpdateStatus(inquiryId, status, note = "") {
-  const result = await InquiryAPI.updateStatus(inquiryId, status, note);
-  if (result) {
-    showToast(`Status updated to ${Formatter.statusLabel(status)}`, "success");
-    await loadInquiries();
-    if (DOM.drawer()?.classList.contains("active"))
-      await loadInquiryDetail(inquiryId);
+  if (!inquiryId || !status) {
+    showToast("Missing required fields", "error");
+    return;
+  }
+
+  try {
+    const result = await InquiryAPI.updateStatus(inquiryId, status, note);
+    if (result) {
+      showToast(
+        `✅ Status updated to ${Formatter.statusLabel(status)}`,
+        "success",
+      );
+      await loadInquiries();
+      if (DOM.drawer()?.classList.contains("active")) {
+        await loadInquiryDetail(inquiryId);
+      }
+    }
+  } catch (error) {
+    console.error("Status update error:", error);
+    showToast("❌ Failed to update status: " + error.message, "error");
   }
 }
 
 export function handleWhatsApp(inquiry) {
-  const phone = inquiry?.customer_phone_number;
+  if (!inquiry) {
+    showToast("No inquiry data available", "error");
+    return;
+  }
+
+  const phone = inquiry.customer_phone_number;
   if (!phone) {
     showToast("No phone number available", "error");
     return;
   }
+
   const cleanPhone = phone.replace(/[^0-9]/g, "");
+  if (cleanPhone.length < 8) {
+    showToast("Invalid phone number", "error");
+    return;
+  }
+
+  const name = inquiry.customer_name || "Customer";
+  const brand = inquiry.vehicle_brand || "";
+  const model = inquiry.vehicle_model || "";
+  const type = inquiry.project_type || "";
+
   const message = encodeURIComponent(
-    `Halo ${inquiry.customer_name},\n\n` +
+    `Halo ${name},\n\n` +
       `Kami dari NOCTRA ingin menindaklanjuti inquiry Anda mengenai:\n` +
-      `• Kendaraan: ${inquiry.vehicle_brand} ${inquiry.vehicle_model}\n` +
-      `• Tipe Proyek: ${inquiry.project_type}\n\n` +
+      `• Kendaraan: ${brand} ${model}\n` +
+      `• Tipe Proyek: ${type}\n\n` +
       `Ada yang bisa kami bantu? 😊`,
   );
+
   window.open(`https://wa.me/${cleanPhone}?text=${message}`, "_blank");
+  showToast("📱 Opening WhatsApp...", "info");
 }
 
 export async function handleSaveNote() {
@@ -58,14 +127,60 @@ export async function handleSaveNote() {
     showToast("No inquiry selected", "error");
     return;
   }
-  const note = DOM.drawerNotes()?.value?.trim();
-  if (!note) {
-    showToast("Please enter a note", "error");
+
+  const noteEl = DOM.drawerNotes();
+  if (!noteEl) {
+    showToast("Note input not found", "error");
     return;
   }
-  const result = await InquiryAPI.addNote(inquiryId, note, "internal", false);
-  if (result) {
-    showToast("Note saved!", "success");
-    if (DOM.noteCounter()) DOM.noteCounter().textContent = note.length;
+
+  const note = noteEl.value?.trim();
+  if (!note) {
+    showToast("Please enter a note", "error");
+    noteEl.focus();
+    return;
   }
+
+  if (note.length > 500) {
+    showToast("Note is too long (max 500 characters)", "warning");
+    return;
+  }
+
+  try {
+    const result = await InquiryAPI.addNote(inquiryId, note, "internal", false);
+    if (result) {
+      showToast("✅ Note saved!", "success");
+      const counter = DOM.noteCounter();
+      if (counter) counter.textContent = note.length;
+
+      // ✅ Refresh activities to show note was added
+      const activities = await InquiryAPI.fetchActivities(inquiryId, 50);
+      const timelineContainer = DOM.drawerTimeline();
+      if (timelineContainer) {
+        import("../renderers/timeline.js").then(({ renderDrawerTimeline }) => {
+          renderDrawerTimeline(activities);
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Save note error:", error);
+    showToast("❌ Failed to save note: " + error.message, "error");
+  }
+}
+
+export function handleCloseInquiry(inquiryId, reason = "") {
+  if (!inquiryId) {
+    showToast("No inquiry selected", "error");
+    return;
+  }
+
+  const reasonText = prompt("Enter reason for closing this inquiry:", reason);
+  if (reasonText === null) return; // User cancelled
+
+  if (!reasonText.trim()) {
+    showToast("Please provide a reason for closing", "warning");
+    return;
+  }
+
+  handleUpdateStatus(inquiryId, "closed", reasonText.trim());
 }

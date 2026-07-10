@@ -288,7 +288,11 @@ class PaymentRepository(BaseRepository[InquiryPayment]):
             )
         )
         result = await self.db.execute(stmt)
-        paid_amount = result.scalar() or Decimal(0)
+        paid_amount = result.scalar() or Decimal('0')
+
+        # ✅ FIX: Jangan biarkan paid_amount melebihi total_amount
+        if paid_amount > invoice.total_amount:
+            paid_amount = invoice.total_amount
 
         invoice.paid_amount = paid_amount
 

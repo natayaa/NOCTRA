@@ -1,6 +1,4 @@
-// ============================================================
-// shared/payments/formatters.js - Payment Formatters
-// ============================================================
+// shared/payments/formatters.js
 
 export const PaymentFormatter = {
   currency: (amount) => {
@@ -41,38 +39,113 @@ export const PaymentFormatter = {
     }
   },
 
+  // ✅ Match dengan status dari backend
   statusLabel: (status) => {
     const map = {
       pending: "Pending",
+      awaiting_confirmation: "Awaiting Confirmation",
+      processing: "Processing",
       confirmed: "Confirmed",
       paid: "Paid",
       completed: "Completed",
+      settled: "Settled",
       cancelled: "Cancelled",
       failed: "Failed",
-      awaiting_confirmation: "Awaiting Confirmation",
-      processing: "Processing",
-      settled: "Settled",
       voided: "Voided",
       rejected: "Rejected",
+      // Invoice status
+      draft: "Draft",
+      sent: "Sent",
+      viewed: "Viewed",
+      partial: "Partial",
+      overdue: "Overdue",
+      refunded: "Refunded",
     };
-    return map[status] || status;
+    return map[status] || status || "Unknown";
   },
 
-  statusBadge: (status) => {
+  statusColor: (status) => {
     const map = {
-      pending: "pending",
-      awaiting_confirmation: "pending",
-      processing: "pending",
-      confirmed: "confirmed",
-      paid: "completed",
-      completed: "completed",
-      settled: "completed",
-      cancelled: "cancelled",
-      failed: "cancelled",
-      voided: "cancelled",
-      rejected: "cancelled",
+      pending: "#f59e0b",
+      awaiting_confirmation: "#f59e0b",
+      processing: "#f59e0b",
+      confirmed: "#3b82f6",
+      paid: "#10b981",
+      completed: "#10b981",
+      settled: "#10b981",
+      cancelled: "#ef4444",
+      failed: "#ef4444",
+      voided: "#ef4444",
+      rejected: "#ef4444",
+      draft: "#94a3b8",
+      sent: "#3b82f6",
+      viewed: "#3b82f6",
+      partial: "#f59e0b",
+      overdue: "#ef4444",
+      refunded: "#94a3b8",
     };
-    return map[status] || status;
+    return map[status] || "#94a3b8";
+  },
+
+  statusIcon: (status) => {
+    const map = {
+      pending: "⏳",
+      awaiting_confirmation: "⏳",
+      processing: "⏳",
+      confirmed: "✅",
+      paid: "✅",
+      completed: "✅",
+      settled: "✅",
+      cancelled: "❌",
+      failed: "❌",
+      voided: "❌",
+      rejected: "❌",
+      draft: "📄",
+      sent: "📨",
+      viewed: "👁️",
+      partial: "💰",
+      overdue: "⚠️",
+      refunded: "↩️",
+    };
+    return map[status] || "📄";
+  },
+
+  // ✅ Match dengan payment_type dari backend
+  paymentTypeLabel: (type) => {
+    const map = {
+      deposit: "Deposit",
+      payment: "Payment",
+      refund: "Refund",
+      installment: "Installment",
+    };
+    const key = (type || "").toLowerCase();
+    return map[key] || type || "Payment";
+  },
+
+  paymentTypeIcon: (type) => {
+    const map = {
+      deposit: "🏦",
+      payment: "💳",
+      refund: "↩️",
+      installment: "📊",
+    };
+    const key = (type || "").toLowerCase();
+    return map[key] || "💳";
+  },
+
+  // ✅ Invoice status badge class
+  invoiceStatusBadgeClass: (status) => {
+    const map = {
+      draft: "draft",
+      sent: "sent",
+      viewed: "sent",
+      partial: "partial",
+      paid: "paid",
+      overdue: "danger",
+      cancelled: "cancelled",
+      refunded: "cancelled",
+    };
+    return map[status] || "draft";
   },
 };
 

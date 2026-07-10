@@ -1,6 +1,4 @@
-// ============================================================
-// projects/renderers/detail/overview.js - Overview Tab
-// ============================================================
+// projects/renderers/detail/overview.js (FIXED & IMPROVED)
 
 import { DOM } from "../../dom.js";
 import {
@@ -16,12 +14,15 @@ export function renderOverview(projectData) {
   const project = projectData?.project || projectData;
   if (!project) return;
 
+  // ✅ Title
   const title = DOM.drawerTitle();
   const subtitle = DOM.drawerSubtitle();
   if (title) title.textContent = project.name || "Project Details";
-  if (subtitle)
+  if (subtitle) {
     subtitle.textContent = `ID: ${project.id?.substring(0, 8) || "N/A"}`;
+  }
 
+  // ✅ Customer & Vehicle fields
   const fields = {
     drawerCustomer: project.customer_name,
     drawerPhone: project.customer_phone,
@@ -31,6 +32,7 @@ export function renderOverview(projectData) {
     drawerYear: project.vehicle_year,
     drawerPlate: project.vehicle_license_plate,
   };
+
   Object.keys(fields).forEach((key) => {
     const el = DOM[key]();
     if (el) {
@@ -40,6 +42,7 @@ export function renderOverview(projectData) {
     }
   });
 
+  // ✅ Status & Priority
   const statusEl = DOM.drawerStatus();
   const priorityEl = DOM.drawerPriority();
   if (statusEl) {
@@ -49,11 +52,57 @@ export function renderOverview(projectData) {
     priorityEl.innerHTML = `<span class="priority-badge ${getPriorityBadgeClass(project.priority)}">${getPriorityLabel(project.priority)}</span>`;
   }
 
+  // ✅ Progress
   const progress = project.progress || 0;
   const fillEl = DOM.drawerProgressFill();
   const textEl = DOM.drawerProgressText();
   const notesEl = DOM.drawerNotes();
-  if (fillEl) fillEl.style.width = `${progress}%`;
-  if (textEl) textEl.textContent = `${progress}%`;
-  if (notesEl) notesEl.textContent = project.notes || "-";
+
+  if (fillEl) {
+    fillEl.style.width = `${progress}%`;
+    fillEl.style.backgroundColor = getProgressColor(progress);
+  }
+  if (textEl) {
+    textEl.textContent = `${progress}%`;
+    textEl.style.color = getProgressColor(progress);
+  }
+  if (notesEl) {
+    notesEl.textContent = project.notes || "-";
+    notesEl.style.whiteSpace = "pre-wrap";
+  }
+
+  // ✅ Budget info (if available)
+  const budgetEl = DOM.budgetPercentage();
+  const budgetFillEl = DOM.budgetProgressFillFinancial();
+  const estimatedCost = project.estimated_cost || 0;
+  const actualCost = project.actual_cost || 0;
+
+  if (budgetEl && estimatedCost > 0) {
+    const percentage = Math.min((actualCost / estimatedCost) * 100, 100);
+    budgetEl.textContent = `${percentage.toFixed(0)}%`;
+    budgetEl.style.color =
+      percentage > 90 ? "#ef4444" : percentage > 75 ? "#f59e0b" : "#10b981";
+  }
+
+  if (budgetFillEl && estimatedCost > 0) {
+    const percentage = Math.min((actualCost / estimatedCost) * 100, 100);
+    budgetFillEl.style.width = `${percentage}%`;
+    budgetFillEl.className = "budget-progress-fill";
+    if (percentage > 90) budgetFillEl.classList.add("danger");
+    else if (percentage > 75) budgetFillEl.classList.add("warning");
+  }
+
+  // ✅ Total cost display
+  const totalCostEl = document.getElementById("drawerTotalCostDisplay");
+  if (totalCostEl) {
+    totalCostEl.textContent = Formatter.currency(actualCost);
+  }
+}
+
+function getProgressColor(progress) {
+  if (progress >= 100) return "#10b981";
+  if (progress >= 75) return "#3b82f6";
+  if (progress >= 50) return "#f59e0b";
+  if (progress >= 25) return "#f97316";
+  return "#94a3b8";
 }

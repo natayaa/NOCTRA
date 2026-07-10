@@ -1,40 +1,84 @@
-// ============================================================
-// inquiries/utils.js - Utility Functions
-// ============================================================
-
 // inquiries/utils.js
 
 import { state } from "./config.js";
+// ✅ Import dari shared/payments untuk konsistensi
+import { calculatePaymentSummary } from "../shared/payments/utils.js";
 
+/**
+ * Get item name by ID from inventory items state
+ */
 export function getItemName(itemId) {
   if (!itemId) return "Unknown";
+
   if (state.inventoryItems && state.inventoryItems.length > 0) {
     const found = state.inventoryItems.find((i) => i.id === itemId);
-    if (found) return found.name;
+    if (found) return found.name || "Unknown";
   }
+
+  // ✅ Fallback: tampilkan ID pendek
   return `Item ${itemId.substring(0, 8)}`;
 }
 
+/**
+ * Get item unit by ID from inventory items state
+ */
 export function getItemUnit(itemId) {
   if (!itemId) return "";
+
   if (state.inventoryItems && state.inventoryItems.length > 0) {
     const found = state.inventoryItems.find((i) => i.id === itemId);
     if (found) return found.unit || "";
   }
+
   return "";
 }
 
+/**
+ * Get item cost by ID from inventory items state
+ * ✅ Cek multiple price fields
+ */
 export function getItemCost(itemId) {
   if (!itemId) return 0;
+
   if (state.inventoryItems && state.inventoryItems.length > 0) {
     const found = state.inventoryItems.find((i) => i.id === itemId);
-    if (found) return found.cost_price || found.selling_price || 0;
+    if (found) {
+      // ✅ Cek semua kemungkinan field price
+      return found.cost_price || found.selling_price || found.price || 0;
+    }
   }
+
   return 0;
 }
 
 /**
- * ✅ FIX: Calculate financial data from inquiry, labor, materials, and payments
+ * Get full item details by ID
+ */
+export function getItemDetails(itemId) {
+  if (!itemId) return null;
+
+  if (state.inventoryItems && state.inventoryItems.length > 0) {
+    const found = state.inventoryItems.find((i) => i.id === itemId);
+    if (found) {
+      return {
+        name: found.name || "Unknown",
+        unit: found.unit || "",
+        cost_price: found.cost_price || 0,
+        selling_price: found.selling_price || 0,
+        price: found.price || 0,
+        current_stock: found.current_stock || 0,
+        category: found.category || "",
+        sub_category: found.sub_category || "",
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Calculate financial data from inquiry, labor, materials, and payments
+ * ✅ Menggunakan calculatePaymentSummary dari shared
  */
 export function calculateFinancialFromData(
   inquiry,
@@ -43,25 +87,24 @@ export function calculateFinancialFromData(
   payments,
 ) {
   console.log("📊 Calculating financial from:", {
-    inquiry,
-    labor,
-    materials,
-    payments,
+    //inquiry: inquiry?.id,
+    //laborCount: labor?.length || 0,
+    // materialsCount: materials?.length || 0,
+    // paymentsCount: payments?.length || 0,
   });
 
-  // ✅ Ambil data dari inquiry
   const project = inquiry?.project || {};
 
   // ✅ Estimated Cost - dari project atau inquiry
   const estimatedCost =
-    Number(project.estimated_cost) || Number(inquiry.estimated_cost) || 0;
+    Number(project.estimated_cost) || Number(inquiry.estimated_budget) || 0;
   const estimatedRevenue =
     Number(project.estimated_revenue) || Number(inquiry.estimated_revenue) || 0;
 
-  // ✅ Deposit
-  const depositAmount =
-    Number(project.deposit_amount) || Number(inquiry.deposit_amount) || 0;
-  const depositPaid = project.deposit_paid || inquiry.deposit_paid || false;
+  // ✅ Deposit - dari inquiry atau project
+  const inquiryDeposit = Number(inquiry.deposit_required) || 0;
+  const projectDeposit = Number(project.deposit_amount) || 0;
+  const depositAmount = projectDeposit || inquiryDeposit || 0;
 
   // ✅ Labor Cost - hitung dari labor items
   const totalLaborCost = (labor || []).reduce((sum, item) => {
@@ -75,7 +118,8 @@ export function calculateFinancialFromData(
   // ✅ Material Cost - hitung dari material usages
   const totalMaterialCost = (materials || []).reduce((sum, item) => {
     const qty = Number(item.quantity) || 0;
-    // Coba ambil dari berbagai field
+
+    // Coba ambil price dari berbagai field
     let price =
       Number(item.cost_price) ||
       Number(item.unit_price) ||
@@ -87,9 +131,6 @@ export function calculateFinancialFromData(
       price = getItemCost(item.item_id);
     }
 
-    console.log(
-      `📦 Material: ${item.item_name || item.item_id}, qty: ${qty}, price: ${price}`,
-    );
     return sum + qty * price;
   }, 0);
 
@@ -102,48 +143,92 @@ export function calculateFinancialFromData(
   // ✅ Total Actual Cost
   const actualCost = totalLaborCost + totalMaterialCost + otherExpenses;
 
-  // ✅ Payments summary
-  const paymentsList = payments || [];
-  const totalDeposit = paymentsList
-    .filter((p) => {
-      const type = (p.payment_type || p.type || "").toLowerCase();
-      return type === "deposit";
-    })
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  // ✅ Payments summary - pakai fungsi dari shared/payments
+  const paymentSummary = calculatePaymentSummary(payments || []);
+  console.log("💰 Payment Summary:", paymentSummary);
 
-  const totalPaid = paymentsList
-    .filter((p) => {
-      const status = (p.status || "").toLowerCase();
-      return ["completed", "confirmed", "paid", "success", "settled"].includes(
-        status,
-      );
-    })
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  // ✅ Total Paid = semua payment yang completed (termasuk deposit)
+  const totalPaid = paymentSummary.totalPaid;
+  const totalDeposit = paymentSummary.totalDeposit;
+  const totalPending = paymentSummary.totalPending;
 
-  const totalPending = paymentsList
-    .filter((p) => {
-      const status = (p.status || "").toLowerCase();
-      return ["pending", "awaiting_confirmation", "processing"].includes(
-        status,
-      );
-    })
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  // ✅ Remaining = actual cost - total paid (termasuk deposit)
+  const remaining = Math.max(0, actualCost - totalPaid);
 
-  console.log("💰 Payment summary:", { totalDeposit, totalPaid, totalPending });
+  // ✅ Deposit paid status
+  const depositPaid =
+    totalDeposit > 0 || (depositAmount > 0 && totalDeposit >= depositAmount);
 
-  // ✅ Return financial data
+  // console.log("📊 Final financial:", {
+  //  estimatedCost,
+  //  actualCost,
+  //  totalPaid,
+  //  totalDeposit,
+  //  remaining,
+  //});
+
   return {
     estimated_cost: estimatedCost,
     actual_cost: actualCost,
     estimated_revenue: estimatedRevenue,
     actual_revenue: totalPaid,
     deposit_amount: depositAmount || totalDeposit,
-    deposit_paid: depositPaid || totalDeposit > 0,
+    deposit_paid: depositPaid,
     material_cost: totalMaterialCost,
     labor_cost: totalLaborCost,
     other_expenses: otherExpenses,
     total_paid: totalPaid,
     total_deposit: totalDeposit,
     total_pending: totalPending,
+    remaining: remaining,
   };
+}
+
+/**
+ * Helper: Format currency for display
+ */
+export function formatCurrency(amount) {
+  if (!amount && amount !== 0) return "Rp 0";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Number(amount));
+}
+
+/**
+ * Helper: Get status color
+ */
+export function getStatusColor(status) {
+  const colors = {
+    new: "#3b82f6",
+    under_review: "#8b5cf6",
+    contacted: "#f59e0b",
+    quoted: "#f59e0b",
+    approved: "#10b981",
+    converted: "#10b981",
+    rejected: "#ef4444",
+    closed: "#94a3b8",
+    completed: "#10b981",
+  };
+  return colors[status] || "#94a3b8";
+}
+
+/**
+ * Helper: Get status label
+ */
+export function getStatusLabel(status) {
+  const labels = {
+    new: "New",
+    under_review: "Under Review",
+    contacted: "Contacted",
+    quoted: "Quoted",
+    approved: "Approved",
+    converted: "Converted",
+    rejected: "Rejected",
+    closed: "Closed",
+    completed: "Completed",
+  };
+  return labels[status] || status;
 }

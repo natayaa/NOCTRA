@@ -1,4 +1,4 @@
-// projects/handlers/materialKeypad.js - File Baru
+// projects/handlers/materialKeypad.js (FIXED & IMPROVED)
 
 let materialKeypadInitialized = false;
 let materialKeypadValue = "1";
@@ -20,7 +20,6 @@ export function initMaterialQtyKeypad() {
   }
 
   materialKeypadInitialized = true;
-
   materialKeypadValue = input.value || "1";
   input.value = materialKeypadValue;
 
@@ -32,30 +31,20 @@ export function initMaterialQtyKeypad() {
 
   function openKeypad() {
     if (materialIsOpen) return;
-
     materialValueBeforeOpen = input.value || "1";
-
     keypad.classList.add("active");
     input.classList.add("active");
     materialKeypadValue = input.value || "1";
     materialIsOpen = true;
-
-    console.log("🔑 Material Qty Keypad opened, value:", materialKeypadValue);
   }
 
   function closeKeypad(triggerChange = false) {
     if (!materialIsOpen) return;
-
     keypad.classList.remove("active");
     input.classList.remove("active");
     materialIsOpen = false;
-
     if (triggerChange) {
       input.dispatchEvent(new Event("change", { bubbles: true }));
-      console.log(
-        "✅ Material Qty Keypad closed with change, value:",
-        materialKeypadValue,
-      );
     }
   }
 
@@ -73,9 +62,7 @@ export function initMaterialQtyKeypad() {
   keypad.addEventListener("click", (e) => {
     const btn = e.target.closest(".keypad-btn");
     if (!btn) return;
-
     e.stopPropagation();
-
     const value = btn.dataset.value;
     if (!value) return;
 
@@ -100,9 +87,7 @@ export function initMaterialQtyKeypad() {
 
     if (materialIsOpen && wrapper && !wrapper.contains(e.target)) {
       setTimeout(() => {
-        if (materialIsOpen) {
-          closeKeypad();
-        }
+        if (materialIsOpen) closeKeypad();
       }, 50);
     }
   });
@@ -148,44 +133,22 @@ export function initMaterialQtyKeypad() {
 function processMaterialKeypadInput(value, currentValue = "1") {
   switch (value) {
     case "backspace":
-      if (currentValue.length > 1) {
-        return currentValue.slice(0, -1);
-      }
-      return "1";
-
+      return currentValue.length > 1 ? currentValue.slice(0, -1) : "1";
     case "clear":
       return "1";
-
     case ".":
-      if (!currentValue.includes(".")) {
-        return currentValue + ".";
-      }
-      return currentValue;
-
+      return currentValue.includes(".") ? currentValue : currentValue + ".";
     default:
-      if (!/^\d$/.test(value)) {
-        return currentValue;
-      }
-
-      if (currentValue === "1" && value !== ".") {
-        return value;
-      }
-
+      if (!/^\d$/.test(value)) return currentValue;
+      if (currentValue === "1" && value !== ".") return value;
       const [whole, decimal = ""] = currentValue.split(".");
-
-      if (!currentValue.includes(".") && whole.length >= 8) {
+      if (!currentValue.includes(".") && whole.length >= 8) return currentValue;
+      if (currentValue.includes(".") && decimal.length >= 2)
         return currentValue;
-      }
-
-      if (currentValue.includes(".") && decimal.length >= 2) {
-        return currentValue;
-      }
-
       return currentValue + value;
   }
 }
 
-// Debug helper
 window.debugMaterialKeypad = () => {
   console.log({
     materialKeypadValue,
@@ -195,5 +158,3 @@ window.debugMaterialKeypad = () => {
     inputValue: document.getElementById("materialQty")?.value,
   });
 };
-
-console.log("🔑 Material keypad.js loaded");

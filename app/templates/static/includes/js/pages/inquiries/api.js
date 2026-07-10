@@ -1,14 +1,12 @@
-// ============================================================
 // inquiries/api.js - API Services (FIXED)
-// ============================================================
 
 import { CONFIG, state } from "./config.js";
 import { showToast } from "./toast.js";
-import { getItemUnit, getItemCost } from "./utils.js";
 
 // ============================================================
 // Base API Helper
 // ============================================================
+
 export async function apiFetch(endpoint, options = {}) {
   const url = `${CONFIG.API_BASE_URL}${endpoint}`;
   const config = {
@@ -21,25 +19,11 @@ export async function apiFetch(endpoint, options = {}) {
 
   try {
     const response = await fetch(url, config);
-
-    // ✅ Clone response untuk debugging
-    const clone = response.clone();
-    let data;
-    try {
-      data = await response.json();
-    } catch (e) {
-      const text = await clone.text();
-      console.error("Raw response:", text);
-      throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
-    }
+    const data = await response.json();
 
     if (!response.ok) {
-      // ✅ Format error dengan detail
-      const errorMsg = data.message || data.detail || `HTTP ${response.status}`;
-      const error = new Error(errorMsg);
-      error.status = response.status;
-      error.response = { status: response.status, data };
-      throw error;
+      const errorMsg = data.detail || data.message || `HTTP ${response.status}`;
+      throw new Error(errorMsg);
     }
     return data;
   } catch (error) {
@@ -51,8 +35,9 @@ export async function apiFetch(endpoint, options = {}) {
 // ============================================================
 // Inquiry API Services
 // ============================================================
+
 export const InquiryAPI = {
-  // ✅ GET /api/api/inquiries/
+  // ✅ GET /api/inquiries/
   fetchInquiries: async (page = 1, filters = {}) => {
     state.isLoading = true;
     const params = new URLSearchParams({
@@ -73,7 +58,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ GET /api/api/inquiries/statistics
+  // ✅ GET /api/inquiries/statistics
   fetchStatistics: async () => {
     try {
       const response = await apiFetch("/inquiries/statistics");
@@ -84,7 +69,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ GET /api/api/inquiries/{inquiry_id}
+  // ✅ GET /api/inquiries/{inquiry_id}
   fetchDetail: async (inquiryId) => {
     try {
       const response = await apiFetch(`/inquiries/${inquiryId}`);
@@ -95,7 +80,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ PATCH /api/api/inquiries/{inquiry_id}/status
+  // ✅ PATCH /api/inquiries/{inquiry_id}/status
   updateStatus: async (inquiryId, status, note = "") => {
     try {
       const response = await apiFetch(`/inquiries/${inquiryId}/status`, {
@@ -109,7 +94,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ POST /api/api/inquiries/{inquiry_id}/quote
+  // ✅ POST /api/inquiries/{inquiry_id}/quote
   sendQuotation: async (inquiryId, estimatedCost, notes = "") => {
     try {
       const response = await apiFetch(`/inquiries/${inquiryId}/quote`, {
@@ -123,7 +108,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ POST /api/api/inquiries/{inquiry_id}/reject
+  // ✅ POST /api/inquiries/{inquiry_id}/reject
   reject: async (inquiryId, reason = "") => {
     try {
       const response = await apiFetch(`/inquiries/${inquiryId}/reject`, {
@@ -137,7 +122,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ POST /api/api/inquiries/{inquiry_id}/convert-to-project
+  // ✅ POST /api/inquiries/{inquiry_id}/convert-to-project
   convertToProject: async (
     inquiryId,
     startDate = null,
@@ -163,7 +148,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ GET /api/api/inquiries/{inquiry_id}/activities
+  // ✅ GET /api/inquiries/{inquiry_id}/activities
   fetchActivities: async (inquiryId, limit = CONFIG.MAX_ACTIVITIES) => {
     try {
       const response = await apiFetch(
@@ -176,7 +161,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ GET /api/api/inquiries/{inquiry_id}/notes
+  // ✅ GET /api/inquiries/{inquiry_id}/notes
   fetchNotes: async (inquiryId, includePrivate = false) => {
     try {
       const response = await apiFetch(
@@ -189,7 +174,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ POST /api/api/inquiries/{inquiry_id}/notes
+  // ✅ POST /api/inquiries/{inquiry_id}/notes
   addNote: async (
     inquiryId,
     note,
@@ -212,7 +197,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ GET /api/api/inquiries/{inquiry_id}/photos
+  // ✅ GET /api/inquiries/{inquiry_id}/photos
   fetchPhotos: async (inquiryId) => {
     try {
       const response = await apiFetch(`/inquiries/${inquiryId}/photos`);
@@ -223,18 +208,19 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ GET /api/api/inventory/items (for inventory items)
+  // ✅ GET /api/inventory/items
   fetchInventoryItems: async () => {
     try {
       const response = await apiFetch("/inventory/items?page=1&limit=100");
-      return response.data || response || [];
+      const result = response.data || response;
+      return result.items || result || [];
     } catch (error) {
       console.error("Failed to load inventory items:", error);
       return [];
     }
   },
 
-  // ✅ GET /api/api/projects/{project_id}/labor
+  // ✅ GET /api/projects/{project_id}/labor
   fetchProjectLabor: async (projectId) => {
     try {
       const response = await apiFetch(`/projects/${projectId}/labor`);
@@ -245,7 +231,7 @@ export const InquiryAPI = {
     }
   },
 
-  // ✅ GET /api/api/inventory/usage/project/{project_id}
+  // ✅ GET /api/inventory/usage/project/{project_id}
   fetchProjectMaterialUsage: async (projectId) => {
     try {
       const response = await apiFetch(`/inventory/usage/project/${projectId}`);

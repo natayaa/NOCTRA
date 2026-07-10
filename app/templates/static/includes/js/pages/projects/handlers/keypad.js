@@ -1,4 +1,4 @@
-// projects/handlers/keypad.js
+// projects/handlers/keypad.js (FIXED & IMPROVED)
 
 let keypadInitialized = false;
 let keypadValue = "0";
@@ -13,60 +13,42 @@ export function initHoursKeypad() {
     return;
   }
 
-  // prevent duplicate initialization
   if (keypadInitialized) {
     console.log("Hours keypad already initialized");
     return;
   }
 
   keypadInitialized = true;
-
   keypadValue = input.value || "0";
   input.value = keypadValue;
 
   function updateInput(value) {
     keypadValue = value;
     input.value = value;
-
-    input.dispatchEvent(
-      new Event("input", {
-        bubbles: true,
-      }),
-    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   function openKeypad() {
     if (isOpen) return;
-
     keypad.classList.add("active");
     input.classList.add("active");
-
     keypadValue = input.value || "0";
-
     isOpen = true;
   }
 
   function closeKeypad(triggerChange = false) {
     if (!isOpen) return;
-
     keypad.classList.remove("active");
     input.classList.remove("active");
-
     isOpen = false;
-
     if (triggerChange) {
-      input.dispatchEvent(
-        new Event("change", {
-          bubbles: true,
-        }),
-      );
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }
 
-  // input click
+  // Input click
   input.addEventListener("click", (e) => {
     e.stopPropagation();
-
     if (isOpen) {
       closeKeypad();
     } else {
@@ -74,16 +56,12 @@ export function initHoursKeypad() {
     }
   });
 
-  // keypad buttons
+  // Keypad buttons
   keypad.addEventListener("click", (e) => {
     e.stopPropagation();
-
     const btn = e.target.closest(".keypad-btn");
-
     if (!btn) return;
-
     const value = btn.dataset.value;
-
     if (!value) return;
 
     if (value === "enter") {
@@ -92,25 +70,22 @@ export function initHoursKeypad() {
     }
 
     const result = processKeypadInput(value, keypadValue);
-
     if (result !== null) {
       updateInput(result);
     }
   });
 
-  // outside click
+  // Outside click
   document.addEventListener("click", (e) => {
     const wrapper = input.closest(".hours-input-wrapper");
-
     if (isOpen && wrapper && !wrapper.contains(e.target)) {
       closeKeypad();
     }
   });
 
-  // keyboard support
+  // Keyboard support
   input.addEventListener("keydown", (e) => {
     e.preventDefault();
-
     const key = e.key;
 
     if ((key >= "0" && key <= "9") || key === ".") {
@@ -138,43 +113,24 @@ export function initHoursKeypad() {
     }
   });
 
-  console.log("Hours keypad initialized");
+  console.log("✅ Hours keypad initialized");
 }
 
 function processKeypadInput(value, currentValue = "0") {
   switch (value) {
     case "backspace":
       return currentValue.length > 1 ? currentValue.slice(0, -1) : "0";
-
     case "clear":
       return "0";
-
     case ".":
-      if (!currentValue.includes(".")) {
-        return currentValue + ".";
-      }
-      return currentValue;
-
+      return currentValue.includes(".") ? currentValue : currentValue + ".";
     default:
-      // numeric only
-      if (!/^\d$/.test(value)) {
-        return currentValue;
-      }
-
-      if (currentValue === "0") {
-        return value;
-      }
-
+      if (!/^\d$/.test(value)) return currentValue;
+      if (currentValue === "0") return value;
       const [whole, decimal = ""] = currentValue.split(".");
-
-      if (!currentValue.includes(".") && whole.length >= 8) {
+      if (!currentValue.includes(".") && whole.length >= 8) return currentValue;
+      if (currentValue.includes(".") && decimal.length >= 2)
         return currentValue;
-      }
-
-      if (currentValue.includes(".") && decimal.length >= 2) {
-        return currentValue;
-      }
-
       return currentValue + value;
   }
 }

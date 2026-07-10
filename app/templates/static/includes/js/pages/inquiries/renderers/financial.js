@@ -1,10 +1,10 @@
-// inquiries/renderers/financial.js
+// inquiries/renderers/financial.js (FIXED & IMPROVED)
 
 import { DOM } from "../dom.js";
 import { Formatter } from "../formatters.js";
 
 export function renderDrawerFinancial(financial) {
-  console.log("💰 Rendering financial data:", financial);
+  console.log("💰 Rendering financial data:");
 
   const elements = {
     estCost: DOM.drawerEstCost(),
@@ -24,18 +24,11 @@ export function renderDrawerFinancial(financial) {
   };
 
   if (!financial) {
-    Object.values(elements).forEach((el) => {
-      if (el) el.textContent = "-";
-    });
-    if (elements.budgetPercent) elements.budgetPercent.textContent = "0%";
-    if (elements.budgetFill) {
-      elements.budgetFill.style.width = "0%";
-      elements.budgetFill.className = "budget-progress-fill";
-    }
+    setEmptyState(elements);
     return;
   }
 
-  // ✅ Ambil semua nilai dengan default 0
+  // ✅ Extract values with defaults
   const estCost = Number(financial.estimated_cost) || 0;
   const actualCost = Number(financial.actual_cost) || 0;
   const estRevenue = Number(financial.estimated_revenue) || 0;
@@ -45,21 +38,17 @@ export function renderDrawerFinancial(financial) {
   const materialCost = Number(financial.material_cost) || 0;
   const laborCost = Number(financial.labor_cost) || 0;
   const otherExpenses = Number(financial.other_expenses) || 0;
-
-  // ✅ Total cost = material + labor + other
   const totalCost = materialCost + laborCost + otherExpenses;
-
-  // ✅ Jika actualCost masih 0 tapi totalCost > 0, gunakan totalCost
   const displayActualCost = actualCost > 0 ? actualCost : totalCost;
 
-  console.log("💰 Values:", {
-    estCost,
-    actualCost,
-    displayActualCost,
-    totalCost,
-    materialCost,
-    laborCost,
-  });
+  // ✅ Profit & Margin
+  const profit = actualRevenue - displayActualCost;
+  const margin = actualRevenue > 0 ? (profit / actualRevenue) * 100 : 0;
+  const isProfit = profit >= 0;
+
+  // ✅ Budget Progress
+  const budgetPercent =
+    estCost > 0 ? Math.min((displayActualCost / estCost) * 100, 100) : 0;
 
   // ✅ Update DOM
   if (elements.estCost)
@@ -82,22 +71,20 @@ export function renderDrawerFinancial(financial) {
       : "var(--danger, #ef4444)";
   }
 
-  // ✅ Profit & Margin
-  const profit = actualRevenue - displayActualCost;
-  const margin = actualRevenue > 0 ? (profit / actualRevenue) * 100 : 0;
-
   if (elements.profit) {
     elements.profit.textContent = Formatter.currency(profit);
-    elements.profit.style.color =
-      profit >= 0 ? "var(--success, #10b981)" : "var(--danger, #ef4444)";
-  }
-  if (elements.margin) {
-    elements.margin.textContent = margin.toFixed(1) + "%";
-    elements.margin.style.color =
-      margin >= 0 ? "var(--success, #10b981)" : "var(--danger, #ef4444)";
+    elements.profit.style.color = isProfit
+      ? "var(--success, #10b981)"
+      : "var(--danger, #ef4444)";
   }
 
-  // ✅ Cost Breakdown
+  if (elements.margin) {
+    elements.margin.textContent = margin.toFixed(1) + "%";
+    elements.margin.style.color = isProfit
+      ? "var(--success, #10b981)"
+      : "var(--danger, #ef4444)";
+  }
+
   if (elements.materialCost)
     elements.materialCost.textContent = Formatter.currency(materialCost);
   if (elements.laborCost)
@@ -107,15 +94,34 @@ export function renderDrawerFinancial(financial) {
   if (elements.totalCost)
     elements.totalCost.textContent = Formatter.currency(displayActualCost);
 
-  // ✅ Budget Progress
-  const budgetPercent =
-    estCost > 0 ? Math.min((displayActualCost / estCost) * 100, 100) : 0;
-  if (elements.budgetPercent)
+  if (elements.budgetPercent) {
     elements.budgetPercent.textContent = budgetPercent.toFixed(0) + "%";
+    elements.budgetPercent.style.color =
+      budgetPercent > 90
+        ? "var(--danger, #ef4444)"
+        : budgetPercent > 75
+          ? "var(--warning, #f59e0b)"
+          : "var(--text-primary)";
+  }
+
   if (elements.budgetFill) {
     elements.budgetFill.style.width = `${budgetPercent}%`;
     elements.budgetFill.className = "budget-progress-fill";
     if (budgetPercent > 90) elements.budgetFill.classList.add("danger");
     else if (budgetPercent > 75) elements.budgetFill.classList.add("warning");
+  }
+}
+
+function setEmptyState(elements) {
+  Object.values(elements).forEach((el) => {
+    if (el) el.textContent = "-";
+  });
+  if (elements.budgetPercent) {
+    elements.budgetPercent.textContent = "0%";
+    elements.budgetPercent.style.color = "";
+  }
+  if (elements.budgetFill) {
+    elements.budgetFill.style.width = "0%";
+    elements.budgetFill.className = "budget-progress-fill";
   }
 }
