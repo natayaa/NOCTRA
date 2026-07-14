@@ -1,4 +1,4 @@
-# core/config.py
+# core/config.py - TAMBAHKAN LOG_LEVEL
 from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field, field_validator
@@ -33,6 +33,10 @@ class Settings(BaseSettings):
         default="development", description="Environment: development, staging, production")
     SECRET_KEY: str = Field(default="your-secret-key-here",
                             description="Secret key for JWT")
+
+    # ✅ TAMBAHKAN INI
+    LOG_LEVEL: str = Field(
+        default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
 
     # =========================================================================
     # API
@@ -71,6 +75,11 @@ class Settings(BaseSettings):
     EMAIL_PORT: Optional[int] = Field(None, description="Email port")
     EMAIL_USER: Optional[str] = Field(None, description="Email user")
     EMAIL_PASSWORD: Optional[str] = Field(None, description="Email password")
+
+    # =========================================================================
+    # Redis (Optional)
+    # =========================================================================
+    REDIS_URL: Optional[str] = Field(None, description="Redis URL for caching")
 
     # =========================================================================
     # Validators

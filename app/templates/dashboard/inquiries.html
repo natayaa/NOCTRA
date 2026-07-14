@@ -15,14 +15,7 @@
      DASHBOARD / OVERVIEW CARDS
      ============================================================ -->
 <div class="inquiry-dashboard">
-    <div class="overview-card">
-        <div class="overview-icon"><i class="ph ph-file-text"></i></div>
-        <div>
-            <span>Total Inquiries</span>
-            <h2 id="totalCount">0</h2>
-            <small>All time</small>
-        </div>
-    </div>
+    
     <div class="overview-card">
         <div class="overview-icon"><i class="ph ph-newspaper"></i></div>
         <div>
@@ -45,6 +38,18 @@
             <span>Converted</span>
             <h2 id="convertedCount">0</h2>
             <small>Became projects</small>
+        </div>
+    </div>
+
+    <div class="overview-card">
+        <div class="overview-icon"><i class="ph ph-file-text"></i></div>
+        <div>
+            <span>Total Inquiries</span>
+            <h2 id="totalCount">0</h2>
+            <div class="trend">
+                <span class="trend-up">↑ 12%</span>
+                <small>vs last month</small>
+            </div>
         </div>
     </div>
 </div>
@@ -74,6 +79,14 @@
             <option value="project_completed">Project Completed</option>
         </select>
     </div>
+    <!-- Opsi 1: Tambahkan checkbox toggle -->
+    <!--div class="filter-group">
+        <label class="toggle-label">
+            <input type="checkbox" id="hasProjectToggle" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-text">Show only with project</span>
+        </label>
+    </div-->
     <div class="toolbar-right">
         <button class="btn-secondary" id="exportInquiriesBtn">
             <i class="ph ph-file-arrow-down"></i> Export
@@ -99,7 +112,18 @@
                 </tr>
             </thead>
             <tbody id="inquiriesBody">
-                <tr><td colspan="7" class="loading-placeholder">Loading inquiries...</td></tr>
+                <tr>
+                    <td colspan="7" class="empty-state">
+                        <div class="empty-state-content">
+                            <i class="ph ph-file-text" style="font-size:3rem; color:var(--text-muted);"></i>
+                            <h3>No inquiries found</h3>
+                            <p>Try adjusting your filters or search terms</p>
+                            <button class="btn-secondary" onclick="clearFilters()">
+                                <i class="ph ph-funnel"></i> Clear Filters
+                            </button>
+                        </div>
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -113,6 +137,8 @@
 <!-- ============================================================
      DRAWER (Detail) - FULL VERSION
      ============================================================ -->
+
+     
 <aside class="drawer" id="inquiryDrawer">
     <div class="drawer-header">
         <div>
@@ -280,6 +306,14 @@
                     <span class="value" id="drawerRemaining">Rp 0</span>
                 </div>
             </div>
+            <!-- Di financial summary -->
+            <div class="financial-summary-item highlight">
+                <span class="label">Profit / Loss</span>
+                <span class="value" id="drawerProfit">
+                    <span class="profit-indicator">+ Rp 5.000.000</span>
+                </span>
+                <span class="sub-text">↑ 12.5% margin</span>
+            </div>
 
             <div class="payment-actions">
                 <button class="btn-success" id="addDepositBtn"><i class="ph ph-plus"></i> Add Deposit</button>
@@ -289,9 +323,19 @@
 
             <!-- Payment History -->
             <div class="payment-history">
-                <h4>Payment History</h4>
-                <div id="drawerPaymentHistory">
-                    <p class="no-data">No payments recorded</p>
+                <div class="payment-history-header">
+                    <h4><i class="ph ph-clock"></i> Payment History</h4>
+                    <span class="payment-count" id="paymentCount">0 transactions</span>
+                </div>
+                
+                <!-- Payment List -->
+                <div class="payment-list" id="drawerPaymentHistory">
+                    <!-- Empty State -->
+                    <div class="payment-empty">
+                        <i class="ph ph-credit-card"></i>
+                        <p>No payments recorded</p>
+                        <span class="sub-text">Add a payment to start tracking</span>
+                    </div>
                 </div>
             </div>
         </section>
@@ -340,15 +384,55 @@
         <section class="detail-card">
             <h3>Actions</h3>
             <div class="action-section">
-                <button class="btn-success" id="drawerApproveBtn">Approve</button>
-                <button class="btn-primary" id="drawerQuoteBtn">Send Quote</button>
-                <button class="btn-danger" id="drawerRejectBtn">Reject</button>
-                <button class="btn-secondary" id="drawerWhatsappBtn">WhatsApp</button>
-                <button class="btn-primary" id="drawerConvertBtn">Convert to Project</button>
-                <a href="#" id="drawerViewProjectBtn" class="btn-secondary" style="display:none;">View Project</a>
-                <button class="btn-success" id="drawerCompleteBtn" style="display:none;">
-                  <i class="ph ph-check-circle"></i> Mark as Completed
+                <!-- ✅ Tombol Review (NEW → UNDER_REVIEW) -->
+                <button class="btn-secondary" id="drawerReviewBtn" style="display:none;">
+                    <i class="ph ph-file-text"></i> Review
                 </button>
+                
+                <!-- ✅ Tombol Contact (NEW/UNDER_REVIEW → CONTACTED) -->
+                <button class="btn-secondary" id="drawerContactBtn" style="display:none;">
+                    <i class="ph ph-phone"></i> Contact
+                </button>
+                
+                <!-- ✅ Tombol Quote (UNDER_REVIEW/CONTACTED → QUOTED) -->
+                <button class="btn-primary" id="drawerQuoteBtn" style="display:none;">
+                    <i class="ph ph-file-text"></i> Send Quote
+                </button>
+                
+                <!-- ✅ Tombol Approve (QUOTED → APPROVED) -->
+                <button class="btn-success" id="drawerApproveBtn" style="display:none;">
+                    <i class="ph ph-check-circle"></i> Approve
+                </button>
+                
+                <!-- ✅ Tombol Convert (APPROVED → CONVERTED) -->
+                <button class="btn-primary" id="drawerConvertBtn" style="display:none;">
+                    <i class="ph ph-arrow-right"></i> Convert to Project
+                </button>
+                
+                <!-- ✅ Tombol Reject (Semua status kecuali final) -->
+                <button class="btn-danger" id="drawerRejectBtn" style="display:none;">
+                    <i class="ph ph-x-circle"></i> Reject
+                </button>
+                
+                <!-- ✅ Tombol Close (REJECTED → CLOSED) -->
+                <button class="btn-secondary" id="drawerCloseBtn" style="display:none;">
+                    <i class="ph ph-lock"></i> Close
+                </button>
+                
+                <!-- ✅ Tombol Complete (CONVERTED + Project Completed) -->
+                <button class="btn-success" id="drawerCompleteBtn" style="display:none;">
+                    <i class="ph ph-check-circle"></i> Mark as Completed
+                </button>
+                
+                <!-- ✅ Tombol WhatsApp -->
+                <button class="btn-secondary" id="drawerWhatsappBtn" style="display:none;">
+                    <i class="ph ph-whatsapp-logo"></i> WhatsApp
+                </button>
+                
+                <!-- ✅ Tombol View Project -->
+                <a href="#" id="drawerViewProjectBtn" class="btn-secondary" style="display:none;" target="_blank">
+                    <i class="ph ph-briefcase"></i> View Project
+                </a>
             </div>
         </section>
     </div>

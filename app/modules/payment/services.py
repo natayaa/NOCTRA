@@ -5,7 +5,7 @@ Payment Service - FIXED Decimal Operations
 from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +34,8 @@ from modules.payment.schemas import (
     InvoiceReminderRequest,
     PaymentReconciliationCreate,
 )
+
+from modules.settings.services import SettingsService
 
 
 class PaymentService:
@@ -398,6 +400,29 @@ class PaymentService:
     async def get_overdue_invoices(self) -> List[InquiryInvoice]:
         """Get all overdue invoices."""
         return await self.invoice_repo.get_overdue_invoices()
+
+    # =================
+    # Calculate Invoice Total
+    # =================
+    async def calculate_invoice_total(self, items: List[Dict], apply_tax: bool = True) -> Dict:
+        """Hitung total invoice dengan tax dari settings"""
+        settings_service = SettingsService(self.db)
+        pricing = await settings_service.get_pricing_settings()
+
+        subtotal = sum(item['quantity'] * item['unit_price'] for item in items)
+        result = {
+            "subtotal": subtotal,
+            "tax_percent": float(pricing.tax_percent) if pricing else 11.0,
+            "tax_amount": 0,
+            "total": subtotal
+        }
+
+        if apply_tax and pricing:
+            tax_amount = subtotal * (float(pricing.tax_percent) / 100)
+            result['tax_amount'] = tax_amount
+            result['total'] = subtotal + tax_amount
+
+        return result
 
     async def update_invoice_status(
         self,

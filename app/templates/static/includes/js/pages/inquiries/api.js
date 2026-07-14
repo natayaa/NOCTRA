@@ -33,6 +33,10 @@ export async function apiFetch(endpoint, options = {}) {
 }
 
 // ============================================================
+// Export Inquiries
+// ============================================================
+
+// ============================================================
 // Inquiry API Services
 // ============================================================
 
@@ -66,6 +70,43 @@ export const InquiryAPI = {
     } catch (error) {
       console.error("Failed to load statistics:", error);
       return null;
+    }
+  },
+
+  // ✅ TAMBAHKAN: Export inquiries
+  exportInquiries: async (filters = {}) => {
+    try {
+      const params = new URLSearchParams();
+      if (filters.status) params.set("status", filters.status);
+      if (filters.search) params.set("search", filters.search);
+
+      const url = `${CONFIG.API_BASE_URL}/inquiries/export?${params.toString()}`;
+
+      // Download file
+      //const response = await fetch(url, {
+      //  headers: {
+      // Tambahkan auth token jika perlu
+      //    Authorization: `Bearer ${localStorage.getItem("token")}`,
+      //  },
+      //});
+
+      //if (!response.ok) {
+      //  throw new Error(`Export failed: ${response.status}`);
+      //}
+
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `inquiries_export_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
+      return true;
+    } catch (error) {
+      console.error("Export error:", error);
+      throw error;
     }
   },
 

@@ -64,6 +64,83 @@
   color: var(--text-muted);
 }
 
+.overview-card .trend {
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.1rem;
+}
+.overview-card .trend-up {
+  color: var(--success, #10b981);
+}
+.overview-card .trend-down {
+  color: var(--danger, #ef4444);
+}
+
+/* Toggle switch */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+.toggle-slider {
+  width: 36px;
+  height: 20px;
+  background: var(--bg-input);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.3s;
+}
+.toggle-slider::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s;
+}
+.toggle-label input:checked + .toggle-slider {
+  background: var(--primary);
+}
+.toggle-label input:checked + .toggle-slider::after {
+  transform: translateX(16px);
+}
+
+/* Skeleton loading */
+.skeleton-loader {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.skeleton-header {
+  width: 60%;
+  height: 24px;
+  background: var(--bg-input);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+.skeleton-line {
+  height: 12px;
+  background: var(--bg-input);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+.skeleton-line.short {
+  width: 40%;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 /* ============================================================
    INQUIRY TOOLBAR
    ============================================================ */
@@ -203,6 +280,19 @@
 #inquiriesTable tbody tr.selected {
   background: rgba(var(--primary-rgb), 0.06);
   border-left: 3px solid var(--primary);
+}
+
+.empty-state-content {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+.empty-state-content h3 {
+  margin: 1rem 0 0.5rem;
+  color: var(--text-primary);
+}
+.empty-state-content p {
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
 }
 
 /* ============================================================
@@ -580,6 +670,20 @@
 /* ============================================================
    FINANCIAL SUMMARY
    ============================================================ */
+
+.profit-indicator.positive {
+  color: var(--success, #10b981);
+}
+.profit-indicator.negative {
+  color: var(--danger, #ef4444);
+}
+.profit-indicator .arrow-up {
+  color: var(--success);
+}
+.profit-indicator .arrow-down {
+  color: var(--danger);
+}
+
 .financial-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -785,82 +889,244 @@
    PAYMENT HISTORY
    ============================================================ */
 .payment-history {
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
 }
 
-.payment-history h4 {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-bottom: 0.5rem;
-}
-
-.payment-history-item {
+.payment-history-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
-  transition: background var(--transition-fast);
-  border-left: 3px solid transparent;
-  border-radius: var(--radius-sm);
-  margin-bottom: 0.25rem;
 }
 
-.payment-history-item:last-child {
-  border-bottom: none;
+.payment-history-header h4 {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
-.payment-history-item:hover {
+.payment-history-header .payment-count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
   background: var(--bg-input);
+  padding: 0.1rem 0.6rem;
+  border-radius: var(--radius-full);
+  font-weight: 500;
 }
 
-.payment-history-item .payment-info {
+/* Payment List - Clean Cards */
+.payment-list {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.5rem;
+}
+
+/* Payment Item Card */
+.payment-item-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.payment-item-card:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-input-hover);
+}
+
+/* Status Indicator (left border) */
+.payment-item-card .status-indicator {
+  width: 4px;
+  height: 32px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.payment-item-card .status-indicator.completed {
+  background: var(--success, #10b981);
+}
+.payment-item-card .status-indicator.pending {
+  background: var(--warning, #f59e0b);
+}
+.payment-item-card .status-indicator.cancelled {
+  background: var(--danger, #ef4444);
+}
+.payment-item-card .status-indicator.refunded {
+  background: #8b5cf6;
+}
+
+/* Payment Info */
+.payment-item-card .payment-info {
   flex: 1;
+  min-width: 0;
 }
 
-.payment-history-item .payment-info .type {
+.payment-item-card .payment-info .payment-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.payment-item-card .payment-info .payment-type {
   font-weight: 600;
-  color: var(--text-primary);
   font-size: 0.85rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.payment-item-card .payment-info .payment-type .type-icon {
+  font-size: 0.9rem;
 }
 
-.payment-history-item .payment-info .meta {
-  font-size: 0.65rem;
-  color: var(--text-muted);
+.payment-item-card .payment-info .payment-type .type-badge {
+  font-size: 0.55rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.type-badge.deposit {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+.type-badge.payment {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+.type-badge.refund {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+}
+.type-badge.installment {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.payment-item-card .payment-info .payment-status-label {
+  font-size: 0.6rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+}
+.payment-status-label.completed {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+.payment-status-label.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+.payment-status-label.cancelled {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+.payment-status-label.refunded {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
+.payment-item-card .payment-info .payment-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 0.75rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+.payment-item-card .payment-info .payment-meta span {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
 }
 
-.payment-history-item .payment-amount {
-  font-weight: 600;
-  font-size: 0.9rem;
+/* Payment Amount */
+.payment-item-card .payment-amount {
+  font-weight: 700;
+  font-size: 0.95rem;
   flex-shrink: 0;
-  margin-left: 0.5rem;
+  text-align: right;
 }
-
-.payment-history-item .payment-amount.pending {
-  color: var(--warning, #f59e0b);
-}
-.payment-history-item .payment-amount.completed {
+.payment-item-card .payment-amount.completed {
   color: var(--success, #10b981);
 }
-.payment-history-item .payment-amount.cancelled {
+.payment-item-card .payment-amount.pending {
+  color: var(--warning, #f59e0b);
+}
+.payment-item-card .payment-amount.cancelled {
   color: var(--danger, #ef4444);
 }
+.payment-item-card .payment-amount.refunded {
+  color: #8b5cf6;
+}
 
-.payment-history-item.pending {
-  border-left-color: var(--warning, #f59e0b);
+/* Payment Actions (small buttons) */
+.payment-item-card .payment-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  margin: 0;
 }
-.payment-history-item.completed {
-  border-left-color: var(--success, #10b981);
+.payment-item-card .payment-actions button {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
 }
-.payment-history-item.cancelled {
-  border-left-color: var(--danger, #ef4444);
+.btn-confirm-payment {
+  background: var(--success, #10b981);
+  color: white;
+}
+.btn-confirm-payment:hover {
+  background: #059669;
+}
+.btn-delete-payment {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.btn-delete-payment:hover {
+  color: var(--danger, #ef4444);
+  border-color: var(--danger);
+}
+
+/* Payment Empty State */
+.payment-empty {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+.payment-empty i {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  opacity: 0.4;
+}
+.payment-empty p {
+  margin: 0;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.payment-empty .sub-text {
+  font-size: 0.75rem;
+  opacity: 0.6;
 }
 
 /* ============================================================
@@ -1598,6 +1864,26 @@
     width: 100%;
     text-align: right;
   }
+  .payment-item-card {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .payment-item-card .payment-info {
+    flex: 1 1 100%;
+    order: 1;
+  }
+  .payment-item-card .payment-amount {
+    order: 2;
+    font-size: 0.9rem;
+  }
+  .payment-item-card .payment-actions {
+    order: 3;
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .payment-item-card .status-indicator {
+    height: 24px;
+  }
 
   #toastContainer {
     right: 10px;
@@ -1710,5 +1996,13 @@
   }
   .payment-item .value {
     font-size: 0.85rem;
+  }
+  .payment-item-card .payment-info .payment-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+  .payment-item-card .payment-actions {
+    justify-content: flex-start;
   }
 }

@@ -1,6 +1,6 @@
 # modules/inquiry/schemas.py
 from fastapi import UploadFile
-from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator, HttpUrl
+from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator, computed_field
 from typing import Optional, List, Dict
 from uuid import UUID
 from datetime import datetime
@@ -53,13 +53,14 @@ class WorkshopNoteResponse(BaseModel):
 
 
 class ProjectMinimalResponse(BaseModel):
-    """Minimal response untuk project."""
     id: UUID
     name: str
     status: str
     progress: int
-    estimated_cost: Optional[float] = None
+    estimated_cost: Optional[float] = None      # ✅ TAMBAHKAN
     actual_cost: Optional[float] = None
+    deposit_amount: Optional[float] = None      # ✅ TAMBAHKAN
+    estimated_revenue: Optional[float] = None   # ✅ TAMBAHKAN
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -142,6 +143,12 @@ class CustomerInquiryCreate(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return value
+
+    @field_validator("project_type")
+    @classmethod
+    async def validate_project_type(cls, v: str) -> str:
+        # Validasi akan dilakukan di service layer
+        return v
 
 
 class CustomerInquiryUpdate(BaseModel):
@@ -270,6 +277,7 @@ class CustomerInquiryResponse(BaseModel):
     desired_finish: Optional[str] = None
     desired_color: Optional[str] = None
     estimated_budget: Optional[int] = None
+    deposit_required: Optional[Decimal] = None
     deadline: Optional[str] = None
     priority: Optional[str] = None
     project_description: str
@@ -303,6 +311,49 @@ class CustomerInquiryResponse(BaseModel):
     workshop_notes: List[WorkshopNoteResponse] = Field(default_factory=list)
     project: Optional[ProjectMinimalResponse] = None
     payments: List[PaymentMinimalResponse] = Field(default_factory=list)
+
+    # COMPUTED FIELD - > Frontend consistency
+    @computed_field
+    @property
+    def estimated_cost(self) -> float:
+        """Nilai estimasi cost dari project atau inquiry"""
+        if self.project and self.project.estimated_cost is not None:
+            return float(self.project.estimated_cost)
+
+        return float(self.project.estimated_cost or 0)
+
+    @computed_field
+    @property
+    def deposit_amount(self) -> float:
+        """Nilai deposit dari project atau inquiry"""
+        if self.project and hasattr(self.project, 'deposit_amount') and self.project.deposit_amount is not None:
+            return float(self.project.deposit_amount)
+        return float(self.deposit_required or 0)
+
+    @computed_field
+    @property
+    def actual_cost(self) -> float:
+        """Actual cost - bisa dihitung dari labor + material."""
+        # Ini akan dihitung dari data terkait, default 0
+        return 0.0
+
+    @computed_field
+    @property
+    def estimated_revenue(self) -> float:
+        """Estimasi revenue - dari project atau inquiry."""
+        if self.project and hasattr(self.project, 'estimated_revenue') and self.project.estimated_revenue is not None:
+            return float(self.project.estimated_revenue)
+        return 0.0
+
+    @computed_field
+    @property
+    def actual_revenue(self) -> float:
+        """Actual revenue - dari total payment yang sudah completed."""
+        if self.payments:
+            total = sum(float(p.amount)
+                        for p in self.payments if p.status == "completed")
+            return total
+        return 0.0
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -28,6 +28,20 @@ from .schemas import (
     InquiryFollowUpComplete,
 )
 
+from modules.settings.services import SettingsService
+
+ALLOWED_TRANSITIONS = {
+    InquiryStatus.NEW: [InquiryStatus.UNDER_REVIEW, InquiryStatus.CONTACTED, InquiryStatus.REJECTED],
+    InquiryStatus.UNDER_REVIEW: [InquiryStatus.CONTACTED, InquiryStatus.QUOTED, InquiryStatus.REJECTED],
+    InquiryStatus.CONTACTED: [InquiryStatus.QUOTED, InquiryStatus.REJECTED],
+    InquiryStatus.QUOTED: [InquiryStatus.APPROVED, InquiryStatus.REJECTED],
+    InquiryStatus.APPROVED: [InquiryStatus.CONVERTED, InquiryStatus.REJECTED],
+    InquiryStatus.CONVERTED: [InquiryStatus.COMPLETED, InquiryStatus.REJECTED],
+    InquiryStatus.REJECTED: [InquiryStatus.CLOSED],
+    InquiryStatus.CLOSED: [],
+    InquiryStatus.COMPLETED: [],
+}
+
 # Gunakan absolute path untuk upload
 UPLOAD_DIR = Path("uploads/customer_inquiries")
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'}
@@ -42,14 +56,20 @@ class InquiryService:
 
     # ==================== Core CRUD ====================
 
-    async def create_inquiry(
-        self,
-        request: CustomerInquiryCreate,
-        photos: Optional[List[UploadFile]] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
-    ) -> CustomerInquiry:
+    async def create_inquiry(self, request: CustomerInquiryCreate, photos: Optional[List[UploadFile]] = None, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> CustomerInquiry:
         """Create a new inquiry."""
+
+        # ✅ VALIDASI PROJECT TYPE DARI SETTINGS
+        settings_service = SettingsService(self.db)
+        project_types = await settings_service.list_project_types()
+        valid_types = [pt.name for pt in project_types if pt.is_active]
+
+        if request.project_type not in valid_types:
+            raise ValidationError(
+                f"Invalid project type: {request.project_type}. "
+                f"Available types: {', '.join(valid_types)}"
+            )
+
         # 1. Buat inquiry
         inquiry_data = request.model_dump()
         inquiry = CustomerInquiry(
@@ -92,11 +112,21 @@ class InquiryService:
         status: Optional[str] = None,
         search: Optional[str] = None,
         brand: Optional[str] = None,
+        project_status: Optional[str] = None,
+        has_project: Optional[bool] = None,
         limit: int = 100,
         offset: int = 0
     ) -> tuple[List[CustomerInquiry], int]:
         """List inquiries with filters."""
-        return await self.repo.list_all(status, search, brand, limit, offset)
+        return await self.repo.list_all(
+            status=status,
+            search=search,
+            brand=brand,
+            project_status=project_status,
+            has_project=has_project,
+            limit=limit,
+            offset=offset
+        )
 
     async def update_inquiry(
         self,
@@ -132,16 +162,29 @@ class InquiryService:
 
     # ==================== Status Management ====================
 
-    async def update_status(
-        self,
-        inquiry_id: UUID,
-        status: str,
-        note: Optional[str] = None
-    ) -> bool:
-        """Update inquiry status."""
+    async def update_status(self, inquiry_id: UUID, status: str, note: Optional[str] = None) -> bool:
+        """Update inquiry status with transition validation"""
         valid_statuses = [e.value for e in InquiryStatus]
         if status not in valid_statuses:
-            raise ValidationError(f"Invalid status: {status}")
+            raise ValidationError(f"Invalid inquiry status : {status}")
+
+        inquiry = await self.repo.get(inquiry_id)
+        if not inquiry:
+            raise NotFoundError(f"Inquiry {inquiry_id} not found")
+
+        current_status = inquiry.status
+
+        # ✅ AMBIL WORKFLOW DARI SETTINGS
+        settings_service = SettingsService(self.db)
+        workflow_map = await settings_service.get_status_workflow_map()
+
+        allowed = workflow_map.get(current_status, [])
+
+        if status not in allowed:
+            raise ValidationError(
+                f"Cannot transition from '{current_status}' to '{status}'. "
+                f"Allowed transitions: {allowed}"
+            )
 
         return await self.repo.update_status(inquiry_id, status, note)
 
@@ -249,6 +292,22 @@ class InquiryService:
             raise BusinessError(
                 f"Cannot convert inquiry with status: {inquiry.status}")
 
+        settings_service = SettingsService(self.db)
+        pricing = await settings_service.get_pricing_settings()
+
+        estimated_cost = data.estimated_cost or Decimal(
+            inquiry.estimated_budget or 0)
+
+        # ✅ HITUNG DEPOSIT DARI SETTINGS
+        deposit_percent = float(pricing.deposit_percent) if pricing else 30.0
+        deposit_amount = estimated_cost * (deposit_percent / 100)
+
+        # ✅ DEFAULT DURATION DARI SETTINGS
+        default_duration = pricing.default_duration_days if pricing else 14
+        target_delivery = data.project_target_delivery or (
+            datetime.now() + timedelta(days=default_duration)
+        )
+
         project_name = data.project_name or f"Project: {inquiry.vehicle_brand} {inquiry.vehicle_model} - {inquiry.customer_name}"
 
         project_data = {
@@ -261,8 +320,9 @@ class InquiryService:
             "vehicle_year": inquiry.vehicle_year,
             "vehicle_license_plate": inquiry.vehicle_license_plate,
             "estimated_cost": data.estimated_cost or Decimal(inquiry.estimated_budget or 0),
+            "deposit_amount": deposit_amount,
             "project_start_date": data.project_start_date or datetime.now(),
-            "project_target_delivery": data.project_target_delivery,
+            "project_target_delivery": target_delivery,
             "status": ProjectStatus.ACTIVE,
             "priority": ProjectPriority.MEDIUM,
             "notes": inquiry.project_description,
@@ -288,6 +348,60 @@ class InquiryService:
         await self.db.refresh(inquiry)
 
         return project
+
+    async def on_project_completed(self, project_id: UUID):
+        """Dipanggil saat project selesai."""
+        # Cari inquiry yang terkait
+        inquiry = await self.repo.get_by_project_id(project_id)
+        if inquiry and inquiry.status != InquiryStatus.COMPLETED:
+            await self.update_status(
+                inquiry.id,
+                InquiryStatus.COMPLETED,
+                "Auto-updated: Project completed"
+            )
+
+    async def calculate_estimated_cost(self, project_type: str, services: Optional[str] = None, desired_finish: Optional[str] = None, desired_color: Optional[str] = None) -> int:
+        """Hitung estimasi biaya berdasarkan project type dan services
+            mengambil base price dari settings
+
+        """
+        settings_service = SettingsService(self.db)
+        pricing = await settings_service.get_pricing_settings()
+        if not pricing:
+            return 0
+
+        # base price berdasarkan project type
+        base_price_map = {
+            "Paint Job": pricing.paint_base_price,
+            "Restoration": pricing.restoration_base_price,
+            "Detailing": pricing.detailing_base_price,
+            "Full Custom": pricing.custom_color_surcharge + pricing.paint_base_price,
+            "Touch Up": pricing.paint_base_price // 2,
+        }
+
+        total = base_price_map.get(project_type, pricing.paint_base_price)
+        # tambahkan untuk custom color
+        if desired_color and desired_color.lower() not in ['standard', 'original', 'default']:
+            total += pricing.custom_color_surcharge
+
+        # tambahan berdasarkan service
+        if services:
+            service_bonus = {
+                "prep": 50000,
+                "wet_sanding": 150000,
+                "polishing": 40000,
+                "coating": 60000,
+                "striping": 100000
+            }
+
+            for key, value in service_bonus.items():
+                if key in services.lower():
+                    total += value
+
+        # apply margin
+        margin_multiplier = 1 + (float(pricing.default_margin_percent) / 100)
+        total = int(total * margin_multiplier)
+        return total
 
     # ==================== Photos ====================
 

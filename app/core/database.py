@@ -1,5 +1,6 @@
-# core/database.py
+# core/database.py - FULL FIXED
 import logging
+from sqlalchemy import text  # ✅ TAMBAHKAN INI!
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from typing import AsyncGenerator
 
@@ -37,7 +38,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 # =============================================================================
-# Database Dependency - YANG PALING PENTING
+# Database Dependency - ✅ FIXED
 # =============================================================================
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -76,17 +77,20 @@ SessionDep = AsyncSession
 
 
 # =============================================================================
-# Health Check
+# Health Check - ✅ FIXED (Menggunakan text())
 # =============================================================================
 
 async def check_db_connection() -> bool:
     """Check if database connection is healthy."""
     try:
         async with engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            # ✅ WAJIB pakai text() untuk raw SQL di SQLAlchemy 2.0
+            await conn.execute(text("SELECT 1"))
+            await conn.commit()
+        logger.info("✅ Database health check passed")
         return True
     except Exception as e:
-        logger.error(f"Database health check failed: {e}")
+        logger.error(f"❌ Database health check failed: {e}")
         return False
 
 
@@ -98,9 +102,11 @@ async def create_tables():
     """Create all tables if they don't exist."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    logger.info("✅ Tables created successfully")
 
 
 async def drop_tables():
     """Drop all tables (use with caution!)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    logger.warning("⚠️ All tables dropped!")

@@ -19,7 +19,7 @@ export function calculatePaymentSummary(payments) {
     };
   }
 
-  console.log("📊 Calculating payment summary from:", payments);
+  // console.log("📊 Calculating payment summary from:", payments);
 
   // ✅ Deposit = payment_type === "deposit" DAN status completed
   const totalDeposit = payments
@@ -69,12 +69,12 @@ export function calculatePaymentSummary(payments) {
     0,
   );
 
-  console.log("📊 Summary result:", {
-    totalDeposit,
-    totalPaid,
-    totalPending,
-    totalAll,
-  });
+  //console.log("📊 Summary result:", {
+  //  totalDeposit,
+  //  totalPaid,
+  //  totalPending,
+  //  totalAll,
+  // });
 
   return {
     totalDeposit,

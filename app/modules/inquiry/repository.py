@@ -50,10 +50,14 @@ class InquiryRepository(BaseRepository[CustomerInquiry]):
         status: Optional[str] = None,
         search: Optional[str] = None,
         brand: Optional[str] = None,
+        project_status: Optional[str] = None,
+        has_project: Optional[bool] = None,
         limit: int = 100,
         offset: int = 0
     ) -> tuple[List[CustomerInquiry], int]:
         """List all inquiries with filters."""
+        from modules.projects.models import Project  # ✅ LAZY IMPORT DI SINI
+
         stmt = select(CustomerInquiry)
         count_stmt = select(func.count()).select_from(CustomerInquiry)
 
@@ -74,9 +78,28 @@ class InquiryRepository(BaseRepository[CustomerInquiry]):
             )
             filters.append(search_filter)
 
+        # ✅ FILTER HAS PROJECT - Gunakan project_id
+        if has_project is not None:
+            if has_project:
+                filters.append(CustomerInquiry.project_id.isnot(None))
+            else:
+                filters.append(CustomerInquiry.project_id.is_(None))
+
+        # ✅ FILTER PROJECT STATUS - JOIN dengan Project
+        if project_status:
+            # Join dengan Project
+            stmt = stmt.join(Project, CustomerInquiry.project_id == Project.id)
+            filters.append(Project.status == project_status)
+
+            # Untuk count, juga perlu join
+            count_stmt = count_stmt.join(
+                Project, CustomerInquiry.project_id == Project.id)
+            count_stmt = count_stmt.where(Project.status == project_status)
+
         if filters:
             stmt = stmt.where(and_(*filters))
-            count_stmt = count_stmt.where(and_(*filters))
+            if not project_status:  # Jika sudah ada join di atas, jangan double
+                count_stmt = count_stmt.where(and_(*filters))
 
         stmt = stmt.options(
             selectinload(CustomerInquiry.project),

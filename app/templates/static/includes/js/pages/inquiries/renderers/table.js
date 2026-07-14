@@ -23,13 +23,19 @@ export function renderInquiries(inquiries) {
 
   if (!inquiries || inquiries.length === 0) {
     body.innerHTML = `
-      <tr>
-        <td colspan="7" style="text-align:center; padding:2rem; color: var(--text-muted);">
-          <i class="ph ph-file-text" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
-          No inquiries found
-        </td>
-      </tr>
-    `;
+    <tr>
+      <td colspan="7" class="empty-state">
+        <div class="empty-state-content">
+          <i class="ph ph-file-text"></i>
+          <h3>No inquiries found</h3>
+          <p>Try adjusting your filters or search terms</p>
+          <button class="btn-secondary" onclick="window.clearFilters()">
+            <i class="ph ph-funnel"></i> Clear Filters
+          </button>
+        </div>
+      </td>
+    </tr>
+  `;
     return;
   }
 

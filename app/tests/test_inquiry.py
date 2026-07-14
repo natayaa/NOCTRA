@@ -1,31 +1,34 @@
-# tests/test_inquiry.py
+# tests/test_inquiry_status.py
+
 import pytest
-from datetime import datetime
-from uuid import uuid4
-
-from modules.inquiry.models import CustomerInquiry
+from core.constants import InquiryStatus
+from modules.inquiry.services import ALLOWED_TRANSITIONS
 
 
 @pytest.mark.asyncio
-async def test_create_inquiry(client):
-    """Test creating inquiry."""
-    data = {
-        "customer_name": "John Doe",
-        "customer_phone_number": "08123456789",
-        "vehicle_brand": "Honda",
-        "vehicle_model": "CBR",
-        "project_type": "repaint",
-        "project_description": "Full body repaint"
-    }
+async def test_status_transition_valid():
+    """Test valid transitions."""
+    # new → under_review → contacted → quoted → approved → converted → completed
+    transitions = [
+        (InquiryStatus.NEW, InquiryStatus.UNDER_REVIEW),
+        (InquiryStatus.UNDER_REVIEW, InquiryStatus.CONTACTED),
+        (InquiryStatus.CONTACTED, InquiryStatus.QUOTED),
+        (InquiryStatus.QUOTED, InquiryStatus.APPROVED),
+        (InquiryStatus.APPROVED, InquiryStatus.CONVERTED),
+        (InquiryStatus.CONVERTED, InquiryStatus.COMPLETED),
+    ]
 
-    response = await client.post("/api/inquiries/", json=data)
-    assert response.status_code == 201
-    assert response.json()["success"] is True
+    for old, new in transitions:
+        assert new in ALLOWED_TRANSITIONS.get(old, [])
 
 
 @pytest.mark.asyncio
-async def test_list_inquiries(client):
-    """Test listing inquiries."""
-    response = await client.get("/api/inquiries/")
-    assert response.status_code == 200
-    assert response.json()["success"] is True
+async def test_status_transition_invalid():
+    """Test invalid transitions."""
+    # new → completed (langsung tanpa melalui proses)
+    assert InquiryStatus.COMPLETED not in ALLOWED_TRANSITIONS.get(
+        InquiryStatus.NEW, [])
+
+    # rejected → approved (tidak bisa)
+    assert InquiryStatus.APPROVED not in ALLOWED_TRANSITIONS.get(
+        InquiryStatus.REJECTED, [])

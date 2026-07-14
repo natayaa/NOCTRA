@@ -8,6 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, status, Depends, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from modules.settings.services import SettingsService
 from core.constants import PaymentStatus, PaymentType
 from core.database import get_db
 from core.base import BaseResponse
@@ -221,6 +222,23 @@ async def get_payment(
         PaymentResponse.model_validate(payment).model_dump(),
         message="Payment retrieved successfully"
     )
+
+
+@payment_router.get("/payment-methods", response_model=BaseResponse)
+async def get_payment_methods(
+    settings_service: SettingsService = Depends(get_service(SettingsService))
+):
+    """Get active payment methods dari settings."""
+    methods = await settings_service.list_payment_methods(include_inactive=False)
+    return success_response([
+        {
+            "id": str(m.id),
+            "name": m.name,
+            "code": m.code,
+            "icon": m.icon,
+        }
+        for m in methods
+    ], message="Payment methods retrieved")
 
 
 @payment_router.patch("/{payment_id}", response_model=BaseResponse)

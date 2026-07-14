@@ -11,7 +11,16 @@ import {
   updateDashboard,
 } from "./renderers/table.js";
 import { openInquiryDrawer, closeDrawer, loadInquiryDetail } from "./drawer.js";
-import { handleApprove, handleMarkComplete } from "./handlers/actions.js";
+import {
+  handleApprove,
+  handleWhatsApp,
+  handleSaveNote,
+  handleMarkComplete,
+  handleUnderReview,
+  handleContacted,
+  handleClose,
+  handleUpdateStatus,
+} from "./handlers/actions.js";
 import {
   openConvertModal,
   closeConvertModal,
@@ -117,56 +126,20 @@ function renderErrorState(message) {
 // ============================================================
 // EXPORT FUNCTION
 // ============================================================
-export function exportInquiries() {
-  if (!state.inquiries || state.inquiries.length === 0) {
-    showToast("No data to export", "warning");
-    return;
+export async function exportInquiries() {
+  try {
+    showToast("⏳ Generating export...", "info");
+
+    await InquiryAPI.exportInquiries({
+      status: state.filters.status,
+      search: state.filters.search,
+    });
+
+    showToast("✅ Export completed!", "success");
+  } catch (error) {
+    console.error("Export error:", error);
+    showToast("❌ Failed to export: " + error.message, "error");
   }
-
-  const headers = [
-    "ID",
-    "Customer",
-    "Phone",
-    "Vehicle",
-    "Project Type",
-    "Status",
-    "Created",
-    "Has Project",
-  ];
-
-  const rows = state.inquiries.map((inq) => [
-    inq.id || "",
-    inq.customer_name || "",
-    inq.customer_phone_number || "",
-    `${inq.vehicle_brand || ""} ${inq.vehicle_model || ""}`.trim(),
-    inq.project_type || "",
-    Formatter.statusLabel(inq.status),
-    Formatter.date(inq.created_at),
-    inq.project ? "Yes" : "No",
-  ]);
-
-  // ✅ Escape CSV values
-  const escapeCsv = (value) => {
-    if (
-      typeof value === "string" &&
-      (value.includes(",") || value.includes('"') || value.includes("\n"))
-    ) {
-      return `"${value.replace(/"/g, '""')}"`;
-    }
-    return value;
-  };
-
-  const csvRows = rows.map((row) => row.map(escapeCsv).join(","));
-  const csv = [headers.map(escapeCsv).join(","), ...csvRows].join("\n");
-
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `inquiries_export_${new Date().toISOString().split("T")[0]}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-
-  showToast("Export completed!", "success");
 }
 
 // ============================================================
@@ -270,6 +243,10 @@ window.openQuoteModal = openQuoteModal;
 window.openRejectModal = openRejectModal;
 window.handleApprove = handleApprove;
 window.handleMarkComplete = handleMarkComplete;
+window.handleUnderReview = handleUnderReview;
+window.handleContacted = handleContacted;
+window.handleClose = handleClose;
+window.handleUpdateStatus = handleUpdateStatus;
 window.loadInquiries = loadInquiries;
 window.openLightbox = openLightbox;
 window.closeLightbox = closeLightbox;

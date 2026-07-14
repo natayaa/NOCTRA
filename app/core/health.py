@@ -1,10 +1,14 @@
-# core/health.py
+# core/health.py - FIXED
 from typing import Dict, Any
 from datetime import datetime
 import asyncio
+import os
 
 from core.database import check_db_connection
 from core.config import settings
+from core.logging import get_logger
+
+logger = get_logger("health")
 
 
 class HealthChecker:
@@ -21,6 +25,7 @@ class HealthChecker:
                 "details": {"type": "postgresql"}
             }
         except Exception as e:
+            logger.error(f"Database check error: {e}")
             return {
                 "status": "unhealthy",
                 "message": str(e),
@@ -30,18 +35,44 @@ class HealthChecker:
     @classmethod
     async def check_redis(cls) -> Dict[str, Any]:
         """Check Redis connection."""
-        # Implementasi Redis check jika menggunakan Redis
-        return {
-            "status": "healthy",
-            "message": "Redis not configured",
-            "details": {"type": "redis", "configured": False}
-        }
+        try:
+            # Cek apakah Redis dikonfigurasi
+            if not settings.REDIS_URL:
+                return {
+                    "status": "healthy",
+                    "message": "Redis not configured",
+                    "details": {"type": "redis", "configured": False}
+                }
+
+            # Coba konek ke Redis
+            import redis.asyncio as redis
+            client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            await client.ping()
+            await client.close()
+
+            return {
+                "status": "healthy",
+                "message": "Redis connection successful",
+                "details": {"type": "redis", "configured": True}
+            }
+        except ImportError:
+            return {
+                "status": "healthy",
+                "message": "Redis not installed",
+                "details": {"type": "redis", "configured": False}
+            }
+        except Exception as e:
+            logger.error(f"Redis check error: {e}")
+            return {
+                "status": "unhealthy",
+                "message": str(e),
+                "details": {"type": "redis", "configured": True}
+            }
 
     @classmethod
     async def check_storage(cls) -> Dict[str, Any]:
         """Check storage availability."""
         try:
-            import os
             upload_dir = settings.UPLOAD_DIR
             if not os.path.exists(upload_dir):
                 os.makedirs(upload_dir)
@@ -58,6 +89,7 @@ class HealthChecker:
                 "details": {"path": upload_dir}
             }
         except Exception as e:
+            logger.error(f"Storage check error: {e}")
             return {
                 "status": "unhealthy",
                 "message": str(e),
@@ -80,15 +112,19 @@ class HealthChecker:
             cls.check_database(),
             cls.check_redis(),
             cls.check_storage(),
+            return_exceptions=True
         )
 
-        results["checks"]["database"] = checks[0]
-        results["checks"]["redis"] = checks[1]
-        results["checks"]["storage"] = checks[2]
+        results["checks"]["database"] = checks[0] if not isinstance(
+            checks[0], Exception) else {"status": "unhealthy", "message": str(checks[0])}
+        results["checks"]["redis"] = checks[1] if not isinstance(
+            checks[1], Exception) else {"status": "unhealthy", "message": str(checks[1])}
+        results["checks"]["storage"] = checks[2] if not isinstance(
+            checks[2], Exception) else {"status": "unhealthy", "message": str(checks[2])}
 
         # Determine overall status
-        for check in checks:
-            if check["status"] != "healthy":
+        for key, check in results["checks"].items():
+            if check.get("status") != "healthy":
                 results["status"] = "degraded"
                 break
 

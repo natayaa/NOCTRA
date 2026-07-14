@@ -1,10 +1,11 @@
-# core/logging.py
+# core/logging.py - FIXED
 import logging
 import sys
 from typing import Optional
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import json
+import os
 
 from core.config import settings
 
@@ -23,11 +24,9 @@ class JSONFormatter(logging.Formatter):
             "line": record.lineno,
         }
 
-        # Add exception info if present
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
-        # Add extra fields
         if hasattr(record, "extra"):
             log_data.update(record.extra)
 
@@ -41,14 +40,12 @@ def setup_logging(
 ) -> None:
     """Setup logging configuration."""
 
-    level = log_level or settings.LOG_LEVEL or "INFO"
+    # ✅ Gunakan dari settings atau parameter
+    level = log_level or getattr(settings, 'LOG_LEVEL', 'INFO')
     numeric_level = getattr(logging, level.upper(), logging.INFO)
 
-    # Root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(numeric_level)
-
-    # Clear existing handlers
     root_logger.handlers.clear()
 
     # Console handler
@@ -66,6 +63,11 @@ def setup_logging(
 
     # File handler (optional)
     if log_file:
+        # Buat folder logs jika belum ada
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+
         file_handler = RotatingFileHandler(
             log_file,
             maxBytes=10_485_760,  # 10MB
@@ -125,3 +127,7 @@ class AuditLogger:
                 }
             }
         )
+
+
+# ✅ AUTO-INIT ketika di-import
+setup_logging()

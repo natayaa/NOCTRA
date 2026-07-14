@@ -173,6 +173,11 @@ export async function handleConfirmPayment() {
   try {
     const result = await PaymentAPI.confirm(paymentId, "admin");
     if (result) {
+      const paymentCount = document.getElementById("paymentCount");
+      if (paymentCount) {
+        const currentCount = parseInt(paymentCount.textContext) || 0;
+        paymentCount.textContent = `${currentCount} transaction`;
+      }
       showToast("✅ Payment confirmed successfully!", "success");
       closeConfirmPaymentModal();
 
@@ -283,6 +288,11 @@ export async function handleDeletePayment() {
 
     const result = await PaymentAPI.cancel(paymentId, "Deleted by admin");
     if (result) {
+      const paymentCount = document.getElementById("paymentCount");
+      if (paymentCount) {
+        const currentCount = parseInt(paymentCount.textContent) || 0;
+        paymentCount.textContent = `${currentCount} transactions`;
+      }
       showToast("🗑️ Payment deleted successfully", "success");
       closeDeletePaymentModal();
 
@@ -1022,6 +1032,31 @@ export function bindEvents() {
           handleSaveNote();
         }
       }, 1000);
+    });
+  }
+
+  // More Actions Dropdown Toggle
+  const moreBtn = document.getElementById("moreActionsBtn");
+  const moreMenu = document.getElementById("moreActionBtn");
+
+  if (moreBtn && moreMenu) {
+    moreBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      moreMenu.classList.toggle("show");
+    });
+
+    // close dropdown when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) {
+        moreMenu.classList;
+      }
+    });
+
+    // Close dropdown when clicking a menu item
+    moreMenu.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        moreMenu.classList.remove("show");
+      });
     });
   }
 

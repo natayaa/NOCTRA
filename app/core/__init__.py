@@ -1,4 +1,4 @@
-# core/__init__.py
+# core/__init__.py - UPDATE
 from .base import (
     Base,
     UUIDMixin,
@@ -12,7 +12,14 @@ from .base import (
     BulkRequest,
     JSONDict,
 )
-from .database import get_db, AsyncSessionLocal, engine, check_db_connection
+from .database import (
+    get_db,
+    AsyncSessionLocal,
+    engine,
+    check_db_connection,  # ✅ Sudah ada
+    create_tables,
+    drop_tables,
+)
 from .config import Settings, settings
 from .constants import (
     InquiryStatus,
@@ -29,6 +36,10 @@ from .constants import (
     PriceListCategory,
     NotificationType,
     NotificationStatus,
+    UserStatus,
+    UserRole,
+    DEFAULT_ROLES,
+    DEFAULT_PERMISSIONS,
 )
 from .exceptions import (
     AppException,
@@ -57,6 +68,17 @@ from .dependencies import (
     error_response,
     paginated_response,
 )
+from .logging import setup_logging, get_logger
+from .health import HealthChecker
+from .security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    validate_token,
+    sanitize_input,
+)
 
 __all__ = [
     # Base
@@ -76,6 +98,8 @@ __all__ = [
     "AsyncSessionLocal",
     "engine",
     "check_db_connection",
+    "create_tables",
+    "drop_tables",
     # Config
     "Settings",
     "settings",
@@ -94,6 +118,10 @@ __all__ = [
     "PriceListCategory",
     "NotificationType",
     "NotificationStatus",
+    "UserStatus",
+    "UserRole",
+    "DEFAULT_ROLES",
+    "DEFAULT_PERMISSIONS",
     # Exceptions
     "AppException",
     "NotFoundError",
@@ -119,4 +147,17 @@ __all__ = [
     "success_response",
     "error_response",
     "paginated_response",
+    # Logging
+    "setup_logging",
+    "get_logger",
+    # Health
+    "HealthChecker",
+    # Security
+    "hash_password",
+    "verify_password",
+    "create_access_token",
+    "create_refresh_token",
+    "decode_token",
+    "validate_token",
+    "sanitize_input",
 ]

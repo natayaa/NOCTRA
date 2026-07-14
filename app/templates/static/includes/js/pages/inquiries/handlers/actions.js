@@ -1,4 +1,6 @@
-// inquiries/handlers/actions.js (FIXED & IMPROVED)
+// ============================================================
+// inquiries/handlers/actions.js - FULL FIXED
+// ============================================================
 
 import { InquiryAPI } from "../api.js";
 import { showToast } from "../toast.js";
@@ -8,7 +10,92 @@ import { DOM } from "../dom.js";
 import { loadInquiryDetail, closeDrawer } from "../drawer.js";
 import { loadInquiries } from "../index.js";
 
-export async function handleApprove(inquiryId) {
+/**
+ * Update status dengan validasi transisi
+ */
+export async function handleUpdateStatus(inquiryId, status, note = "") {
+  if (!inquiryId || !status) {
+    showToast("Missing required fields", "error");
+    return;
+  }
+
+  // ✅ Validasi transisi status
+  const validTransitions = {
+    new: ["under_review", "contacted", "rejected"],
+    under_review: ["contacted", "quoted", "rejected"],
+    contacted: ["quoted", "rejected"],
+    quoted: ["approved", "rejected"],
+    approved: ["converted", "rejected"],
+    converted: ["completed", "rejected"],
+    rejected: ["closed"],
+    closed: [],
+    completed: [],
+  };
+
+  // Ambil status saat ini
+  const inquiry = await InquiryAPI.fetchDetail(inquiryId);
+  if (!inquiry) {
+    showToast("Inquiry not found", "error");
+    return;
+  }
+
+  const currentStatus = inquiry.status || "new";
+  const allowed = validTransitions[currentStatus] || [];
+
+  if (!allowed.includes(status)) {
+    showToast(
+      `Cannot transition from "${currentStatus}" to "${status}"`,
+      "warning",
+    );
+    return;
+  }
+
+  try {
+    const result = await InquiryAPI.updateStatus(inquiryId, status, note);
+    if (result) {
+      const statusLabel = Formatter.statusLabel(status);
+      showToast(`✅ Status updated to ${statusLabel}`, "success");
+      await loadInquiries();
+      if (DOM.drawer()?.classList.contains("active")) {
+        await loadInquiryDetail(inquiryId);
+      }
+    }
+  } catch (error) {
+    console.error("Status update error:", error);
+    showToast("❌ Failed to update status: " + error.message, "error");
+  }
+}
+
+/**
+ * Mark as Under Review
+ */
+export async function handleUnderReview(inquiryId, note = "") {
+  await handleUpdateStatus(inquiryId, "under_review", note || "Started review");
+}
+
+/**
+ * Mark as Contacted
+ */
+export async function handleContacted(inquiryId, note = "") {
+  await handleUpdateStatus(
+    inquiryId,
+    "contacted",
+    note || "Customer contacted",
+  );
+}
+
+/**
+ * Mark as Approved
+ */
+export async function handleApprove(inquiryId, note = "") {
+  await handleUpdateStatus(
+    inquiryId,
+    "approved",
+    note || "Approved by customer",
+  );
+}
+
+export async function handleApproveA(inquiryId) {
   if (!inquiryId) {
     showToast("No inquiry selected", "error");
     return;
@@ -59,30 +146,6 @@ export async function handleMarkComplete(inquiryId) {
   } catch (error) {
     console.error("Complete error:", error);
     showToast("❌ Failed to mark as completed: " + error.message, "error");
-  }
-}
-
-export async function handleUpdateStatus(inquiryId, status, note = "") {
-  if (!inquiryId || !status) {
-    showToast("Missing required fields", "error");
-    return;
-  }
-
-  try {
-    const result = await InquiryAPI.updateStatus(inquiryId, status, note);
-    if (result) {
-      showToast(
-        `✅ Status updated to ${Formatter.statusLabel(status)}`,
-        "success",
-      );
-      await loadInquiries();
-      if (DOM.drawer()?.classList.contains("active")) {
-        await loadInquiryDetail(inquiryId);
-      }
-    }
-  } catch (error) {
-    console.error("Status update error:", error);
-    showToast("❌ Failed to update status: " + error.message, "error");
   }
 }
 
@@ -168,13 +231,20 @@ export async function handleSaveNote() {
   }
 }
 
-export function handleCloseInquiry(inquiryId, reason = "") {
+// ============================================================
+// ✅ EXPORT: handleClose - FIXED
+// ============================================================
+
+/**
+ * Close inquiry with reason
+ */
+export async function handleClose(inquiryId, reason = "") {
   if (!inquiryId) {
     showToast("No inquiry selected", "error");
     return;
   }
 
-  const reasonText = prompt("Enter reason for closing this inquiry:", reason);
+  const reasonText = reason || prompt("Enter reason for closing this inquiry:");
   if (reasonText === null) return; // User cancelled
 
   if (!reasonText.trim()) {
@@ -182,5 +252,63 @@ export function handleCloseInquiry(inquiryId, reason = "") {
     return;
   }
 
-  handleUpdateStatus(inquiryId, "closed", reasonText.trim());
+  await handleUpdateStatus(inquiryId, "closed", reasonText.trim());
+}
+
+/**
+ * Close inquiry with confirmation
+ */
+export async function handleCloseInquiry(inquiryId, reason = "") {
+  if (!inquiryId) {
+    showToast("No inquiry selected", "error");
+    return;
+  }
+
+  if (!confirm("Are you sure you want to close this inquiry?")) return;
+
+  const reasonText = reason || prompt("Enter reason for closing this inquiry:");
+  if (reasonText === null) return;
+
+  if (!reasonText.trim()) {
+    showToast("Please provide a reason for closing", "warning");
+    return;
+  }
+
+  await handleUpdateStatus(inquiryId, "closed", reasonText.trim());
+}
+
+// ============================================================
+// ✅ EXPORT: Reject Inquiry
+// ============================================================
+
+export async function handleReject(inquiryId, reason = "") {
+  if (!inquiryId) {
+    showToast("No inquiry selected", "error");
+    return;
+  }
+
+  const reasonText =
+    reason || prompt("Enter reason for rejecting this inquiry:");
+  if (reasonText === null) return;
+
+  if (!reasonText.trim()) {
+    showToast("Please provide a reason for rejection", "warning");
+    return;
+  }
+
+  if (!confirm("Reject this inquiry?")) return;
+
+  try {
+    const result = await InquiryAPI.reject(inquiryId, reasonText.trim());
+    if (result) {
+      showToast("Inquiry rejected", "info");
+      await loadInquiries();
+      if (DOM.drawer()?.classList.contains("active")) {
+        await loadInquiryDetail(inquiryId);
+      }
+    }
+  } catch (error) {
+    console.error("Reject error:", error);
+    showToast("❌ Failed to reject inquiry: " + error.message, "error");
+  }
 }

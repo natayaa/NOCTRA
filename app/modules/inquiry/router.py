@@ -1,14 +1,16 @@
-# modules/inquiry/router.py
+import csv
 from uuid import UUID
-from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
+from io import StringIO
 
 from fastapi import APIRouter, HTTPException, status, File, UploadFile, Body, Query, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.responses import StreamingResponse
 
+from modules.settings.services import SettingsService
 from core.database import get_db
 from core.base import BaseResponse, PaginatedResponse
+from core.websocket import manager
 from core.constants import InquiryStatus
 from core.dependencies import InquiryQueryParams, success_response, get_service
 from core.exceptions import NotFoundError, ValidationError, BusinessError
@@ -40,24 +42,41 @@ inquiry_router = APIRouter(
 
 @inquiry_router.get("/", response_model=PaginatedResponse[CustomerInquirySummary])
 async def list_inquiries(
-    params: InquiryQueryParams = Depends(),
+    status: Optional[str] = Query(
+        None, description="Filter by inquiry status"),
+    search: Optional[str] = Query(
+        None, description="Search by name, phone, brand, model, plate"),
+    brand: Optional[str] = Query(None, description="Filter by vehicle brand"),
+    project_status: Optional[str] = Query(
+        None, description="Filter by project status"),
+    has_project: Optional[bool] = Query(
+        None, description="Filter by project existence (true/false)"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
     service: InquiryService = Depends(get_service(InquiryService))
 ):
-    """List all inquiries with filters."""
+    """
+    List all inquiries with filters.
+
+    **Status values**: new, under_review, contacted, quoted, approved, converted, rejected, closed, completed
+    **Project status values**: draft, active, in_progress, on_hold, completed, cancelled, preparation, painting, assembly
+    """
     inquiries, total = await service.list_inquiries(
-        status=params.status,
-        search=params.search,
-        brand=params.brand,
-        limit=params.limit,
-        offset=params.offset
+        status=status,
+        search=search,
+        brand=brand,
+        project_status=project_status,
+        has_project=has_project,
+        limit=limit,
+        offset=offset
     )
 
     return PaginatedResponse.from_paginated(
         items=[CustomerInquirySummary.model_validate(
             i).model_dump() for i in inquiries],
         total=total,
-        page=params.page,
-        page_size=params.limit,
+        page=(offset // limit) + 1,
+        page_size=limit,
         message="Inquiries retrieved successfully"
     )
 
@@ -101,7 +120,57 @@ async def get_inquiry(
     )
 
 
+# ==================== EXPORT ====================
+@inquiry_router.get("/export", response_class=StreamingResponse)
+async def export_inquiries(status: Optional[str] = Query(None), search: Optional[str] = Query(None), service: InquiryService = Depends(get_service(InquiryService))):
+    """Export all inquiries into csv"""
+    inquiries, total = await service.list_inquiries(status=status, search=search, limit=10000, offset=0)
+    output = StringIO()
+    writer = csv.writer()
+    # Header
+    writer.writerow([
+        "ID", "Customer", "Phone", "Email", "Province", "City",
+        "Vehicle Brand", "Vehicle Model", "Year", "License Plate",
+        "Project Type", "Services", "Desired Finish", "Desired Color",
+        "Estimated Budget", "Status", "Created At", "Source",
+        "Has Project", "Project Status"
+    ])
+
+    for inquiry in inquiries:
+        writer.writerow([
+            str(inquiry.id),
+            inquiry.customer_name or "",
+            inquiry.customer_phone_number or "",
+            inquiry.customer_email or "",
+            inquiry.province or "",
+            inquiry.city or "",
+            inquiry.vehicle_brand or "",
+            inquiry.vehicle_model or "",
+            inquiry.vehicle_year or "",
+            inquiry.vehicle_license_plate or "",
+            inquiry.project_type or "",
+            inquiry.services or "",
+            inquiry.desired_finish or "",
+            inquiry.desired_color or "",
+            inquiry.estimated_budget or 0,
+            inquiry.status,
+            inquiry.created_at.isoformat() if inquiry.created_at else "",
+            inquiry.source or "",
+            "Yes" if inquiry.project else "No",
+            inquiry.project.status if inquiry.project else ""
+        ])
+
+    output.seek(0)
+    filename = f"inquiries_export_{datetime.now().strftime('%Y%m%d')}.csv"
+
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 # ==================== Create ====================
+
 
 @inquiry_router.post("/", response_model=BaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_inquiry(
@@ -112,10 +181,22 @@ async def create_inquiry(
     try:
         inquiry = await service.create_inquiry(request)
 
+        # 🔥 Broadcast ke semua admin yang connected
+        await manager.broadcast({
+            "type": "new_inquiry",
+            "data": {
+                "id": str(inquiry.id),
+                "customer_name": inquiry.customer_name,
+                "vehicle": f"{inquiry.vehicle_brand} {inquiry.vehicle_model}",
+                "created_at": inquiry.created_at.isoformat()
+            }
+        })
+
         return success_response(
             {"id": str(inquiry.id)},
             message="Inquiry created successfully"
         )
+
     except ValidationError as e:
         await service.db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
@@ -123,7 +204,20 @@ async def create_inquiry(
 
 # ==================== Update ====================
 
-@inquiry_router.patch("/{inquiry_id}", response_model=BaseResponse)
+@inquiry_router.patch("/{inquiry_id}", response_model=BaseResponse, description="""
+    Update inquiry status dengan validasi transisi.
+    
+    Status yang diperbolehkan:
+    - new → under_review, contacted, rejected
+    - under_review → contacted, quoted, rejected
+    - contacted → quoted, rejected
+    - quoted → approved, rejected
+    - approved → converted, rejected
+    - converted → completed, rejected
+    - rejected → closed
+    - closed → (final)
+    - completed → (final)
+    """)
 async def update_inquiry(
     inquiry_id: UUID,
     request: CustomerInquiryUpdate,
@@ -637,3 +731,38 @@ async def send_follow_up_reminders(
     except Exception as e:
         await service.db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@inquiry_router.get("/{inquiry_id}/whatsapp-message", response_model=BaseResponse)
+async def get_whatsapp_message(
+    inquiry_id: UUID,
+    service: InquiryService = Depends(get_service(InquiryService)),
+    settings_service: SettingsService = Depends(get_service(SettingsService))
+):
+    """Generate WhatsApp message menggunakan template dari settings."""
+    inquiry = await service.get_inquiry(inquiry_id)
+    if not inquiry:
+        raise HTTPException(404, "Inquiry not found")
+
+    # Ambil template dari settings
+    default_template = await settings_service.get_default_whatsapp_template()
+
+    if default_template:
+        # Render template dengan data inquiry
+        data = {
+            "customer_name": inquiry.customer_name or "Customer",
+            "vehicle": f"{inquiry.vehicle_brand} {inquiry.vehicle_model}".strip() or "Vehicle",
+            "project_type": inquiry.project_type or "Project",
+            "phone": inquiry.customer_phone_number or "",
+            "inquiry_id": str(inquiry.id)[:8],
+        }
+        message = default_template.render(data)
+    else:
+        # Fallback template
+        message = f"Halo {inquiry.customer_name},\n\nKami dari NOCTRA ingin menindaklanjuti inquiry Anda mengenai:\n• Kendaraan: {inquiry.vehicle_brand} {inquiry.vehicle_model}\n• Tipe Proyek: {inquiry.project_type}\n\nAda yang bisa kami bantu? 😊"
+
+    return success_response({
+        "message": message,
+        "phone": inquiry.customer_phone_number,
+        "template_id": str(default_template.id) if default_template else None
+    })
