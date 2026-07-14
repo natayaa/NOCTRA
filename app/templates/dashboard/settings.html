@@ -53,7 +53,7 @@
 
         <div class="form-group">
             <label for="workshop_name">Workshop Name</label>
-            <input id="workshop_name" name="workshop_name" type="text" value="NOCTRA Autoworks" required />
+            <input id="workshop_name" name="workshop_name" type="text" placeholder="NOCTRA Autoworks" />
         </div>
 
         <div class="form-group">
@@ -105,16 +105,6 @@
         <div class="form-group">
             <label for="custom_color_price">Custom Color Surcharge</label>
             <input id="custom_color_price" name="custom_color_price" type="number" value="500000" step="50000" />
-        </div>
-    </section>
-
-    <!-- ============================================================
-         LABOR SETTINGS
-     ============================================================ -->
-    <section class="settings-card" id="section-labor">
-        <div class="card-header">
-            <h3><i class="ph ph-user-gear"></i> Labor</h3>
-            <span>Labor and manpower costs</span>
         </div>
 
         <div class="form-group">
@@ -234,9 +224,7 @@
                 <i class="ph ph-plus"></i> Add
             </button>
         </div>
-
         <div id="templateList" class="template-list">
-            <!-- Templates akan di-render oleh JavaScript -->
             <div class="loading-placeholder-sm">Loading templates...</div>
         </div>
     </section>
@@ -252,7 +240,6 @@
                 <i class="ph ph-plus"></i> Add
             </button>
         </div>
-
         <div id="projectTypeList" class="project-type-list">
             <div class="loading-placeholder-sm">Loading project types...</div>
         </div>
@@ -269,7 +256,6 @@
                 <i class="ph ph-plus"></i> Add
             </button>
         </div>
-
         <div id="paymentMethodList" class="payment-method-list">
             <div class="loading-placeholder-sm">Loading payment methods...</div>
         </div>
@@ -286,7 +272,6 @@
                 <i class="ph ph-user-plus"></i> Add
             </button>
         </div>
-
         <div id="userList" class="user-list">
             <div class="loading-placeholder-sm">Loading users...</div>
         </div>
@@ -478,9 +463,7 @@
     </div>
 </div>
 
-<!-- ============================================================
-     TOAST CONTAINER
-     ============================================================ -->
+<!-- Toast -->
 <div id="toastContainer"></div>
 
 {% endblock %}

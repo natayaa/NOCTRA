@@ -196,12 +196,7 @@ class InquiryService:
         """Mark inquiry as contacted."""
         return await self.update_status(inquiry_id, InquiryStatus.CONTACTED, note)
 
-    async def send_quote(
-        self,
-        inquiry_id: UUID,
-        estimated_cost: Decimal,
-        notes: Optional[str] = None
-    ) -> bool:
+    async def send_quote(self, inquiry_id: UUID, estimated_cost: Decimal, notes: Optional[str] = None) -> bool:
         """Send quotation to customer."""
         inquiry = await self.repo.get(inquiry_id)
         if not inquiry:
@@ -214,9 +209,11 @@ class InquiryService:
 
         await self.db.flush()
 
+        # ✅ Konversi Decimal ke float untuk formatting
+        cost_float = float(estimated_cost)
         await self.repo.add_activity(
             inquiry_id,
-            f"Quotation sent: Rp {estimated_cost:,.2f}" +
+            f"Quotation sent: Rp {cost_float:,.2f}" +
             (f" - {notes}" if notes else ""),
             "quotation",
             performed_by="system"
@@ -276,7 +273,6 @@ class InquiryService:
         data: InquiryConvertToProject
     ) -> any:  # Project
         """Convert inquiry to project."""
-        # Import di sini untuk menghindari circular import
         from modules.projects.models import Project
         from modules.projects.schemas import ProjectCreate
         from modules.projects.services import ProjectService
@@ -295,21 +291,29 @@ class InquiryService:
         settings_service = SettingsService(self.db)
         pricing = await settings_service.get_pricing_settings()
 
+        # ✅ KONVERSI KE Decimal ATAU float
         estimated_cost = data.estimated_cost or Decimal(
             inquiry.estimated_budget or 0)
 
-        # ✅ HITUNG DEPOSIT DARI SETTINGS
-        deposit_percent = float(pricing.deposit_percent) if pricing else 30.0
-        deposit_amount = estimated_cost * (deposit_percent / 100)
+        # ✅ PASTIKAN estimated_cost adalah Decimal
+        if not isinstance(estimated_cost, Decimal):
+            estimated_cost = Decimal(str(estimated_cost))
 
-        # ✅ DEFAULT DURATION DARI SETTINGS
-        default_duration = pricing.default_duration_days if pricing else 14
+        # ✅ HITUNG DEPOSIT - PASTIKAN SEMUA Decimal
+        deposit_percent = Decimal(
+            str(pricing.deposit_percent)) if pricing else Decimal('30.0')
+        deposit_amount = estimated_cost * (deposit_percent / Decimal('100'))
+
+        # ✅ DEFAULT DURATION
+        default_duration = int(
+            pricing.default_duration_days) if pricing else 14
         target_delivery = data.project_target_delivery or (
             datetime.now() + timedelta(days=default_duration)
         )
 
         project_name = data.project_name or f"Project: {inquiry.vehicle_brand} {inquiry.vehicle_model} - {inquiry.customer_name}"
 
+        # ✅ SEMUA NILAI DIKONVERSI KE float ATAU Decimal YANG KONSISTEN
         project_data = {
             "name": project_name,
             "customer_name": inquiry.customer_name,
@@ -319,8 +323,11 @@ class InquiryService:
             "vehicle_model": inquiry.vehicle_model,
             "vehicle_year": inquiry.vehicle_year,
             "vehicle_license_plate": inquiry.vehicle_license_plate,
-            "estimated_cost": data.estimated_cost or Decimal(inquiry.estimated_budget or 0),
-            "deposit_amount": deposit_amount,
+            # ✅ Konversi ke float untuk project
+            "estimated_cost": float(estimated_cost),
+            "deposit_amount": float(deposit_amount),  # ✅ Konversi ke float
+            # ✅ Konversi ke float
+            "estimated_revenue": float(estimated_cost) * 1.3,
             "project_start_date": data.project_start_date or datetime.now(),
             "project_target_delivery": target_delivery,
             "status": ProjectStatus.ACTIVE,
@@ -335,7 +342,7 @@ class InquiryService:
 
         inquiry.status = InquiryStatus.CONVERTED
         inquiry.converted_at = datetime.now()
-        inquiry.conversion_rate = Decimal(100)
+        inquiry.conversion_rate = Decimal('100')
 
         await self.repo.add_activity(
             inquiry_id,
@@ -402,6 +409,25 @@ class InquiryService:
         margin_multiplier = 1 + (float(pricing.default_margin_percent) / 100)
         total = int(total * margin_multiplier)
         return total
+
+    async def enrich_material_usage(self, material_usage: List) -> List:
+        """Enrich material usage dengan data inventory."""
+        from modules.inventory.services import InventoryService
+
+        inventory_service = InventoryService(self.db)
+        enriched = []
+        for item in material_usage:
+            inventory_item = await inventory_service.get_item(item.item_id)
+            if inventory_item:
+                enriched.append({
+                    **item,
+                    "item_name": inventory_item.name,
+                    "unit": inventory_item.unit,
+                    "cost_price": inventory_item.cost_price,
+                })
+            else:
+                enriched.append(item)
+        return enriched
 
     # ==================== Photos ====================
 

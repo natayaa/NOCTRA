@@ -30,7 +30,7 @@ class WorkshopSettingsUpdate(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = Field(None, max_length=30)
     email: Optional[EmailStr] = None
-    website: Optional[HttpUrl] = None
+    website: Optional[str] = None
     logo_url: Optional[str] = None
     favicon_url: Optional[str] = None
     primary_color: Optional[str] = Field(None, pattern=r'^#[0-9a-fA-F]{6}$')

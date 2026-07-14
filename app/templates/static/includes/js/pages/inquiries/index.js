@@ -234,6 +234,20 @@ export async function refreshAndReload() {
   }
 }
 
+export function clearFilters() {
+  state.filters.search = "";
+  state.filters.status = "";
+  state.currentPage = 1;
+
+  const searchInput = DOM.searchInquiry();
+  const statusSelect = DOM.statusFilter();
+
+  if (searchInput) searchInput.value = "";
+  if (statusSelect) statusSelect.value = "";
+
+  loadInquiries();
+}
+
 // ============================================================
 // ✅ EXPOSE TO GLOBAL (for inline onclick handlers)
 // ============================================================
@@ -264,5 +278,6 @@ window.openDeletePaymentModal = openDeletePaymentModal;
 window.closeDeletePaymentModal = closeDeletePaymentModal;
 window.refreshCurrentInquiry = refreshCurrentInquiry;
 window.refreshAndReload = refreshAndReload;
+window.clearFilters = clearFilters;
 
 console.log("📋 Inquiries page module ready");

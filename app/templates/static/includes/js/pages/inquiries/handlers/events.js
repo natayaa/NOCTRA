@@ -175,7 +175,7 @@ export async function handleConfirmPayment() {
     if (result) {
       const paymentCount = document.getElementById("paymentCount");
       if (paymentCount) {
-        const currentCount = parseInt(paymentCount.textContext) || 0;
+        const currentCount = parseInt(paymentCount.textContent) || 0;
         paymentCount.textContent = `${currentCount} transaction`;
       }
       showToast("✅ Payment confirmed successfully!", "success");
@@ -1037,7 +1037,7 @@ export function bindEvents() {
 
   // More Actions Dropdown Toggle
   const moreBtn = document.getElementById("moreActionsBtn");
-  const moreMenu = document.getElementById("moreActionBtn");
+  const moreMenu = document.getElementById("moreActionMenu");
 
   if (moreBtn && moreMenu) {
     moreBtn.addEventListener("click", (e) => {
@@ -1048,7 +1048,7 @@ export function bindEvents() {
     // close dropdown when clicking outside
     document.addEventListener("click", (e) => {
       if (!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) {
-        moreMenu.classList;
+        moreMenu.classList.remove("show");
       }
     });
 

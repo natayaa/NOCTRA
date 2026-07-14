@@ -57,10 +57,10 @@ class ProjectMinimalResponse(BaseModel):
     name: str
     status: str
     progress: int
-    estimated_cost: Optional[float] = None      # ✅ TAMBAHKAN
+    estimated_cost: Optional[float] = None      # ✅ WAJIB ADA
     actual_cost: Optional[float] = None
-    deposit_amount: Optional[float] = None      # ✅ TAMBAHKAN
-    estimated_revenue: Optional[float] = None   # ✅ TAMBAHKAN
+    deposit_amount: Optional[float] = None      # ✅ WAJIB ADA
+    estimated_revenue: Optional[float] = None   # ✅ WAJIB ADA
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -143,12 +143,6 @@ class CustomerInquiryCreate(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return value
-
-    @field_validator("project_type")
-    @classmethod
-    async def validate_project_type(cls, v: str) -> str:
-        # Validasi akan dilakukan di service layer
-        return v
 
 
 class CustomerInquiryUpdate(BaseModel):
@@ -317,38 +311,36 @@ class CustomerInquiryResponse(BaseModel):
     @property
     def estimated_cost(self) -> float:
         """Nilai estimasi cost dari project atau inquiry"""
-        if self.project and self.project.estimated_cost is not None:
+        if self.project is not None and self.project.estimated_cost is not None:
             return float(self.project.estimated_cost)
-
-        return float(self.project.estimated_cost or 0)
+        return float(self.estimated_budget or 0)
 
     @computed_field
     @property
     def deposit_amount(self) -> float:
         """Nilai deposit dari project atau inquiry"""
-        if self.project and hasattr(self.project, 'deposit_amount') and self.project.deposit_amount is not None:
+        if self.project is not None and hasattr(self.project, 'deposit_amount') and self.project.deposit_amount is not None:
             return float(self.project.deposit_amount)
         return float(self.deposit_required or 0)
 
     @computed_field
     @property
     def actual_cost(self) -> float:
-        """Actual cost - bisa dihitung dari labor + material."""
-        # Ini akan dihitung dari data terkait, default 0
+        """Actual cost - dihitung dari labor + material"""
         return 0.0
 
     @computed_field
     @property
     def estimated_revenue(self) -> float:
-        """Estimasi revenue - dari project atau inquiry."""
-        if self.project and hasattr(self.project, 'estimated_revenue') and self.project.estimated_revenue is not None:
+        """Estimasi revenue - dari project atau inquiry"""
+        if self.project is not None and hasattr(self.project, 'estimated_revenue') and self.project.estimated_revenue is not None:
             return float(self.project.estimated_revenue)
         return 0.0
 
     @computed_field
     @property
     def actual_revenue(self) -> float:
-        """Actual revenue - dari total payment yang sudah completed."""
+        """Actual revenue - dari total payment yang sudah completed"""
         if self.payments:
             total = sum(float(p.amount)
                         for p in self.payments if p.status == "completed")

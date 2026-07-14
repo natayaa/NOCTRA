@@ -139,6 +139,13 @@ export async function loadInquiryDetail(inquiryId) {
       }
     }
 
+    // ✅ Sembunyikan skeleton setelah data dimuat
+    const skeleton = document.getElementById("skeletonLoader");
+    const content = document.getElementById("drawerContentInner");
+
+    if (skeleton) skeleton.style.display = "none";
+    if (content) content.style.display = "block";
+
     // ✅ Calculate financial data
     financial = calculateFinancialFromData(inquiry, labor, materials, payments);
     // console.log("📊 Financial data:", financial);

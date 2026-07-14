@@ -167,14 +167,19 @@
         });
       }
 
-      // Enter key support - prevent form submit on enter
+      // 🔥 FIXED: Enter key support - prevent double submission
       form?.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
           e.preventDefault();
           const currentStep = this.#state.currentStep;
           if (currentStep === this.#state.totalSteps - 1) {
+            // 🔥 FIX: Gunakan form.dispatchEvent untuk trigger submit
+            // Ini akan memicu event submit yang sudah di-handle oleh form listener
+            // Dan mencegah double trigger karena kita tidak memanggil click() pada submitBtn
             if (this.#validateStep(currentStep)) {
-              submitBtn?.click();
+              // Gunakan form.requestSubmit() untuk trigger submit secara native
+              // Ini akan memicu event submit yang sama seperti klik tombol submit
+              form.requestSubmit();
             }
           } else {
             nextBtn?.click();
@@ -708,10 +713,13 @@
 
     // ─── Form Submission ──────────────────────────────────────
     async #handleSubmit(event) {
+      // 🔥 FIX: Prevent multiple submissions
       event.preventDefault();
 
-      if (!this.#validateStep(2)) return;
+      // 🔥 FIX: Cek apakah sudah dalam proses submit
       if (this.#state.isSubmitting) return;
+
+      if (!this.#validateStep(2)) return;
 
       this.#state.isSubmitting = true;
       const submitBtn = this.#dom.submitBtn;
