@@ -137,3 +137,21 @@ def read_payments(request: Request):
         "request": request
     }
     return template.TemplateResponse(name="payments.html", request=request, context=context, status_code=200)
+
+
+@html.get("/billing-quotaitions", response_class=HTMLResponse)
+async def read_billing_quotations(request: Request):
+    context = {
+        "request": request
+    }
+
+    return template.TemplateResponse(name="billing.html", request=request, context=context, status_code=200)
+
+
+@html.get("/restored-bikes", response_class=HTMLResponse)
+async def get_restored_bikes(request: Request):
+    context = {
+        "request": request
+    }
+
+    return template.TemplateResponse(name="restored-bikes.html", request=request, context=context, status_code=200)

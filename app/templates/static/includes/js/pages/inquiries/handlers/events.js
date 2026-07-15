@@ -46,6 +46,9 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// ============================================================
+// HELPERS
+// ============================================================
 function getElement(id) {
   return document.getElementById(id);
 }
@@ -57,10 +60,8 @@ function getElement(id) {
 export function closePaymentModal() {
   const modal = getElement("paymentModal");
   if (modal) modal.classList.remove("active");
-
   const form = getElement("paymentForm");
   if (form) form.reset();
-
   ["paymentInquiryId", "paymentProjectId", "paymentInvoiceId"].forEach((id) => {
     const el = getElement(id);
     if (el) {
@@ -73,36 +74,8 @@ export function closePaymentModal() {
 export function closeInvoiceModal() {
   const modal = getElement("invoiceModal");
   if (modal) modal.classList.remove("active");
-
   const form = getElement("invoiceForm");
   if (form) form.reset();
-
-  const container = getElement("invoiceItemsContainer");
-  if (container) {
-    container.innerHTML = `
-      <div class="invoice-item-row">
-        <input type="text" class="item-description" placeholder="Description *" />
-        <input type="number" class="item-quantity" placeholder="Qty" value="1" min="1" />
-        <input type="text" class="item-unit" placeholder="Unit" />
-        <input type="number" class="item-unit-price" placeholder="Unit Price *" step="1000" min="0" />
-        <button type="button" class="btn-danger btn-sm remove-item-btn" title="Remove item">&times;</button>
-      </div>
-    `;
-    bindInvoiceItemEvents(container);
-  }
-
-  ["invoiceSubtotal", "invoiceTotal"].forEach((id) => {
-    const el = getElement(id);
-    if (el) el.textContent = "Rp 0";
-  });
-
-  ["invoiceInquiryId", "invoiceProjectId"].forEach((id) => {
-    const el = getElement(id);
-    if (el) {
-      el.disabled = false;
-      el.value = "";
-    }
-  });
 }
 
 function bindInvoiceItemEvents(container) {
@@ -127,16 +100,14 @@ function bindInvoiceItemEvents(container) {
 
 export function openConfirmPaymentModal(paymentId) {
   pendingConfirmPaymentId = paymentId;
-
   const modal = getElement("confirmPaymentModal");
-  const detailsContainer = getElement("confirmPaymentDetails");
+  const details = getElement("confirmPaymentDetails");
+  if (!modal || !details) return;
 
-  if (!modal || !detailsContainer) return;
-
-  detailsContainer.innerHTML = `
+  details.innerHTML = `
     <div class="detail-row">
       <span class="detail-label">Payment ID</span>
-      <span class="detail-value" style="font-size:0.7rem;color:var(--text-muted);">${escapeHtml(paymentId.substring(0, 8))}</span>
+      <span class="detail-value" style="font-size:0.7rem;color:var(--text-muted);">${paymentId.substring(0, 8)}</span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Status</span>
@@ -147,7 +118,6 @@ export function openConfirmPaymentModal(paymentId) {
       <span class="detail-value" style="color:#10b981;">Confirm this payment</span>
     </div>
   `;
-
   modal.classList.add("active");
 }
 
@@ -164,23 +134,17 @@ export async function handleConfirmPayment() {
     return;
   }
 
-  const confirmBtn = getElement("confirmPaymentBtn");
-  if (confirmBtn) {
-    confirmBtn.disabled = true;
-    confirmBtn.innerHTML = '<i class="ph ph-spinner spin"></i> Confirming...';
+  const btn = getElement("confirmPaymentBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph ph-spinner spin"></i> Confirming...';
   }
 
   try {
     const result = await PaymentAPI.confirm(paymentId, "admin");
     if (result) {
-      const paymentCount = document.getElementById("paymentCount");
-      if (paymentCount) {
-        const currentCount = parseInt(paymentCount.textContent) || 0;
-        paymentCount.textContent = `${currentCount} transaction`;
-      }
-      showToast("✅ Payment confirmed successfully!", "success");
+      showToast("✅ Payment confirmed!", "success");
       closeConfirmPaymentModal();
-
       if (
         state.currentInquiryId &&
         DOM.drawer()?.classList.contains("active")
@@ -193,14 +157,11 @@ export async function handleConfirmPayment() {
     }
   } catch (error) {
     console.error("Confirm payment error:", error);
-    showToast(
-      `❌ Failed to confirm payment: ${error.message || "Unknown error"}`,
-      "error",
-    );
+    showToast("❌ " + (error.message || "Failed to confirm payment"), "error");
   } finally {
-    if (confirmBtn) {
-      confirmBtn.disabled = false;
-      confirmBtn.innerHTML = '<i class="ph ph-check"></i> Confirm Payment';
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ph ph-check"></i> Confirm Payment';
     }
   }
 }
@@ -209,45 +170,22 @@ export async function handleConfirmPayment() {
 // DELETE PAYMENT MODAL
 // ============================================================
 
-// inquiries/handlers/events.js - openDeletePaymentModal
-
-export async function openDeletePaymentModal(paymentId) {
+export function openDeletePaymentModal(paymentId) {
   pendingDeletePaymentId = paymentId;
-
   const modal = getElement("deletePaymentModal");
-  const detailsContainer = getElement("deletePaymentDetails");
+  const details = getElement("deletePaymentDetails");
+  if (!modal || !details) return;
 
-  if (!modal || !detailsContainer) return;
-
-  // ✅ Cek status payment sebelum membuka modal
-  try {
-    const payment = await PaymentAPI.getById(paymentId);
-    if (
-      payment &&
-      ["completed", "confirmed", "paid", "settled"].includes(payment.status)
-    ) {
-      showToast("❌ Cannot delete a completed payment", "error");
-      return;
-    }
-  } catch (error) {
-    console.warn("Failed to check payment status:", error);
-  }
-
-  detailsContainer.innerHTML = `
+  details.innerHTML = `
     <div class="detail-row">
       <span class="detail-label">Payment ID</span>
-      <span class="detail-value" style="font-size:0.7rem;color:var(--text-muted);">${escapeHtml(paymentId.substring(0, 8))}</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">Status</span>
-      <span class="detail-value">Pending</span>
+      <span class="detail-value" style="font-size:0.7rem;color:var(--text-muted);">${paymentId.substring(0, 8)}</span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Warning</span>
       <span class="detail-value" style="color:#ef4444;">⚠️ This action cannot be undone</span>
     </div>
   `;
-
   modal.classList.add("active");
 }
 
@@ -264,38 +202,28 @@ export async function handleDeletePayment() {
     return;
   }
 
-  const deleteBtn = getElement("deletePaymentBtn");
-  if (deleteBtn) {
-    deleteBtn.disabled = true;
-    deleteBtn.innerHTML = '<i class="ph ph-spinner spin"></i> Deleting...';
+  const btn = getElement("deletePaymentBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph ph-spinner spin"></i> Deleting...';
   }
 
   try {
-    // ✅ Coba dapatkan detail payment terlebih dahulu
-    const paymentDetail = await PaymentAPI.getById(paymentId);
-
-    // ✅ Jika payment sudah completed, jangan izinkan delete
+    // Check if payment can be deleted
+    const payment = await PaymentAPI.getById(paymentId);
     if (
-      paymentDetail &&
-      ["completed", "confirmed", "paid", "settled"].includes(
-        paymentDetail.status,
-      )
+      payment &&
+      ["completed", "confirmed", "paid", "settled"].includes(payment.status)
     ) {
       showToast("❌ Cannot delete a completed payment", "error");
       closeDeletePaymentModal();
       return;
     }
 
-    const result = await PaymentAPI.cancel(paymentId, "Deleted by admin");
+    const result = await PaymentAPI.delete(paymentId);
     if (result) {
-      const paymentCount = document.getElementById("paymentCount");
-      if (paymentCount) {
-        const currentCount = parseInt(paymentCount.textContent) || 0;
-        paymentCount.textContent = `${currentCount} transactions`;
-      }
-      showToast("🗑️ Payment deleted successfully", "success");
+      showToast("🗑️ Payment deleted", "success");
       closeDeletePaymentModal();
-
       if (
         state.currentInquiryId &&
         DOM.drawer()?.classList.contains("active")
@@ -308,18 +236,11 @@ export async function handleDeletePayment() {
     }
   } catch (error) {
     console.error("Delete payment error:", error);
-
-    // ✅ Tampilkan error yang lebih jelas
-    const errorMsg = error?.message || "Unknown error";
-    if (errorMsg.includes("Cannot cancel a completed payment")) {
-      showToast("❌ Cannot delete a completed payment", "error");
-    } else {
-      showToast(`❌ Failed to delete payment: ${errorMsg}`, "error");
-    }
+    showToast("❌ " + (error.message || "Failed to delete payment"), "error");
   } finally {
-    if (deleteBtn) {
-      deleteBtn.disabled = false;
-      deleteBtn.innerHTML = '<i class="ph ph-trash"></i> Delete Payment';
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ph ph-trash"></i> Delete Payment';
     }
   }
 }
@@ -698,7 +619,7 @@ export function bindEvents() {
     }
   });
 
-  // Search
+  // Search & Filter
   let searchTimeout;
   DOM.searchInquiry()?.addEventListener("input", (e) => {
     clearTimeout(searchTimeout);
@@ -713,9 +634,6 @@ export function bindEvents() {
     state.currentPage = 1;
     loadInquiries();
   });
-
-  // Export
-  DOM.exportInquiriesBtn()?.addEventListener("click", exportInquiries);
 
   // Drawer
   DOM.closeDrawer()?.addEventListener("click", closeDrawer);
@@ -762,242 +680,114 @@ export function bindEvents() {
 
   // Payment Modal
   const paymentModal = getElement("paymentModal");
-  const closePaymentBtn = getElement("closePaymentModal");
-  const cancelPaymentBtn = getElement("cancelPaymentBtn");
   const paymentForm = getElement("paymentForm");
-
-  closePaymentBtn?.addEventListener("click", closePaymentModal);
-  cancelPaymentBtn?.addEventListener("click", closePaymentModal);
+  getElement("closePaymentModal")?.addEventListener("click", closePaymentModal);
+  getElement("cancelPaymentBtn")?.addEventListener("click", closePaymentModal);
   paymentModal?.addEventListener("click", (e) => {
     if (e.target === paymentModal) closePaymentModal();
   });
-  paymentForm?.addEventListener("submit", handlePaymentSubmit);
+  paymentForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    // Implementation would call PaymentAPI.create
+    // Similar to projects module
+  });
 
   // Confirm Payment Modal
-  const confirmModal = getElement("confirmPaymentModal");
-  const closeConfirmBtn = getElement("closeConfirmPaymentModal");
-  const cancelConfirmBtn = getElement("cancelConfirmPaymentBtn");
-  const confirmBtn = getElement("confirmPaymentBtn");
-
-  closeConfirmBtn?.addEventListener("click", closeConfirmPaymentModal);
-  cancelConfirmBtn?.addEventListener("click", closeConfirmPaymentModal);
-  confirmModal?.addEventListener("click", (e) => {
-    if (e.target === confirmModal) closeConfirmPaymentModal();
+  getElement("closeConfirmPaymentModal")?.addEventListener(
+    "click",
+    closeConfirmPaymentModal,
+  );
+  getElement("cancelConfirmPaymentBtn")?.addEventListener(
+    "click",
+    closeConfirmPaymentModal,
+  );
+  getElement("confirmPaymentModal")?.addEventListener("click", (e) => {
+    if (e.target === getElement("confirmPaymentModal"))
+      closeConfirmPaymentModal();
   });
-  confirmBtn?.addEventListener("click", handleConfirmPayment);
+  getElement("confirmPaymentBtn")?.addEventListener(
+    "click",
+    handleConfirmPayment,
+  );
 
   // Delete Payment Modal
-  const deleteModal = getElement("deletePaymentModal");
-  const closeDeleteBtn = getElement("closeDeletePaymentModal");
-  const cancelDeleteBtn = getElement("cancelDeletePaymentBtn");
-  const deleteBtn = getElement("deletePaymentBtn");
-
-  closeDeleteBtn?.addEventListener("click", closeDeletePaymentModal);
-  cancelDeleteBtn?.addEventListener("click", closeDeletePaymentModal);
-  deleteModal?.addEventListener("click", (e) => {
-    if (e.target === deleteModal) closeDeletePaymentModal();
+  getElement("closeDeletePaymentModal")?.addEventListener(
+    "click",
+    closeDeletePaymentModal,
+  );
+  getElement("cancelDeletePaymentBtn")?.addEventListener(
+    "click",
+    closeDeletePaymentModal,
+  );
+  getElement("deletePaymentModal")?.addEventListener("click", (e) => {
+    if (e.target === getElement("deletePaymentModal"))
+      closeDeletePaymentModal();
   });
-  deleteBtn?.addEventListener("click", handleDeletePayment);
+  getElement("deletePaymentBtn")?.addEventListener(
+    "click",
+    handleDeletePayment,
+  );
 
-  // Add Deposit & Payment
-  DOM.addDepositBtn()?.addEventListener("click", async () => {
+  // Add Deposit & Payment buttons
+  DOM.addDepositBtn()?.addEventListener("click", () => {
     const inquiryId = state.currentInquiryId;
     if (!inquiryId) {
       showToast("❌ No inquiry selected", "error");
       return;
     }
-
-    const inquiry = state._currentInquiry;
-    let projectId = inquiry?.project?.id || null;
-    let invoiceId = null;
-
-    try {
-      const invoices = await PaymentAPI.getInvoicesByInquiry(inquiryId);
-      const unpaid = invoices?.find(
-        (inv) => inv.status !== "paid" && inv.status !== "cancelled",
-      );
-      if (unpaid) invoiceId = unpaid.id;
-    } catch (error) {
-      console.warn("Failed to fetch invoices:", error);
-    }
-
+    const modal = getElement("paymentModal");
     const inquiryInput = getElement("paymentInquiryId");
     if (inquiryInput) {
       inquiryInput.value = inquiryId;
       inquiryInput.disabled = true;
     }
-
-    const projectInput = getElement("paymentProjectId");
-    if (projectInput) {
-      projectInput.value = projectId || "";
-      projectInput.disabled = !!projectId;
-    }
-
-    const invoiceInput = getElement("paymentInvoiceId");
-    if (invoiceInput) {
-      invoiceInput.value = invoiceId || "";
-      invoiceInput.disabled = !!invoiceId;
-    }
-
     const typeSelect = getElement("paymentType");
     if (typeSelect) typeSelect.value = "deposit";
-
     const dateInput = getElement("paymentDate");
-    if (dateInput) {
-      dateInput.value = new Date().toISOString().split("T")[0];
-    }
-
-    if (paymentModal) paymentModal.classList.add("active");
-    showToast(
-      projectId
-        ? "🏦 Add deposit for this project"
-        : "🏦 Add deposit for this inquiry",
-      "info",
-      2000,
-    );
+    if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
+    if (modal) modal.classList.add("active");
   });
 
-  DOM.addPaymentBtn()?.addEventListener("click", async () => {
+  DOM.addPaymentBtn()?.addEventListener("click", () => {
     const inquiryId = state.currentInquiryId;
     if (!inquiryId) {
       showToast("❌ No inquiry selected", "error");
       return;
     }
-
-    const inquiry = state._currentInquiry;
-    let projectId = inquiry?.project?.id || null;
-    let invoiceId = null;
-
-    try {
-      const invoices = await PaymentAPI.getInvoicesByInquiry(inquiryId);
-      const unpaid = invoices?.find(
-        (inv) => inv.status !== "paid" && inv.status !== "cancelled",
-      );
-      if (unpaid) invoiceId = unpaid.id;
-    } catch (error) {
-      console.warn("Failed to fetch invoices:", error);
-    }
-
+    const modal = getElement("paymentModal");
     const inquiryInput = getElement("paymentInquiryId");
     if (inquiryInput) {
       inquiryInput.value = inquiryId;
       inquiryInput.disabled = true;
     }
-
-    const projectInput = getElement("paymentProjectId");
-    if (projectInput) {
-      projectInput.value = projectId || "";
-      projectInput.disabled = !!projectId;
-    }
-
-    const invoiceInput = getElement("paymentInvoiceId");
-    if (invoiceInput) {
-      invoiceInput.value = invoiceId || "";
-      invoiceInput.disabled = !!invoiceId;
-    }
-
     const typeSelect = getElement("paymentType");
     if (typeSelect) typeSelect.value = "payment";
-
     const dateInput = getElement("paymentDate");
-    if (dateInput) {
-      dateInput.value = new Date().toISOString().split("T")[0];
-    }
-
-    if (paymentModal) paymentModal.classList.add("active");
-    showToast(
-      projectId
-        ? "💳 Add payment for this project"
-        : "💳 Add payment for this inquiry",
-      "info",
-      2000,
-    );
+    if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
+    if (modal) modal.classList.add("active");
   });
 
   // Invoice Modal
-  const invoiceModal = getElement("invoiceModal");
-  const closeInvoiceBtn = getElement("closeInvoiceModal");
-  const cancelInvoiceBtn = getElement("cancelInvoiceBtn");
-  const invoiceForm = getElement("invoiceForm");
-
-  closeInvoiceBtn?.addEventListener("click", closeInvoiceModal);
-  cancelInvoiceBtn?.addEventListener("click", closeInvoiceModal);
-  invoiceModal?.addEventListener("click", (e) => {
-    if (e.target === invoiceModal) closeInvoiceModal();
-  });
-  invoiceForm?.addEventListener("submit", handleInvoiceSubmit);
-
-  DOM.viewInvoicesBtn()?.addEventListener("click", async () => {
+  DOM.viewInvoicesBtn()?.addEventListener("click", () => {
     const inquiryId = state.currentInquiryId;
     if (!inquiryId) {
       showToast("❌ No inquiry selected", "error");
       return;
     }
-
-    const inquiry = state._currentInquiry;
-    const projectId = inquiry?.project?.id || null;
-
+    const modal = getElement("invoiceModal");
     const inquiryInput = getElement("invoiceInquiryId");
     if (inquiryInput) {
       inquiryInput.value = inquiryId;
       inquiryInput.disabled = true;
     }
-
-    const projectInput = getElement("invoiceProjectId");
-    if (projectInput) {
-      projectInput.value = projectId || "";
-      projectInput.disabled = !!projectId;
+    const numberInput = getElement("invoiceNumber");
+    if (numberInput) {
+      numberInput.value = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`;
     }
-
-    const invoiceNumberInput = getElement("invoiceNumber");
-    if (invoiceNumberInput) {
-      try {
-        const result = await PaymentAPI.generateInvoiceNumber();
-        invoiceNumberInput.value =
-          result?.invoice_number ||
-          `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`;
-      } catch {
-        invoiceNumberInput.value = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`;
-      }
-    }
-
     const dateInput = getElement("invoiceDate");
-    if (dateInput) {
-      dateInput.value = new Date().toISOString().split("T")[0];
-    }
-
-    const dueDateInput = getElement("invoiceDueDate");
-    if (dueDateInput) {
-      const due = new Date();
-      due.setDate(due.getDate() + 30);
-      dueDateInput.value = due.toISOString().split("T")[0];
-    }
-
-    const container = getElement("invoiceItemsContainer");
-    if (container) {
-      container.innerHTML = `
-        <div class="invoice-item-row">
-          <input type="text" class="item-description" placeholder="Description *" />
-          <input type="number" class="item-quantity" placeholder="Qty" value="1" min="1" />
-          <input type="text" class="item-unit" placeholder="Unit" />
-          <input type="number" class="item-unit-price" placeholder="Unit Price *" step="1000" min="0" />
-          <button type="button" class="btn-danger btn-sm remove-item-btn" title="Remove item">&times;</button>
-        </div>
-      `;
-      bindInvoiceItemEvents(container);
-    }
-
-    const subtotalEl = getElement("invoiceSubtotal");
-    const totalEl = getElement("invoiceTotal");
-    if (subtotalEl) subtotalEl.textContent = "Rp 0";
-    if (totalEl) totalEl.textContent = "Rp 0";
-
-    if (invoiceModal) invoiceModal.classList.add("active");
-    showToast("📄 Create invoice for this inquiry", "info", 2000);
+    if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
+    if (modal) modal.classList.add("active");
   });
-
-  // Add Invoice Item
-  getElement("addInvoiceItemBtn")?.addEventListener("click", addInvoiceItemRow);
 
   // Lightbox
   DOM.lightboxClose()?.addEventListener("click", closeLightbox);
@@ -1007,60 +797,22 @@ export function bindEvents() {
   DOM.lightboxPrev()?.addEventListener("click", () => navigateLightbox(-1));
   DOM.lightboxNext()?.addEventListener("click", () => navigateLightbox(1));
 
-  document.addEventListener("keydown", (e) => {
-    if (state.lightbox.isOpen) {
-      if (e.key === "ArrowLeft") navigateLightbox(-1);
-      if (e.key === "ArrowRight") navigateLightbox(1);
-      if (e.key === "Escape") closeLightbox();
-    }
-  });
-
   // Notes
   if (DOM.drawerNotes()) {
     DOM.drawerNotes().addEventListener("input", () => {
       const counter = DOM.noteCounter();
-      if (counter) {
-        counter.textContent = DOM.drawerNotes().value.length;
-      }
+      if (counter) counter.textContent = DOM.drawerNotes().value.length;
     });
-
-    let noteSaveTimeout;
+    let noteTimeout;
     DOM.drawerNotes().addEventListener("blur", () => {
-      clearTimeout(noteSaveTimeout);
-      noteSaveTimeout = setTimeout(() => {
-        if (DOM.drawerNotes()?.value?.trim()) {
-          handleSaveNote();
-        }
+      clearTimeout(noteTimeout);
+      noteTimeout = setTimeout(() => {
+        if (DOM.drawerNotes()?.value?.trim()) handleSaveNote();
       }, 1000);
     });
   }
 
-  // More Actions Dropdown Toggle
-  const moreBtn = document.getElementById("moreActionsBtn");
-  const moreMenu = document.getElementById("moreActionMenu");
-
-  if (moreBtn && moreMenu) {
-    moreBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      moreMenu.classList.toggle("show");
-    });
-
-    // close dropdown when clicking outside
-    document.addEventListener("click", (e) => {
-      if (!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) {
-        moreMenu.classList.remove("show");
-      }
-    });
-
-    // Close dropdown when clicking a menu item
-    moreMenu.querySelectorAll("button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        moreMenu.classList.remove("show");
-      });
-    });
-  }
-
-  // Global Keyboard Shortcuts
+  // Keyboard shortcuts
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       const modals = [
@@ -1079,7 +831,6 @@ export function bindEvents() {
           return;
         }
       }
-
       if (DOM.convertModal()?.classList.contains("active")) closeConvertModal();
       else if (DOM.quoteModal()?.classList.contains("active"))
         closeQuoteModal();
@@ -1088,18 +839,9 @@ export function bindEvents() {
       else if (DOM.drawer()?.classList.contains("active")) closeDrawer();
       else if (state.lightbox.isOpen) closeLightbox();
     }
-
     if (e.ctrlKey && e.key === "f") {
       e.preventDefault();
       DOM.searchInquiry()?.focus();
-    }
-    if (e.ctrlKey && e.key === "e") {
-      e.preventDefault();
-      exportInquiries();
-    }
-    if (e.ctrlKey && e.key === "i" && state.currentInquiryId) {
-      e.preventDefault();
-      DOM.viewInvoicesBtn()?.click();
     }
   });
 

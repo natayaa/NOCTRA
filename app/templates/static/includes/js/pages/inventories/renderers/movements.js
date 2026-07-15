@@ -1,6 +1,4 @@
-// ============================================================
-// inventories/renderers/movements.js - Recent Movements Rendering
-// ============================================================
+// inventories/renderers/movements.js - FIXED
 
 import { DOM } from "../dom.js";
 import { Formatter, escapeHtml } from "../formatters.js";
@@ -18,7 +16,8 @@ export function renderRecentMovements(movements) {
 
   list.innerHTML = movements
     .map((m) => {
-      let itemName = m.item_name || m.name || m.item?.name || m.item_id;
+      // Get item name from state
+      let itemName = m.item_name || m.name || m.item?.name;
 
       if (!itemName || itemName === m.item_id) {
         const item = state.items.find((i) => i.id === m.item_id);
@@ -31,22 +30,28 @@ export function renderRecentMovements(movements) {
 
       const qty = Number(m.quantity) || 0;
       const type = m.movement_type || m.type || "unknown";
-      const isIn = ["in", "purchase", "restock", "stock_in"].includes(type);
+      const isIn = [
+        "in",
+        "purchase",
+        "restock",
+        "stock_in",
+        "adjustment_in",
+      ].includes(type);
 
       return `
-            <div class="movement-item ${isIn ? "stock-in" : "stock-out"}">
-                <div class="movement-icon">
-                    <i class="fas ${isIn ? "fa-arrow-down" : "fa-arrow-up"}"></i>
-                </div>
-                <div class="movement-info">
-                    <strong>${escapeHtml(itemName)}</strong>
-                    <span>${Formatter.date(m.created_at)} · ${escapeHtml(m.reference_type || type)}</span>
-                </div>
-                <span class="movement-qty ${isIn ? "positive" : "negative"}">
-                    ${isIn ? "+" : "-"}${qty} ${escapeHtml(m.unit || "")}
-                </span>
-            </div>
-        `;
+        <div class="movement-item ${isIn ? "stock-in" : "stock-out"}">
+          <div class="movement-icon">
+            <i class="fas ${isIn ? "fa-arrow-down" : "fa-arrow-up"}"></i>
+          </div>
+          <div class="movement-info">
+            <strong>${escapeHtml(itemName)}</strong>
+            <span>${Formatter.date(m.created_at)} · ${escapeHtml(m.reference_type || type)}</span>
+          </div>
+          <span class="movement-qty ${isIn ? "positive" : "negative"}">
+            ${isIn ? "+" : "-"}${qty} ${escapeHtml(m.unit || "")}
+          </span>
+        </div>
+      `;
     })
     .join("");
 }

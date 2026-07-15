@@ -1,6 +1,4 @@
-// ============================================================
-// inventories/handlers/modals.js - Modal Handlers
-// ============================================================
+// inventories/handlers/modals.js - FIXED
 
 import { DOM } from "../dom.js";
 import { InventoryAPI } from "../api.js";
@@ -17,23 +15,29 @@ export function openCreateModal() {
   const editId = DOM.editId();
   const form = DOM.inventoryForm();
   const submit = DOM.submitBtn();
-  const stock = DOM.itemStock();
-  const reorder = DOM.reorderLevel();
 
   if (title) title.textContent = "Add Inventory Item";
   if (editId) editId.value = "";
   if (form) form.reset();
   if (submit) submit.textContent = "Create Item";
-  if (modal) modal.classList.add("active");
+
+  // Set defaults
+  const stock = DOM.itemStock();
+  const reorder = DOM.reorderLevel();
   if (stock) stock.value = 0;
   if (reorder) reorder.value = 5;
+
+  if (modal) modal.classList.add("active");
 
   loadSupplierOptions();
 }
 
 export async function openEditModal(itemId) {
   const item = await InventoryAPI.fetchItemDetail(itemId);
-  if (!item) return;
+  if (!item) {
+    showToast("Failed to load item", "error");
+    return;
+  }
 
   const modal = DOM.inventoryModal();
   const title = DOM.modalTitle();
@@ -61,7 +65,7 @@ export async function openEditModal(itemId) {
 
   for (const [key, value] of Object.entries(fields)) {
     const el = DOM[key]();
-    if (el) el.value = value || "";
+    if (el) el.value = value ?? "";
   }
 
   await loadSupplierOptions(item.supplier_id);
@@ -86,15 +90,15 @@ async function loadSupplierOptions(selectedId = null) {
   }
 
   select.innerHTML = `
-        <option value="">Select Supplier</option>
-        ${suppliers
-          .map(
-            (s) => `
-            <option value="${s.id}" ${selectedId === s.id ? "selected" : ""}>${escapeHtml(s.name)}</option>
-        `,
-          )
-          .join("")}
-    `;
+    <option value="">Select Supplier</option>
+    ${suppliers
+      .map(
+        (s) => `
+        <option value="${s.id}" ${selectedId === s.id ? "selected" : ""}>${escapeHtml(s.name)}</option>
+      `,
+      )
+      .join("")}
+  `;
 }
 
 export async function handleFormSubmit(e) {
@@ -119,19 +123,46 @@ export async function handleFormSubmit(e) {
     status: "active",
   };
 
-  if (!data.name) return showToast("Please enter item name", "error");
-  if (!data.category) return showToast("Please select a category", "error");
-  if (!data.unit) return showToast("Please select a unit", "error");
+  if (!data.name) {
+    showToast("Please enter item name", "error");
+    DOM.itemName()?.focus();
+    return;
+  }
+  if (!data.category) {
+    showToast("Please select a category", "error");
+    DOM.itemCategory()?.focus();
+    return;
+  }
+  if (!data.unit) {
+    showToast("Please select a unit", "error");
+    DOM.itemUnit()?.focus();
+    return;
+  }
 
   const editId = DOM.editId()?.value || "";
-  const result = editId
-    ? await InventoryAPI.updateItem(editId, data)
-    : await InventoryAPI.createItem(data);
+  const submitBtn = DOM.submitBtn();
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = editId ? "Updating..." : "Creating...";
+  }
 
-  if (result) {
-    showToast(editId ? "Item updated!" : "Item created!", "success");
-    closeModal();
-    await loadInventoryItems();
-    if (state.selectedItemId) await selectItem(state.selectedItemId);
+  try {
+    const result = editId
+      ? await InventoryAPI.updateItem(editId, data)
+      : await InventoryAPI.createItem(data);
+
+    if (result) {
+      showToast(editId ? "✅ Item updated!" : "✅ Item created!", "success");
+      closeModal();
+      await loadInventoryItems();
+      if (state.selectedItemId) await selectItem(state.selectedItemId);
+    }
+  } catch (error) {
+    showToast("❌ " + (error.message || "Failed to save item"), "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = editId ? "Update Item" : "Create Item";
+    }
   }
 }

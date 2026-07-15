@@ -112,23 +112,17 @@ export function updatePagination(page, totalPages, totalItems) {
   const next = DOM.nextPageBtn();
 
   const displayTotalPages = Math.max(1, totalPages);
-
-  if (info) {
+  if (info)
     info.textContent = `Page ${page} of ${displayTotalPages} (${totalItems} items)`;
-  }
 
+  // ✅ Pakai class, bukan inline style
   if (prev) {
-    const isFirst = page <= 1;
-    prev.disabled = isFirst;
-    prev.style.opacity = isFirst ? "0.4" : "1";
-    prev.style.cursor = isFirst ? "not-allowed" : "pointer";
+    prev.classList.toggle("disabled", page <= 1);
+    prev.disabled = page <= 1;
   }
-
   if (next) {
-    const isLast = page >= totalPages || totalPages === 0;
-    next.disabled = isLast;
-    next.style.opacity = isLast ? "0.4" : "1";
-    next.style.cursor = isLast ? "not-allowed" : "pointer";
+    next.classList.toggle("disabled", page >= totalPages || totalPages === 0);
+    next.disabled = page >= totalPages || totalPages === 0;
   }
 }
 

@@ -40,15 +40,16 @@ import { bindEvents } from "./handlers/events.js";
 // ============================================================
 // SELECT ITEM
 // ============================================================
+
 export async function selectItem(itemId) {
   const content = DOM.itemDetailContent();
   if (content) {
     content.innerHTML = `
-            <div style="text-align:center;padding:2rem;color:var(--text-muted);">
-                <i class="fas fa-spinner fa-spin" style="font-size:1.5rem;display:block;margin-bottom:0.5rem;"></i>
-                Loading item details...
-            </div>
-        `;
+      <div style="text-align:center;padding:2rem;color:var(--text-muted);">
+        <i class="fas fa-spinner fa-spin" style="font-size:1.5rem;display:block;margin-bottom:0.5rem;"></i>
+        Loading item details...
+      </div>
+    `;
   }
 
   const item = await InventoryAPI.fetchItemDetail(itemId);
@@ -80,17 +81,17 @@ export async function loadInventoryItems() {
     const list = DOM.inventoryItemsList();
     if (list) {
       list.innerHTML = `
-                <tr>
-                    <td colspan="7" class="no-data">
-                        <i class="fas fa-exclamation-triangle" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
-                        Failed to load inventory. Please try again.
-                        <br><br>
-                        <button class="btn-add-item" onclick="window.loadInventoryItems()">
-                            <i class="fas fa-rotate"></i> Retry
-                        </button>
-                    </td>
-                </tr>
-            `;
+        <tr>
+          <td colspan="7" class="no-data">
+            <i class="fas fa-exclamation-triangle" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
+            Failed to load inventory. Please try again.
+            <br><br>
+            <button class="btn-add-item" onclick="window.loadInventoryItems()">
+              <i class="fas fa-rotate"></i> Retry
+            </button>
+          </td>
+        </tr>
+      `;
     }
     return;
   }

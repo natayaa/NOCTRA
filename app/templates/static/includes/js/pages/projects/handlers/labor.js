@@ -10,6 +10,8 @@ import { state } from "../config.js";
 import { loadProjects } from "../index.js";
 import { renderLabor } from "../renderers/detail/labor.js";
 import { autoFillLaborRate } from "./dropdowns.js";
+import { refreshCurrentProjectContext } from "../drawer.js";
+import { getProjectById, isProjectComplete } from "../utils.js";
 
 export function updateLaborSummary(laborItems) {
   const container = document.getElementById("laborSummaryContainer");
@@ -35,6 +37,11 @@ export async function handleAddLabor() {
   const projectId = state.currentProjectId;
   if (!projectId) {
     showToast("No project selected", "error");
+    return;
+  }
+
+  if (isProjectComplete(project)) {
+    showToast("⚠️ Cannot add labor: Project is completed.", "error");
     return;
   }
 
@@ -124,16 +131,7 @@ export async function handleAddLabor() {
     }
 
     // Refresh data
-    if (state.currentProjectId) {
-      const projectData = await ProjectAPI.fetchDetail(state.currentProjectId);
-      if (projectData) {
-        state._currentProjectData = projectData;
-        renderLabor(projectData);
-        // Update summary
-        const financial = projectData?.financial_summary || {};
-        updateLaborSummary(financial.labor_items || []);
-      }
-    }
+    await refreshCurrentProjectContext();
     await loadProjects();
   }
 }

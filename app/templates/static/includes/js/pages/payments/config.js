@@ -1,5 +1,5 @@
 // ============================================================
-// payments/config.js - Configuration & State
+// payments/config.js - Configuration & State (FIXED)
 // ============================================================
 
 export const CONFIG = {
@@ -10,19 +10,16 @@ export const CONFIG = {
 };
 
 export const state = {
-  // Payments
   payments: [],
   paymentsCurrentPage: 1,
   paymentsTotalPages: 1,
   paymentsTotalItems: 0,
 
-  // Invoices
   invoices: [],
   invoicesCurrentPage: 1,
   invoicesTotalPages: 1,
   invoicesTotalItems: 0,
 
-  // Filters
   filters: {
     search: "",
     status: "",
@@ -31,8 +28,6 @@ export const state = {
     endDate: "",
   },
 
-  // Active tab
   activeTab: "payments",
-
   isLoading: false,
 };

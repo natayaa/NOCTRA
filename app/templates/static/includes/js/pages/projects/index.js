@@ -36,8 +36,6 @@ import {
   handleDeleteMaterial,
 } from "./handlers/materials.js";
 import { handleAddLabor, handleDeleteLabor } from "./handlers/labor.js";
-import { initHoursKeypad } from "./handlers/keypad.js";
-import { initMaterialQtyKeypad } from "./handlers/materialKeypad.js";
 
 // ============================================================
 // MAIN LOAD FUNCTION
@@ -124,8 +122,6 @@ export async function initProjects() {
     await loadProjects();
     await loadMaterialItems();
     await loadLaborTypes("labor");
-    initHoursKeypad();
-    initMaterialQtyKeypad();
     console.log("✅ Projects page initialized successfully");
   } catch (error) {
     console.error("❌ Failed to initialize:", error);
@@ -165,7 +161,6 @@ window.handleDeleteMaterial = handleDeleteMaterial;
 window.handleDeleteLabor = handleDeleteLabor;
 window.handleConsumeMaterial = handleConsumeMaterial;
 window.handleAddLabor = handleAddLabor;
-window.initHoursKeypad = initHoursKeypad;
 window.refreshProjects = refreshProjects;
 
 console.log("📋 Projects page module ready");

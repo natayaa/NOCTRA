@@ -10,7 +10,7 @@
       "get": {
         "tags": ["Customer Inquiries"],
         "summary": "List Inquiries",
-        "description": "List all inquiries with filters.",
+        "description": "List all inquiries with filters.\n\n**Status values**: new, under_review, contacted, quoted, approved, converted, rejected, closed, completed\n**Project status values**: draft, active, in_progress, on_hold, completed, cancelled, preparation, painting, assembly",
         "operationId": "list_inquiries_api_api_inquiries__get",
         "parameters": [
           {
@@ -19,10 +19,10 @@
             "required": false,
             "schema": {
               "anyOf": [{ "type": "string" }, { "type": "null" }],
-              "description": "Filter by status",
+              "description": "Filter by inquiry status",
               "title": "Status"
             },
-            "description": "Filter by status"
+            "description": "Filter by inquiry status"
           },
           {
             "name": "search",
@@ -30,10 +30,10 @@
             "required": false,
             "schema": {
               "anyOf": [{ "type": "string" }, { "type": "null" }],
-              "description": "Search by name, phone, vehicle",
+              "description": "Search by name, phone, brand, model, plate",
               "title": "Search"
             },
-            "description": "Search by name, phone, vehicle"
+            "description": "Search by name, phone, brand, model, plate"
           },
           {
             "name": "brand",
@@ -47,17 +47,26 @@
             "description": "Filter by vehicle brand"
           },
           {
-            "name": "page",
+            "name": "project_status",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Page number",
-              "default": 1,
-              "title": "Page"
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "description": "Filter by project status",
+              "title": "Project Status"
             },
-            "description": "Page number"
+            "description": "Filter by project status"
+          },
+          {
+            "name": "has_project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+              "description": "Filter by project existence (true/false)",
+              "title": "Has Project"
+            },
+            "description": "Filter by project existence (true/false)"
           },
           {
             "name": "limit",
@@ -68,10 +77,23 @@
               "maximum": 100,
               "minimum": 1,
               "description": "Items per page",
-              "default": 20,
+              "default": 10,
               "title": "Limit"
             },
             "description": "Items per page"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Pagination offset",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Pagination offset"
           }
         ],
         "responses": {
@@ -204,7 +226,7 @@
       "patch": {
         "tags": ["Customer Inquiries"],
         "summary": "Update Inquiry",
-        "description": "Update inquiry.",
+        "description": "Update inquiry status dengan validasi transisi.\n    \n    Status yang diperbolehkan:\n    - new → under_review, contacted, rejected\n    - under_review → contacted, quoted, rejected\n    - contacted → quoted, rejected\n    - quoted → approved, rejected\n    - approved → converted, rejected\n    - converted → completed, rejected\n    - rejected → closed\n    - closed → (final)\n    - completed → (final)",
         "operationId": "update_inquiry_api_api_inquiries__inquiry_id__patch",
         "parameters": [
           {
@@ -271,6 +293,45 @@
               }
             }
           },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/inquiries/export": {
+      "get": {
+        "tags": ["Customer Inquiries"],
+        "summary": "Export Inquiries",
+        "description": "Export all inquiries into csv",
+        "operationId": "export_inquiries_api_api_inquiries_export_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response" },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1137,6 +1198,44 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/inquiries/{inquiry_id}/whatsapp-message": {
+      "get": {
+        "tags": ["Customer Inquiries"],
+        "summary": "Get Whatsapp Message",
+        "description": "Generate WhatsApp message menggunakan template dari settings.",
+        "operationId": "get_whatsapp_message_api_api_inquiries__inquiry_id__whatsapp_message_get",
+        "parameters": [
+          {
+            "name": "inquiry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Inquiry Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
               }
             }
           }
@@ -2753,6 +2852,228 @@
         }
       }
     },
+    "/api/api/payments/pending": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get Pending Payments",
+        "description": "Get all pending payments.",
+        "operationId": "get_pending_payments_api_api_payments_pending_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/payments/statistics": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get Payment Statistics",
+        "description": "Get payment statistics.",
+        "operationId": "get_payment_statistics_api_api_payments_statistics_get",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "type": "string", "format": "date-time" },
+                { "type": "null" }
+              ],
+              "description": "Tanggal mulai",
+              "title": "Start Date"
+            },
+            "description": "Tanggal mulai"
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "type": "string", "format": "date-time" },
+                { "type": "null" }
+              ],
+              "description": "Tanggal akhir",
+              "title": "End Date"
+            },
+            "description": "Tanggal akhir"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/payments/invoices/generate-number": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Generate Invoice Number",
+        "description": "Generate a unique invoice number.",
+        "operationId": "generate_invoice_number_api_api_payments_invoices_generate_number_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/payments/invoices/summary": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get Invoice Summary",
+        "description": "Get invoice summary.",
+        "operationId": "get_invoice_summary_api_api_payments_invoices_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/payments/invoices/outstanding": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get Outstanding Invoices",
+        "description": "Get all outstanding invoices.",
+        "operationId": "get_outstanding_invoices_api_api_payments_invoices_outstanding_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/payments/invoices/overdue": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get Overdue Invoices",
+        "description": "Get all overdue invoices.",
+        "operationId": "get_overdue_invoices_api_api_payments_invoices_overdue_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/payments/invoices/inquiry/{inquiry_id}": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get Inquiry Invoices",
+        "description": "Get all invoices for an inquiry.",
+        "operationId": "get_inquiry_invoices_api_api_payments_invoices_inquiry__inquiry_id__get",
+        "parameters": [
+          {
+            "name": "inquiry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Inquiry Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/payments/invoices/project/{project_id}": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get Project Invoices",
+        "description": "Get all invoices for a project.",
+        "operationId": "get_project_invoices_api_api_payments_invoices_project__project_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/api/payments/": {
       "post": {
         "tags": ["Payments"],
@@ -2979,6 +3300,24 @@
         }
       }
     },
+    "/api/api/payments/payment-methods": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get Payment Methods",
+        "description": "Get active payment methods dari settings.",
+        "operationId": "get_payment_methods_api_api_payments_payment_methods_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/api/payments/{payment_id}/confirm": {
       "post": {
         "tags": ["Payments"],
@@ -2998,7 +3337,6 @@
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -3074,44 +3412,6 @@
         }
       }
     },
-    "/api/api/payments/inquiry/{inquiry_id}/financial-summary": {
-      "get": {
-        "tags": ["Payments"],
-        "summary": "Get Inquiry Financial Summary",
-        "description": "Get comprehensive financial summary for an inquiry.",
-        "operationId": "get_inquiry_financial_summary_api_api_payments_inquiry__inquiry_id__financial_summary_get",
-        "parameters": [
-          {
-            "name": "inquiry_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Inquiry Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/api/payments/invoices": {
       "post": {
         "tags": ["Payments"],
@@ -3140,24 +3440,6 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/api/payments/invoices/generate-number": {
-      "get": {
-        "tags": ["Payments"],
-        "summary": "Generate Invoice Number",
-        "description": "Generate a unique invoice number.",
-        "operationId": "generate_invoice_number_api_api_payments_invoices_generate_number_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
               }
             }
           }
@@ -3240,118 +3522,6 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/api/payments/invoices/inquiry/{inquiry_id}": {
-      "get": {
-        "tags": ["Payments"],
-        "summary": "Get Inquiry Invoices",
-        "description": "Get all invoices for an inquiry.",
-        "operationId": "get_inquiry_invoices_api_api_payments_invoices_inquiry__inquiry_id__get",
-        "parameters": [
-          {
-            "name": "inquiry_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Inquiry Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/api/payments/invoices/project/{project_id}": {
-      "get": {
-        "tags": ["Payments"],
-        "summary": "Get Project Invoices",
-        "description": "Get all invoices for a project.",
-        "operationId": "get_project_invoices_api_api_payments_invoices_project__project_id__get",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Project Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/api/payments/invoices/outstanding": {
-      "get": {
-        "tags": ["Payments"],
-        "summary": "Get Outstanding Invoices",
-        "description": "Get all outstanding invoices.",
-        "operationId": "get_outstanding_invoices_api_api_payments_invoices_outstanding_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/api/payments/invoices/overdue": {
-      "get": {
-        "tags": ["Payments"],
-        "summary": "Get Overdue Invoices",
-        "description": "Get all overdue invoices.",
-        "operationId": "get_overdue_invoices_api_api_payments_invoices_overdue_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
               }
             }
           }
@@ -3567,40 +3737,22 @@
         }
       }
     },
-    "/api/api/payments/statistics": {
+    "/api/api/payments/inquiry/{inquiry_id}/financial-summary": {
       "get": {
         "tags": ["Payments"],
-        "summary": "Get Payment Statistics",
-        "description": "Get payment statistics.",
-        "operationId": "get_payment_statistics_api_api_payments_statistics_get",
+        "summary": "Get Inquiry Financial Summary",
+        "description": "Get comprehensive financial summary for an inquiry.",
+        "operationId": "get_inquiry_financial_summary_api_api_payments_inquiry__inquiry_id__financial_summary_get",
         "parameters": [
           {
-            "name": "start_date",
-            "in": "query",
-            "required": false,
+            "name": "inquiry_id",
+            "in": "path",
+            "required": true,
             "schema": {
-              "anyOf": [
-                { "type": "string", "format": "date-time" },
-                { "type": "null" }
-              ],
-              "description": "Tanggal mulai",
-              "title": "Start Date"
-            },
-            "description": "Tanggal mulai"
-          },
-          {
-            "name": "end_date",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                { "type": "string", "format": "date-time" },
-                { "type": "null" }
-              ],
-              "description": "Tanggal akhir",
-              "title": "End Date"
-            },
-            "description": "Tanggal akhir"
+              "type": "string",
+              "format": "uuid",
+              "title": "Inquiry Id"
+            }
           }
         ],
         "responses": {
@@ -3623,18 +3775,38 @@
         }
       }
     },
-    "/api/api/payments/invoices/summary": {
+    "/api/api/payments/project/{project_id}/financial-summary": {
       "get": {
         "tags": ["Payments"],
-        "summary": "Get Invoice Summary",
-        "description": "Get invoice summary.",
-        "operationId": "get_invoice_summary_api_api_payments_invoices_summary_get",
+        "summary": "Get Project Financial Summary",
+        "description": "Get financial summary for a project.",
+        "operationId": "get_project_financial_summary_api_api_payments_project__project_id__financial_summary_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
               }
             }
           }
@@ -3769,9 +3941,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedResponse_PriceListItemResponse_"
-                }
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
               }
             }
           },
@@ -3789,9 +3959,9 @@
     "/api/api/price-list/items/{item_id}": {
       "get": {
         "tags": ["Price List"],
-        "summary": "Get Price Item",
+        "summary": "Get Price List Item",
         "description": "Get price list item by ID.",
-        "operationId": "get_price_item_api_api_price_list_items__item_id__get",
+        "operationId": "get_price_list_item_api_api_price_list_items__item_id__get",
         "parameters": [
           {
             "name": "item_id",
@@ -3821,9 +3991,9 @@
       },
       "patch": {
         "tags": ["Price List"],
-        "summary": "Update Price Item",
+        "summary": "Update Price List Item",
         "description": "Update price list item.",
-        "operationId": "update_price_item_api_api_price_list_items__item_id__patch",
+        "operationId": "update_price_list_item_api_api_price_list_items__item_id__patch",
         "parameters": [
           {
             "name": "item_id",
@@ -3926,40 +4096,30 @@
         }
       }
     },
-    "/api/api/price-list/categories": {
-      "get": {
-        "tags": ["Price List"],
-        "summary": "Get Categories",
-        "description": "Get all unique categories.",
-        "operationId": "get_categories_api_api_price_list_categories_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          }
-        }
-      },
+    "/api/api/price-list/items/{item_id}/change-price": {
       "post": {
         "tags": ["Price List"],
-        "summary": "Create Category",
-        "description": "Create a new price list category.",
-        "operationId": "create_category_api_api_price_list_categories_post",
+        "summary": "Change Price List Item Price",
+        "description": "Change price with history tracking.",
+        "operationId": "change_price_list_item_price_api_api_price_list_items__item_id__change_price_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Item Id" }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PriceListCategoryCreate"
-              }
+              "schema": { "$ref": "#/components/schemas/PriceChangeRequest" }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -3978,12 +4138,28 @@
         }
       }
     },
-    "/api/api/price-list/categories/with-counts": {
-      "get": {
+    "/api/api/price-list/items/{item_id}/revert-price": {
+      "post": {
         "tags": ["Price List"],
-        "summary": "Get Categories With Counts",
-        "description": "Get categories with item counts.",
-        "operationId": "get_categories_with_counts_api_api_price_list_categories_with_counts_get",
+        "summary": "Revert Price List Item Price",
+        "description": "Revert price to historical price.",
+        "operationId": "revert_price_list_item_price_api_api_price_list_items__item_id__revert_price_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Item Id" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PriceRevertRequest" }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3992,22 +4168,94 @@
                 "schema": { "$ref": "#/components/schemas/BaseResponse" }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
           }
         }
       }
     },
-    "/api/api/price-list/stats": {
+    "/api/api/price-list/items/{item_id}/price-history": {
       "get": {
         "tags": ["Price List"],
-        "summary": "Get Price List Stats",
-        "description": "Get price list statistics.",
-        "operationId": "get_price_list_stats_api_api_price_list_stats_get",
+        "summary": "Get Price List Item History",
+        "description": "Get price history for an item.",
+        "operationId": "get_price_list_item_history_api_api_price_list_items__item_id__price_history_get",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Item Id" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Limit",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Limit"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/price-list/items/{item_id}/custom-prices": {
+      "get": {
+        "tags": ["Price List"],
+        "summary": "Get Price List Item Custom Prices",
+        "description": "Get all custom prices for an item.",
+        "operationId": "get_price_list_item_custom_prices_api_api_price_list_items__item_id__custom_prices_get",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Item Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
               }
             }
           }
@@ -4055,9 +4303,9 @@
     "/api/api/price-list/items/bulk-update-prices": {
       "post": {
         "tags": ["Price List"],
-        "summary": "Bulk Update Prices",
+        "summary": "Bulk Update Price List Prices",
         "description": "Bulk update prices by percentage.",
-        "operationId": "bulk_update_prices_api_api_price_list_items_bulk_update_prices_post",
+        "operationId": "bulk_update_price_list_prices_api_api_price_list_items_bulk_update_prices_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4086,12 +4334,48 @@
         }
       }
     },
+    "/api/api/price-list/categories": {
+      "get": {
+        "tags": ["Price List"],
+        "summary": "Get Price List Categories",
+        "description": "Get all unique category names.",
+        "operationId": "get_price_list_categories_api_api_price_list_categories_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/price-list/categories/with-counts": {
+      "get": {
+        "tags": ["Price List"],
+        "summary": "Get Price List Categories With Counts",
+        "description": "Get categories with item counts.",
+        "operationId": "get_price_list_categories_with_counts_api_api_price_list_categories_with_counts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/api/price-list/categories/list": {
       "get": {
         "tags": ["Price List"],
-        "summary": "List Categories",
+        "summary": "List Price List Categories",
         "description": "List all active categories.",
-        "operationId": "list_categories_api_api_price_list_categories_list_get",
+        "operationId": "list_price_list_categories_api_api_price_list_categories_list_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4107,9 +4391,9 @@
     "/api/api/price-list/categories/{category_id}": {
       "patch": {
         "tags": ["Price List"],
-        "summary": "Update Category",
+        "summary": "Update Price List Category",
         "description": "Update a category.",
-        "operationId": "update_category_api_api_price_list_categories__category_id__patch",
+        "operationId": "update_price_list_category_api_api_price_list_categories__category_id__patch",
         "parameters": [
           {
             "name": "category_id",
@@ -4153,9 +4437,9 @@
       },
       "delete": {
         "tags": ["Price List"],
-        "summary": "Delete Category",
+        "summary": "Delete Price List Category",
         "description": "Delete a category.",
-        "operationId": "delete_category_api_api_price_list_categories__category_id__delete",
+        "operationId": "delete_price_list_category_api_api_price_list_categories__category_id__delete",
         "parameters": [
           {
             "name": "category_id",
@@ -4191,9 +4475,9 @@
     "/api/api/price-list/discounts": {
       "get": {
         "tags": ["Price List"],
-        "summary": "List Discounts",
+        "summary": "List Price List Discounts",
         "description": "List all active discounts.",
-        "operationId": "list_discounts_api_api_price_list_discounts_get",
+        "operationId": "list_price_list_discounts_api_api_price_list_discounts_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4207,9 +4491,9 @@
       },
       "post": {
         "tags": ["Price List"],
-        "summary": "Create Discount",
+        "summary": "Create Price List Discount",
         "description": "Create a new discount.",
-        "operationId": "create_discount_api_api_price_list_discounts_post",
+        "operationId": "create_price_list_discount_api_api_price_list_discounts_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4240,46 +4524,12 @@
         }
       }
     },
-    "/api/api/price-list/discounts/validate/{code}": {
-      "get": {
-        "tags": ["Price List"],
-        "summary": "Validate Discount",
-        "description": "Validate a discount code.",
-        "operationId": "validate_discount_api_api_price_list_discounts_validate__code__get",
-        "parameters": [
-          {
-            "name": "code",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string", "title": "Code" }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/api/price-list/discounts/{discount_id}": {
       "get": {
         "tags": ["Price List"],
-        "summary": "Get Discount",
+        "summary": "Get Price List Discount",
         "description": "Get discount by ID.",
-        "operationId": "get_discount_api_api_price_list_discounts__discount_id__get",
+        "operationId": "get_price_list_discount_api_api_price_list_discounts__discount_id__get",
         "parameters": [
           {
             "name": "discount_id",
@@ -4313,9 +4563,9 @@
       },
       "patch": {
         "tags": ["Price List"],
-        "summary": "Update Discount",
+        "summary": "Update Price List Discount",
         "description": "Update a discount.",
-        "operationId": "update_discount_api_api_price_list_discounts__discount_id__patch",
+        "operationId": "update_price_list_discount_api_api_price_list_discounts__discount_id__patch",
         "parameters": [
           {
             "name": "discount_id",
@@ -4361,9 +4611,9 @@
     "/api/api/price-list/discounts/{discount_id}/use": {
       "post": {
         "tags": ["Price List"],
-        "summary": "Use Discount",
+        "summary": "Use Price List Discount",
         "description": "Use a discount (increment used_count).",
-        "operationId": "use_discount_api_api_price_list_discounts__discount_id__use_post",
+        "operationId": "use_price_list_discount_api_api_price_list_discounts__discount_id__use_post",
         "parameters": [
           {
             "name": "discount_id",
@@ -4396,12 +4646,46 @@
         }
       }
     },
+    "/api/api/price-list/discounts/validate/{code}": {
+      "get": {
+        "tags": ["Price List"],
+        "summary": "Validate Price List Discount",
+        "description": "Validate a discount code.",
+        "operationId": "validate_price_list_discount_api_api_price_list_discounts_validate__code__get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Code" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/api/price-list/discounts/applicable": {
       "get": {
         "tags": ["Price List"],
-        "summary": "Get Applicable Discounts",
+        "summary": "Get Applicable Price List Discounts",
         "description": "Get discounts applicable to a specific item or category.",
-        "operationId": "get_applicable_discounts_api_api_price_list_discounts_applicable_get",
+        "operationId": "get_applicable_price_list_discounts_api_api_price_list_discounts_applicable_get",
         "parameters": [
           {
             "name": "category",
@@ -4449,152 +4733,16 @@
         }
       }
     },
-    "/api/api/price-list/items/{item_id}/price-history": {
-      "get": {
-        "tags": ["Price List"],
-        "summary": "Get Price History",
-        "description": "Get price history for an item.",
-        "operationId": "get_price_history_api_api_price_list_items__item_id__price_history_get",
-        "parameters": [
-          {
-            "name": "item_id",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string", "format": "uuid", "title": "Item Id" }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/api/price-list/items/{item_id}/change-price": {
-      "post": {
-        "tags": ["Price List"],
-        "summary": "Change Price",
-        "description": "Change price with history tracking.",
-        "operationId": "change_price_api_api_price_list_items__item_id__change_price_post",
-        "parameters": [
-          {
-            "name": "item_id",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string", "format": "uuid", "title": "Item Id" }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_change_price_api_api_price_list_items__item_id__change_price_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/api/price-list/items/{item_id}/revert-price": {
-      "post": {
-        "tags": ["Price List"],
-        "summary": "Revert Price",
-        "description": "Revert price to historical price.",
-        "operationId": "revert_price_api_api_price_list_items__item_id__revert_price_post",
-        "parameters": [
-          {
-            "name": "item_id",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string", "format": "uuid", "title": "Item Id" }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_revert_price_api_api_price_list_items__item_id__revert_price_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/api/price-list/custom-prices": {
       "post": {
         "tags": ["Price List"],
-        "summary": "Create Custom Price",
+        "summary": "Create Price List Custom Price",
         "description": "Create custom price.",
-        "operationId": "create_custom_price_api_api_price_list_custom_prices_post",
+        "operationId": "create_price_list_custom_price_api_api_price_list_custom_prices_post",
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_create_custom_price_api_api_price_list_custom_prices_post"
-              }
+              "schema": { "$ref": "#/components/schemas/CustomPriceCreate" }
             }
           },
           "required": true
@@ -4619,46 +4767,12 @@
         }
       }
     },
-    "/api/api/price-list/items/{item_id}/custom-prices": {
-      "get": {
-        "tags": ["Price List"],
-        "summary": "Get Custom Prices",
-        "description": "Get all custom prices for an item.",
-        "operationId": "get_custom_prices_api_api_price_list_items__item_id__custom_prices_get",
-        "parameters": [
-          {
-            "name": "item_id",
-            "in": "path",
-            "required": true,
-            "schema": { "type": "string", "format": "uuid", "title": "Item Id" }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BaseResponse" }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/api/price-list/custom-prices/{custom_price_id}": {
       "delete": {
         "tags": ["Price List"],
-        "summary": "Delete Custom Price",
+        "summary": "Delete Price List Custom Price",
         "description": "Delete custom price.",
-        "operationId": "delete_custom_price_api_api_price_list_custom_prices__custom_price_id__delete",
+        "operationId": "delete_price_list_custom_price_api_api_price_list_custom_prices__custom_price_id__delete",
         "parameters": [
           {
             "name": "custom_price_id",
@@ -4685,6 +4799,24 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/price-list/stats": {
+      "get": {
+        "tags": ["Price List"],
+        "summary": "Get Price List Stats",
+        "description": "Get price list statistics.",
+        "operationId": "get_price_list_stats_api_api_price_list_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
               }
             }
           }
@@ -5964,10 +6096,1643 @@
         }
       }
     },
-    "/": {
+    "/api/api/settings/workshop": {
       "get": {
-        "summary": "Landing Page",
-        "operationId": "landing_page__get",
+        "tags": ["Settings"],
+        "summary": "Get Workshop Settings",
+        "description": "Get workshop settings.",
+        "operationId": "get_workshop_settings_api_api_settings_workshop_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Settings"],
+        "summary": "Update Workshop Settings",
+        "description": "Update workshop settings.",
+        "operationId": "update_workshop_settings_api_api_settings_workshop_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkshopSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/pricing": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get Pricing Settings",
+        "description": "Get pricing settings.",
+        "operationId": "get_pricing_settings_api_api_settings_pricing_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Settings"],
+        "summary": "Update Pricing Settings",
+        "description": "Update pricing settings.",
+        "operationId": "update_pricing_settings_api_api_settings_pricing_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PricingSettingsUpdate" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/security": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get Security Settings",
+        "description": "Get security settings.",
+        "operationId": "get_security_settings_api_api_settings_security_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Settings"],
+        "summary": "Update Security Settings",
+        "description": "Update security settings.",
+        "operationId": "update_security_settings_api_api_settings_security_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecuritySettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/whatsapp-templates": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "List Whatsapp Templates",
+        "description": "List all WhatsApp templates.",
+        "operationId": "list_whatsapp_templates_api_api_settings_whatsapp_templates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Create Whatsapp Template",
+        "description": "Create WhatsApp template.",
+        "operationId": "create_whatsapp_template_api_api_settings_whatsapp_templates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppTemplateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/whatsapp-templates/default": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get Default Whatsapp Template",
+        "description": "Get default WhatsApp template.",
+        "operationId": "get_default_whatsapp_template_api_api_settings_whatsapp_templates_default_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/whatsapp-templates/{template_id}": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get Whatsapp Template",
+        "description": "Get WhatsApp template by ID.",
+        "operationId": "get_whatsapp_template_api_api_settings_whatsapp_templates__template_id__get",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Template Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Settings"],
+        "summary": "Update Whatsapp Template",
+        "description": "Update WhatsApp template.",
+        "operationId": "update_whatsapp_template_api_api_settings_whatsapp_templates__template_id__patch",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Template Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppTemplateUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Settings"],
+        "summary": "Delete Whatsapp Template",
+        "description": "Delete WhatsApp template.",
+        "operationId": "delete_whatsapp_template_api_api_settings_whatsapp_templates__template_id__delete",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Template Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/whatsapp-templates/{template_id}/set-default": {
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Set Default Template",
+        "description": "Set template as default.",
+        "operationId": "set_default_template_api_api_settings_whatsapp_templates__template_id__set_default_post",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Template Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/whatsapp-templates/render": {
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Render Whatsapp Template",
+        "description": "Render WhatsApp template with data.",
+        "operationId": "render_whatsapp_template_api_api_settings_whatsapp_templates_render_post",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                { "type": "string", "format": "uuid" },
+                { "type": "null" }
+              ],
+              "title": "Template Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": { "type": "string" },
+                "title": "Data"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/project-types": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "List Project Types",
+        "description": "List project types.",
+        "operationId": "list_project_types_api_api_settings_project_types_get",
+        "parameters": [
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include inactive types",
+              "default": false,
+              "title": "Include Inactive"
+            },
+            "description": "Include inactive types"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Create Project Type",
+        "description": "Create project type.",
+        "operationId": "create_project_type_api_api_settings_project_types_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ProjectTypeCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/project-types/{type_id}": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get Project Type",
+        "description": "Get project type by ID.",
+        "operationId": "get_project_type_api_api_settings_project_types__type_id__get",
+        "parameters": [
+          {
+            "name": "type_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Type Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Settings"],
+        "summary": "Update Project Type",
+        "description": "Update project type.",
+        "operationId": "update_project_type_api_api_settings_project_types__type_id__patch",
+        "parameters": [
+          {
+            "name": "type_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Type Id" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ProjectTypeUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Settings"],
+        "summary": "Delete Project Type",
+        "description": "Delete project type.",
+        "operationId": "delete_project_type_api_api_settings_project_types__type_id__delete",
+        "parameters": [
+          {
+            "name": "type_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Type Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/payment-methods": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "List Payment Methods",
+        "description": "List payment methods.",
+        "operationId": "list_payment_methods_api_api_settings_payment_methods_get",
+        "parameters": [
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include inactive methods",
+              "default": false,
+              "title": "Include Inactive"
+            },
+            "description": "Include inactive methods"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Create Payment Method",
+        "description": "Create payment method.",
+        "operationId": "create_payment_method_api_api_settings_payment_methods_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PaymentMethodCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/payment-methods/{method_id}": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get Payment Method",
+        "description": "Get payment method by ID.",
+        "operationId": "get_payment_method_api_api_settings_payment_methods__method_id__get",
+        "parameters": [
+          {
+            "name": "method_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Method Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Settings"],
+        "summary": "Update Payment Method",
+        "description": "Update payment method.",
+        "operationId": "update_payment_method_api_api_settings_payment_methods__method_id__patch",
+        "parameters": [
+          {
+            "name": "method_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Method Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PaymentMethodUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Settings"],
+        "summary": "Delete Payment Method",
+        "description": "Delete payment method.",
+        "operationId": "delete_payment_method_api_api_settings_payment_methods__method_id__delete",
+        "parameters": [
+          {
+            "name": "method_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Method Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/status-workflows": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "List Status Workflows",
+        "description": "List status workflows.",
+        "operationId": "list_status_workflows_api_api_settings_status_workflows_get",
+        "parameters": [
+          {
+            "name": "include_inactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include inactive workflows",
+              "default": false,
+              "title": "Include Inactive"
+            },
+            "description": "Include inactive workflows"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Create Status Workflow",
+        "description": "Create status workflow.",
+        "operationId": "create_status_workflow_api_api_settings_status_workflows_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/StatusWorkflowCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/status-workflows/map": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get Status Workflow Map",
+        "description": "Get status workflow map.",
+        "operationId": "get_status_workflow_map_api_api_settings_status_workflows_map_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/status-workflows/{workflow_id}": {
+      "patch": {
+        "tags": ["Settings"],
+        "summary": "Update Status Workflow",
+        "description": "Update status workflow.",
+        "operationId": "update_status_workflow_api_api_settings_status_workflows__workflow_id__patch",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workflow Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/StatusWorkflowUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Settings"],
+        "summary": "Delete Status Workflow",
+        "description": "Delete status workflow.",
+        "operationId": "delete_status_workflow_api_api_settings_status_workflows__workflow_id__delete",
+        "parameters": [
+          {
+            "name": "workflow_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workflow Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/settings/all": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get All Settings",
+        "description": "Get all settings in one request.",
+        "operationId": "get_all_settings_api_api_settings_all_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Login",
+        "description": "Login user.",
+        "operationId": "login_api_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserLogin" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/register": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Register",
+        "description": "Register new user.",
+        "operationId": "register_api_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserRegister" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/refresh": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Refresh Token",
+        "description": "Refresh access token.",
+        "operationId": "refresh_token_api_api_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshTokenRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Logout",
+        "description": "Logout user.",
+        "operationId": "logout_api_api_auth_logout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshTokenRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/logout-all": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Logout All",
+        "description": "Logout from all devices.",
+        "operationId": "logout_all_api_api_auth_logout_all_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "HTTPBearer": [] }]
+      }
+    },
+    "/api/api/auth/me": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Get Me",
+        "description": "Get current user profile.",
+        "operationId": "get_me_api_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "HTTPBearer": [] }]
+      }
+    },
+    "/api/api/auth/change-password": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Change Password",
+        "description": "Change user password.",
+        "operationId": "change_password_api_api_auth_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChangePasswordRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "HTTPBearer": [] }]
+      }
+    },
+    "/api/api/auth/forgot-password": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Forgot Password",
+        "description": "Request password reset.",
+        "operationId": "forgot_password_api_api_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ForgotPasswordRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/users": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "List Users",
+        "description": "List all users (admin only).",
+        "operationId": "list_users_api_api_auth_users_get",
+        "security": [{ "HTTPBearer": [] }],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 100, "title": "Limit" }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 0, "title": "Offset" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_UserResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Create User",
+        "description": "Create new user (admin only).",
+        "operationId": "create_user_api_api_auth_users_post",
+        "security": [{ "HTTPBearer": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/users/{user_id}": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Get User",
+        "description": "Get user by ID (admin only).",
+        "operationId": "get_user_api_api_auth_users__user_id__get",
+        "security": [{ "HTTPBearer": [] }],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "User Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Authentication"],
+        "summary": "Update User",
+        "description": "Update user (admin only).",
+        "operationId": "update_user_api_api_auth_users__user_id__patch",
+        "security": [{ "HTTPBearer": [] }],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "User Id" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Authentication"],
+        "summary": "Delete User",
+        "description": "Delete user (admin only).",
+        "operationId": "delete_user_api_api_auth_users__user_id__delete",
+        "security": [{ "HTTPBearer": [] }],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "User Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/roles": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "List Roles",
+        "description": "List all roles.",
+        "operationId": "list_roles_api_api_auth_roles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "HTTPBearer": [] }]
+      },
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Create Role",
+        "description": "Create new role.",
+        "operationId": "create_role_api_api_auth_roles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RoleCreate" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "HTTPBearer": [] }]
+      }
+    },
+    "/api/api/auth/roles/{role_id}": {
+      "patch": {
+        "tags": ["Authentication"],
+        "summary": "Update Role",
+        "description": "Update role.",
+        "operationId": "update_role_api_api_auth_roles__role_id__patch",
+        "security": [{ "HTTPBearer": [] }],
+        "parameters": [
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Role Id" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RoleUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Authentication"],
+        "summary": "Delete Role",
+        "description": "Delete role.",
+        "operationId": "delete_role_api_api_auth_roles__role_id__delete",
+        "security": [{ "HTTPBearer": [] }],
+        "parameters": [
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Role Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/users/{user_id}/roles": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Assign Role",
+        "description": "Assign role to user.",
+        "operationId": "assign_role_api_api_auth_users__user_id__roles_post",
+        "security": [{ "HTTPBearer": [] }],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "User Id" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserRoleCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/api/auth/users/{user_id}/roles/{role_id}": {
+      "delete": {
+        "tags": ["Authentication"],
+        "summary": "Remove Role",
+        "description": "Remove role from user.",
+        "operationId": "remove_role_api_api_auth_users__user_id__roles__role_id__delete",
+        "security": [{ "HTTPBearer": [] }],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "User Id" }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "Role Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BaseResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Basic health check endpoint.",
+        "operationId": "health_check_health_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5976,10 +7741,23 @@
         }
       }
     },
-    "/health": {
+    "/health/detailed": {
       "get": {
-        "summary": "Health Check",
-        "operationId": "health_check_health_get",
+        "summary": "Detailed Health Check",
+        "description": "Detailed health check with database status.",
+        "operationId": "detailed_health_check_health_detailed_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Landing Page",
+        "operationId": "landing_page__get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6042,29 +7820,19 @@
         "type": "object",
         "title": "Body_cancel_payment_api_api_payments__payment_id__cancel_post"
       },
-      "Body_change_price_api_api_price_list_items__item_id__change_price_post": {
-        "properties": {
-          "request": { "$ref": "#/components/schemas/PriceChangeRequest" },
-          "changed_by": {
-            "type": "string",
-            "title": "Changed By",
-            "default": "system"
-          }
-        },
-        "type": "object",
-        "required": ["request"],
-        "title": "Body_change_price_api_api_price_list_items__item_id__change_price_post"
-      },
       "Body_confirm_payment_api_api_payments__payment_id__confirm_post": {
         "properties": {
-          "confirmed_by": { "type": "string", "title": "Confirmed By" },
+          "confirmed_by": {
+            "type": "string",
+            "title": "Confirmed By",
+            "default": "system"
+          },
           "notes": {
             "anyOf": [{ "type": "string" }, { "type": "null" }],
             "title": "Notes"
           }
         },
         "type": "object",
-        "required": ["confirmed_by"],
         "title": "Body_confirm_payment_api_api_payments__payment_id__confirm_post"
       },
       "Body_contact_customer_api_api_inquiries__inquiry_id__contact_post": {
@@ -6076,19 +7844,6 @@
         },
         "type": "object",
         "title": "Body_contact_customer_api_api_inquiries__inquiry_id__contact_post"
-      },
-      "Body_create_custom_price_api_api_price_list_custom_prices_post": {
-        "properties": {
-          "request": { "$ref": "#/components/schemas/CustomPriceCreate" },
-          "created_by": {
-            "type": "string",
-            "title": "Created By",
-            "default": "system"
-          }
-        },
-        "type": "object",
-        "required": ["request"],
-        "title": "Body_create_custom_price_api_api_price_list_custom_prices_post"
       },
       "Body_release_reserved_stock_api_api_inventory_stock_release_post": {
         "properties": {
@@ -6138,19 +7893,6 @@
         "required": ["item_id", "quantity", "reference_type", "reference_id"],
         "title": "Body_reserve_stock_api_api_inventory_stock_reserve_post"
       },
-      "Body_revert_price_api_api_price_list_items__item_id__revert_price_post": {
-        "properties": {
-          "request": { "$ref": "#/components/schemas/PriceRevertRequest" },
-          "changed_by": {
-            "type": "string",
-            "title": "Changed By",
-            "default": "system"
-          }
-        },
-        "type": "object",
-        "required": ["request"],
-        "title": "Body_revert_price_api_api_price_list_items__item_id__revert_price_post"
-      },
       "Body_upload_document_api_api_projects__project_id__documents_post": {
         "properties": {
           "file": {
@@ -6189,6 +7931,26 @@
         "type": "object",
         "required": ["photos"],
         "title": "Body_upload_photos_api_api_inquiries__inquiry_id__photos_post"
+      },
+      "ChangePasswordRequest": {
+        "properties": {
+          "old_password": {
+            "type": "string",
+            "title": "Old Password",
+            "description": "Password lama"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "New Password",
+            "description": "Password baru"
+          }
+        },
+        "type": "object",
+        "required": ["old_password", "new_password"],
+        "title": "ChangePasswordRequest",
+        "description": "Request untuk change password."
       },
       "CreateInventoryItem": {
         "properties": {
@@ -7046,6 +8808,20 @@
         "title": "DepositCreate",
         "description": "Schema untuk membuat deposit."
       },
+      "ForgotPasswordRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "Email"
+          }
+        },
+        "type": "object",
+        "required": ["email"],
+        "title": "ForgotPasswordRequest",
+        "description": "Request untuk forgot password."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -7529,14 +9305,6 @@
             "title": "Sort Order",
             "description": "Urutan",
             "default": 0
-          },
-          "price_list_item_id": {
-            "anyOf": [
-              { "type": "string", "format": "uuid" },
-              { "type": "null" }
-            ],
-            "title": "Price List Item Id",
-            "description": "ID price list item"
           }
         },
         "type": "object",
@@ -7575,7 +9343,13 @@
           "note": {
             "anyOf": [{ "type": "string" }, { "type": "null" }],
             "title": "Note",
-            "description": "Catatan reminder"
+            "description": "Catatan tambahan untuk reminder"
+          },
+          "sent_via": {
+            "type": "string",
+            "title": "Sent Via",
+            "description": "email, whatsapp, sms",
+            "default": "email"
           }
         },
         "type": "object",
@@ -7707,35 +9481,6 @@
         "type": "object",
         "title": "PaginatedResponse[InventoryItemResponse]"
       },
-      "PaginatedResponse_PriceListItemResponse_": {
-        "properties": {
-          "success": { "type": "boolean", "title": "Success", "default": true },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "Success"
-          },
-          "total": { "type": "integer", "title": "Total", "default": 0 },
-          "page": { "type": "integer", "title": "Page", "default": 1 },
-          "page_size": {
-            "type": "integer",
-            "title": "Page Size",
-            "default": 10
-          },
-          "total_pages": {
-            "type": "integer",
-            "title": "Total Pages",
-            "default": 0
-          },
-          "data": {
-            "items": { "$ref": "#/components/schemas/PriceListItemResponse" },
-            "type": "array",
-            "title": "Data"
-          }
-        },
-        "type": "object",
-        "title": "PaginatedResponse[PriceListItemResponse]"
-      },
       "PaginatedResponse_ProjectResponse_": {
         "properties": {
           "success": { "type": "boolean", "title": "Success", "default": true },
@@ -7764,6 +9509,35 @@
         },
         "type": "object",
         "title": "PaginatedResponse[ProjectResponse]"
+      },
+      "PaginatedResponse_UserResponse_": {
+        "properties": {
+          "success": { "type": "boolean", "title": "Success", "default": true },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Success"
+          },
+          "total": { "type": "integer", "title": "Total", "default": 0 },
+          "page": { "type": "integer", "title": "Page", "default": 1 },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size",
+            "default": 10
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages",
+            "default": 0
+          },
+          "data": {
+            "items": { "$ref": "#/components/schemas/UserResponse" },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "PaginatedResponse[UserResponse]"
       },
       "PaymentCreate": {
         "properties": {
@@ -7854,6 +9628,85 @@
         "title": "PaymentCreate",
         "description": "Schema untuk membuat payment."
       },
+      "PaymentMethodCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "icon": {
+            "anyOf": [
+              { "type": "string", "maxLength": 50 },
+              { "type": "null" }
+            ],
+            "title": "Icon"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": ["name", "code"],
+        "title": "PaymentMethodCreate"
+      },
+      "PaymentMethodUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              { "type": "string", "maxLength": 50, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "Name"
+          },
+          "code": {
+            "anyOf": [
+              { "type": "string", "maxLength": 20, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "Code"
+          },
+          "icon": {
+            "anyOf": [
+              { "type": "string", "maxLength": 50 },
+              { "type": "null" }
+            ],
+            "title": "Icon"
+          },
+          "is_active": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Is Active"
+          },
+          "sort_order": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Sort Order"
+          },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "title": "PaymentMethodUpdate"
+      },
       "PaymentUpdate": {
         "properties": {
           "status": {
@@ -7894,6 +9747,43 @@
         "type": "object",
         "title": "PaymentUpdate",
         "description": "Schema untuk update payment."
+      },
+      "PermissionResponse": {
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "name": { "type": "string", "title": "Name" },
+          "display_name": { "type": "string", "title": "Display Name" },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          },
+          "module": { "type": "string", "title": "Module" },
+          "action": { "type": "string", "title": "Action" },
+          "is_active": { "type": "boolean", "title": "Is Active" },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "display_name",
+          "module",
+          "action",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PermissionResponse",
+        "description": "Response untuk permission."
       },
       "PriceChangeRequest": {
         "properties": {
@@ -7944,59 +9834,6 @@
         "required": ["category", "percentage"],
         "title": "PriceListBulkUpdate",
         "description": "Schema untuk bulk update harga."
-      },
-      "PriceListCategoryCreate": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "maxLength": 50,
-            "title": "Name",
-            "description": "Nama kategori (unique)"
-          },
-          "display_name": {
-            "type": "string",
-            "maxLength": 100,
-            "title": "Display Name",
-            "description": "Nama tampilan"
-          },
-          "description": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Description",
-            "description": "Deskripsi"
-          },
-          "sort_order": {
-            "type": "integer",
-            "title": "Sort Order",
-            "description": "Urutan",
-            "default": 0
-          },
-          "is_active": {
-            "type": "boolean",
-            "title": "Is Active",
-            "description": "Status aktif",
-            "default": true
-          },
-          "icon": {
-            "anyOf": [
-              { "type": "string", "maxLength": 50 },
-              { "type": "null" }
-            ],
-            "title": "Icon",
-            "description": "Icon untuk UI"
-          },
-          "parent_category": {
-            "anyOf": [
-              { "type": "string", "maxLength": 50 },
-              { "type": "null" }
-            ],
-            "title": "Parent Category",
-            "description": "Kategori induk"
-          }
-        },
-        "type": "object",
-        "required": ["name", "display_name"],
-        "title": "PriceListCategoryCreate",
-        "description": "Schema untuk membuat kategori price list."
       },
       "PriceListCategoryUpdate": {
         "properties": {
@@ -8387,141 +10224,6 @@
         "title": "PriceListItemCreate",
         "description": "Schema untuk membuat price list item."
       },
-      "PriceListItemResponse": {
-        "properties": {
-          "id": { "type": "string", "format": "uuid", "title": "Id" },
-          "category": { "type": "string", "title": "Category" },
-          "sub_category": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Sub Category"
-          },
-          "name": { "type": "string", "title": "Name" },
-          "description": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Description"
-          },
-          "price": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Price"
-          },
-          "cost_price": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              { "type": "null" }
-            ],
-            "title": "Cost Price"
-          },
-          "unit": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Unit"
-          },
-          "sku": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Sku"
-          },
-          "vehicle_brand": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Vehicle Brand"
-          },
-          "vehicle_model": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Vehicle Model"
-          },
-          "effective_date": {
-            "type": "string",
-            "format": "date",
-            "title": "Effective Date"
-          },
-          "expiry_date": {
-            "anyOf": [
-              { "type": "string", "format": "date" },
-              { "type": "null" }
-            ],
-            "title": "Expiry Date"
-          },
-          "is_active": { "type": "boolean", "title": "Is Active" },
-          "is_expired": {
-            "type": "boolean",
-            "title": "Is Expired",
-            "default": false
-          },
-          "min_quantity": {
-            "anyOf": [{ "type": "integer" }, { "type": "null" }],
-            "title": "Min Quantity"
-          },
-          "max_quantity": {
-            "anyOf": [{ "type": "integer" }, { "type": "null" }],
-            "title": "Max Quantity"
-          },
-          "discount_percentage": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              { "type": "null" }
-            ],
-            "title": "Discount Percentage"
-          },
-          "is_taxable": { "type": "boolean", "title": "Is Taxable" },
-          "is_discount_allowed": {
-            "type": "boolean",
-            "title": "Is Discount Allowed"
-          },
-          "estimated_duration_hours": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              { "type": "null" }
-            ],
-            "title": "Estimated Duration Hours"
-          },
-          "price_change_count": {
-            "type": "integer",
-            "title": "Price Change Count",
-            "default": 0
-          },
-          "created_by": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Created By"
-          },
-          "updated_by": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "title": "Updated By"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "category",
-          "name",
-          "price",
-          "effective_date",
-          "is_active",
-          "is_taxable",
-          "is_discount_allowed",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "PriceListItemResponse",
-        "description": "Response untuk price list item."
-      },
       "PriceListItemUpdate": {
         "properties": {
           "category": {
@@ -8691,6 +10393,127 @@
         "required": ["history_id"],
         "title": "PriceRevertRequest",
         "description": "Request untuk revert price."
+      },
+      "PricingSettingsUpdate": {
+        "properties": {
+          "paint_base_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Paint Base Price"
+          },
+          "restoration_base_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Restoration Base Price"
+          },
+          "detailing_base_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Detailing Base Price"
+          },
+          "custom_color_surcharge": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Custom Color Surcharge"
+          },
+          "labor_painter_per_day": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Labor Painter Per Day"
+          },
+          "labor_body_per_day": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Labor Body Per Day"
+          },
+          "labor_assembly_per_day": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Labor Assembly Per Day"
+          },
+          "labor_supervisor_per_day": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Labor Supervisor Per Day"
+          },
+          "tax_percent": {
+            "anyOf": [
+              { "type": "number", "maximum": 100.0, "minimum": 0.0 },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              { "type": "null" }
+            ],
+            "title": "Tax Percent"
+          },
+          "default_margin_percent": {
+            "anyOf": [
+              { "type": "number", "maximum": 100.0, "minimum": 0.0 },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              { "type": "null" }
+            ],
+            "title": "Default Margin Percent"
+          },
+          "default_duration_days": {
+            "anyOf": [
+              { "type": "integer", "maximum": 365.0, "minimum": 1.0 },
+              { "type": "null" }
+            ],
+            "title": "Default Duration Days"
+          },
+          "deposit_percent": {
+            "anyOf": [
+              { "type": "number", "maximum": 100.0, "minimum": 0.0 },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              { "type": "null" }
+            ],
+            "title": "Deposit Percent"
+          },
+          "currency": {
+            "anyOf": [
+              { "type": "string", "maxLength": 10 },
+              { "type": "null" }
+            ],
+            "title": "Currency"
+          },
+          "auto_generate_invoice": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Auto Generate Invoice"
+          },
+          "email_notifications_enabled": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Email Notifications Enabled"
+          },
+          "whatsapp_notifications_enabled": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Whatsapp Notifications Enabled"
+          }
+        },
+        "type": "object",
+        "title": "PricingSettingsUpdate"
       },
       "ProjectCancel": {
         "properties": {
@@ -8980,6 +10803,14 @@
             "anyOf": [{ "type": "number" }, { "type": "null" }],
             "title": "Actual Cost"
           },
+          "deposit_amount": {
+            "anyOf": [{ "type": "number" }, { "type": "null" }],
+            "title": "Deposit Amount"
+          },
+          "estimated_revenue": {
+            "anyOf": [{ "type": "number" }, { "type": "null" }],
+            "title": "Estimated Revenue"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -8988,8 +10819,7 @@
         },
         "type": "object",
         "required": ["id", "name", "status", "progress", "created_at"],
-        "title": "ProjectMinimalResponse",
-        "description": "Minimal response untuk project."
+        "title": "ProjectMinimalResponse"
       },
       "ProjectResponse": {
         "properties": {
@@ -9436,6 +11266,72 @@
         "type": "object",
         "title": "ProjectTimelineUpdate",
         "description": "Schema untuk update timeline project."
+      },
+      "ProjectTypeCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          },
+          "base_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Base Price"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": ["name"],
+        "title": "ProjectTypeCreate"
+      },
+      "ProjectTypeUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              { "type": "string", "maxLength": 50, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          },
+          "base_price": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Base Price"
+          },
+          "is_active": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Is Active"
+          },
+          "sort_order": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Sort Order"
+          }
+        },
+        "type": "object",
+        "title": "ProjectTypeUpdate"
       },
       "ProjectUpdate": {
         "properties": {
@@ -9894,6 +11790,228 @@
         "title": "PurchaseOrderUpdate",
         "description": "Schema untuk update purchase order."
       },
+      "RefreshTokenRequest": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token",
+            "description": "Refresh token"
+          }
+        },
+        "type": "object",
+        "required": ["refresh_token"],
+        "title": "RefreshTokenRequest",
+        "description": "Request untuk refresh token."
+      },
+      "RoleCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 2,
+            "title": "Name",
+            "description": "Nama role"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Display Name",
+            "description": "Nama tampilan"
+          },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description",
+            "description": "Deskripsi"
+          },
+          "permission_ids": {
+            "anyOf": [
+              {
+                "items": { "type": "string", "format": "uuid" },
+                "type": "array"
+              },
+              { "type": "null" }
+            ],
+            "title": "Permission Ids",
+            "description": "ID permissions"
+          }
+        },
+        "type": "object",
+        "required": ["name", "display_name"],
+        "title": "RoleCreate",
+        "description": "Schema untuk membuat role."
+      },
+      "RoleResponse": {
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "name": { "type": "string", "title": "Name" },
+          "display_name": { "type": "string", "title": "Display Name" },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          },
+          "is_active": { "type": "boolean", "title": "Is Active" },
+          "is_system": { "type": "boolean", "title": "Is System" },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "permissions": {
+            "items": { "$ref": "#/components/schemas/PermissionResponse" },
+            "type": "array",
+            "title": "Permissions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "display_name",
+          "is_active",
+          "is_system",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RoleResponse",
+        "description": "Response untuk role."
+      },
+      "RoleUpdate": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              { "type": "string", "maxLength": 100, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "Display Name"
+          },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          },
+          "is_active": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Is Active"
+          },
+          "permission_ids": {
+            "anyOf": [
+              {
+                "items": { "type": "string", "format": "uuid" },
+                "type": "array"
+              },
+              { "type": "null" }
+            ],
+            "title": "Permission Ids"
+          }
+        },
+        "type": "object",
+        "title": "RoleUpdate",
+        "description": "Schema untuk update role."
+      },
+      "SecuritySettingsUpdate": {
+        "properties": {
+          "require_mfa": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Require Mfa"
+          },
+          "allow_remember_me": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Allow Remember Me"
+          },
+          "force_password_change_days": {
+            "anyOf": [
+              { "type": "integer", "maximum": 365.0, "minimum": 0.0 },
+              { "type": "null" }
+            ],
+            "title": "Force Password Change Days"
+          },
+          "session_timeout_minutes": {
+            "anyOf": [
+              { "type": "integer", "maximum": 480.0, "minimum": 5.0 },
+              { "type": "null" }
+            ],
+            "title": "Session Timeout Minutes"
+          },
+          "max_login_attempts": {
+            "anyOf": [
+              { "type": "integer", "maximum": 20.0, "minimum": 3.0 },
+              { "type": "null" }
+            ],
+            "title": "Max Login Attempts"
+          },
+          "lockout_duration_minutes": {
+            "anyOf": [
+              { "type": "integer", "maximum": 1440.0, "minimum": 5.0 },
+              { "type": "null" }
+            ],
+            "title": "Lockout Duration Minutes"
+          }
+        },
+        "type": "object",
+        "title": "SecuritySettingsUpdate"
+      },
+      "StatusWorkflowCreate": {
+        "properties": {
+          "from_status": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "From Status"
+          },
+          "to_status": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "To Status"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": ["from_status", "to_status"],
+        "title": "StatusWorkflowCreate"
+      },
+      "StatusWorkflowUpdate": {
+        "properties": {
+          "from_status": {
+            "anyOf": [
+              { "type": "string", "maxLength": 50, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "From Status"
+          },
+          "to_status": {
+            "anyOf": [
+              { "type": "string", "maxLength": 50, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "To Status"
+          },
+          "sort_order": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "title": "Sort Order"
+          },
+          "is_active": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "StatusWorkflowUpdate"
+      },
       "StockAdjustment": {
         "properties": {
           "item_id": {
@@ -10185,6 +12303,268 @@
         "title": "UpdateSupplier",
         "description": "Schema untuk update supplier."
       },
+      "UserCreate": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 3,
+            "title": "Username",
+            "description": "Username"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Password",
+            "description": "Password"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Full Name",
+            "description": "Nama lengkap"
+          },
+          "phone": {
+            "anyOf": [
+              { "type": "string", "maxLength": 20 },
+              { "type": "null" }
+            ],
+            "title": "Phone",
+            "description": "Nomor telepon"
+          },
+          "department": {
+            "anyOf": [
+              { "type": "string", "maxLength": 100 },
+              { "type": "null" }
+            ],
+            "title": "Department",
+            "description": "Departemen"
+          },
+          "position": {
+            "anyOf": [
+              { "type": "string", "maxLength": 100 },
+              { "type": "null" }
+            ],
+            "title": "Position",
+            "description": "Jabatan"
+          },
+          "role_ids": {
+            "anyOf": [
+              {
+                "items": { "type": "string", "format": "uuid" },
+                "type": "array"
+              },
+              { "type": "null" }
+            ],
+            "title": "Role Ids",
+            "description": "ID roles"
+          }
+        },
+        "type": "object",
+        "required": ["username", "email", "password", "full_name"],
+        "title": "UserCreate",
+        "description": "Schema untuk membuat user baru."
+      },
+      "UserLogin": {
+        "properties": {
+          "username_or_email": {
+            "type": "string",
+            "title": "Username Or Email",
+            "description": "Username atau Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Password"
+          }
+        },
+        "type": "object",
+        "required": ["username_or_email", "password"],
+        "title": "UserLogin",
+        "description": "Schema untuk login."
+      },
+      "UserRegister": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 3,
+            "title": "Username"
+          },
+          "email": { "type": "string", "format": "email", "title": "Email" },
+          "password": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Full Name"
+          },
+          "phone": {
+            "anyOf": [
+              { "type": "string", "maxLength": 20 },
+              { "type": "null" }
+            ],
+            "title": "Phone"
+          }
+        },
+        "type": "object",
+        "required": ["username", "email", "password", "full_name"],
+        "title": "UserRegister",
+        "description": "Schema untuk registrasi user."
+      },
+      "UserResponse": {
+        "properties": {
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "username": { "type": "string", "title": "Username" },
+          "email": { "type": "string", "title": "Email" },
+          "full_name": { "type": "string", "title": "Full Name" },
+          "phone": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Phone"
+          },
+          "avatar": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Avatar"
+          },
+          "bio": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Bio"
+          },
+          "department": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Department"
+          },
+          "position": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Position"
+          },
+          "status": { "type": "string", "title": "Status" },
+          "is_superuser": { "type": "boolean", "title": "Is Superuser" },
+          "is_verified": { "type": "boolean", "title": "Is Verified" },
+          "last_login": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "title": "Last Login"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "roles": {
+            "items": { "$ref": "#/components/schemas/RoleResponse" },
+            "type": "array",
+            "title": "Roles"
+          },
+          "permissions": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Permissions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "email",
+          "full_name",
+          "status",
+          "is_superuser",
+          "is_verified",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UserResponse",
+        "description": "Response untuk user."
+      },
+      "UserRoleCreate": {
+        "properties": {
+          "role_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Role Id",
+            "description": "ID role"
+          }
+        },
+        "type": "object",
+        "required": ["role_id"],
+        "title": "UserRoleCreate",
+        "description": "Schema untuk assign role ke user."
+      },
+      "UserUpdate": {
+        "properties": {
+          "full_name": {
+            "anyOf": [
+              { "type": "string", "maxLength": 100, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "Full Name"
+          },
+          "phone": {
+            "anyOf": [
+              { "type": "string", "maxLength": 20 },
+              { "type": "null" }
+            ],
+            "title": "Phone"
+          },
+          "department": {
+            "anyOf": [
+              { "type": "string", "maxLength": 100 },
+              { "type": "null" }
+            ],
+            "title": "Department"
+          },
+          "position": {
+            "anyOf": [
+              { "type": "string", "maxLength": 100 },
+              { "type": "null" }
+            ],
+            "title": "Position"
+          },
+          "bio": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Bio"
+          },
+          "status": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Status",
+            "description": "active, inactive, suspended"
+          },
+          "role_ids": {
+            "anyOf": [
+              {
+                "items": { "type": "string", "format": "uuid" },
+                "type": "array"
+              },
+              { "type": "null" }
+            ],
+            "title": "Role Ids"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate",
+        "description": "Schema untuk update user."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -10200,7 +12580,126 @@
         "type": "object",
         "required": ["loc", "msg", "type"],
         "title": "ValidationError"
+      },
+      "WhatsAppTemplateCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "template": { "type": "string", "minLength": 1, "title": "Template" },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "default": false
+          },
+          "variables": {
+            "anyOf": [
+              {
+                "additionalProperties": { "type": "string" },
+                "type": "object"
+              },
+              { "type": "null" }
+            ],
+            "title": "Variables"
+          }
+        },
+        "type": "object",
+        "required": ["name", "template"],
+        "title": "WhatsAppTemplateCreate"
+      },
+      "WhatsAppTemplateUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              { "type": "string", "maxLength": 100, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "Name"
+          },
+          "template": {
+            "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+            "title": "Template"
+          },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          },
+          "is_default": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Is Default"
+          },
+          "variables": {
+            "anyOf": [
+              {
+                "additionalProperties": { "type": "string" },
+                "type": "object"
+              },
+              { "type": "null" }
+            ],
+            "title": "Variables"
+          }
+        },
+        "type": "object",
+        "title": "WhatsAppTemplateUpdate"
+      },
+      "WorkshopSettingsUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              { "type": "string", "maxLength": 200, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "Name"
+          },
+          "address": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Address"
+          },
+          "phone": {
+            "anyOf": [
+              { "type": "string", "maxLength": 30 },
+              { "type": "null" }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              { "type": "string", "format": "email" },
+              { "type": "null" }
+            ],
+            "title": "Email"
+          },
+          "website": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Website"
+          },
+          "logo_url": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Logo Url"
+          },
+          "favicon_url": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Favicon Url"
+          },
+          "primary_color": {
+            "anyOf": [
+              { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+              { "type": "null" }
+            ],
+            "title": "Primary Color"
+          }
+        },
+        "type": "object",
+        "title": "WorkshopSettingsUpdate"
       }
-    }
+    },
+    "securitySchemes": { "HTTPBearer": { "type": "http", "scheme": "bearer" } }
   }
 }

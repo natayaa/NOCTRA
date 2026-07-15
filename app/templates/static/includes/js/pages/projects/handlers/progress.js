@@ -6,7 +6,7 @@ import { ProjectAPI } from "../api.js";
 import { showToast } from "../toast.js";
 import { loadProjects } from "../index.js";
 import { openProjectDrawer } from "../drawer.js";
-import { getProjectById } from "../utils.js";
+import { getProjectById, isProjectComplete } from "../utils.js";
 
 export function openProgressPopup(projectId) {
   const project = getProjectById(projectId);
@@ -73,6 +73,15 @@ export async function handleSaveProgress() {
   const projectId = state._progressProjectId;
   if (!projectId) {
     showToast("No project selected", "error");
+    return;
+  }
+
+  const project = getProjectById(projectId);
+  if (isProjectComplete(project)) {
+    showToast(
+      "⚠️ Cannot update progress: Project is already completed.",
+      "error",
+    );
     return;
   }
 

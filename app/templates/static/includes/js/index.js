@@ -30,6 +30,9 @@ function closeModal() {
 
   modal.classList.remove("active");
   unlockScroll();
+
+  // 🔥 Trigger event untuk inquiry.js agar membatalkan request
+  document.dispatchEvent(new CustomEvent("modalClosed"));
 }
 
 /* OPEN / CLOSE */
@@ -39,8 +42,7 @@ closeBtn?.addEventListener("click", closeModal);
 /* BACKDROP CLOSE */
 modal?.addEventListener("click", (e) => {
   const isBackdrop =
-    e.target === modal ||
-    e.target.classList.contains("modal-backdrop");
+    e.target === modal || e.target.classList.contains("modal-backdrop");
 
   if (isBackdrop) closeModal();
 });

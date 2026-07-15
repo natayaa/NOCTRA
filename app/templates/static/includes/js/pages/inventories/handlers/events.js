@@ -4,8 +4,7 @@
 
 import { DOM } from "../dom.js";
 import { state } from "../config.js";
-import { loadInventoryItems } from "../index.js";
-import { selectItem } from "../index.js";
+import { loadInventoryItems, selectItem } from "../index.js";
 import {
   openCreateModal,
   openEditModal,
@@ -23,12 +22,20 @@ import {
   closeReorderModal,
   handleReorderSubmit,
 } from "./reorder.js";
-import { confirmDelete, exportInventory, filterByCategory } from "./actions.js";
+import { confirmDelete, exportInventory } from "./actions.js";
 import { renderAlerts } from "../renderers/alerts.js";
 import { InventoryAPI } from "../api.js";
 import { showToast } from "../toast.js";
 
+let eventsBound = false;
+
 export function bindEvents() {
+  if (eventsBound) {
+    console.log("⚠️ Events already bound, skipping...");
+    return;
+  }
+  eventsBound = true;
+
   // Pagination
   DOM.prevPageBtn()?.addEventListener("click", () => {
     if (state.currentPage > 1) {
@@ -79,7 +86,7 @@ export function bindEvents() {
   DOM.refreshAlertsBtn()?.addEventListener("click", async () => {
     const alerts = await InventoryAPI.fetchAlerts();
     renderAlerts(alerts);
-    showToast("Alerts refreshed!", "success");
+    showToast("🔄 Alerts refreshed!", "success");
   });
 
   // Close modals
@@ -131,4 +138,6 @@ export function bindEvents() {
   DOM.inventoryForm()?.addEventListener("submit", handleFormSubmit);
   DOM.stockAdjustForm()?.addEventListener("submit", handleStockAdjust);
   DOM.reorderForm()?.addEventListener("submit", handleReorderSubmit);
+
+  console.log("✅ Inventory events bound successfully!");
 }

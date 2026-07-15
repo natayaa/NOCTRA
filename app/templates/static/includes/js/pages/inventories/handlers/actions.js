@@ -2,6 +2,7 @@
 // inventories/handlers/actions.js - CRUD Actions
 // ============================================================
 
+import { DOM } from "../dom.js";
 import { InventoryAPI } from "../api.js";
 import { showToast } from "../toast.js";
 import { state } from "../config.js";
@@ -11,18 +12,22 @@ import { loadInventoryItems } from "../index.js";
 
 export async function confirmDelete(itemId) {
   const item = getItemById(itemId);
-  if (!item) return;
+  if (!item) {
+    showToast("Item not found", "error");
+    return;
+  }
 
   if (
     !confirm(
       `Are you sure you want to delete "${item.name}"? This action cannot be undone.`,
     )
-  )
+  ) {
     return;
+  }
 
   const result = await InventoryAPI.deleteItem(itemId);
   if (result) {
-    showToast("Item deleted!", "success");
+    showToast("✅ Item deleted successfully!", "success");
     if (state.selectedItemId === itemId) {
       state.selectedItemId = null;
       renderDetailPanel(null);
@@ -97,5 +102,5 @@ export function exportInventory() {
   link.click();
   URL.revokeObjectURL(link.href);
 
-  showToast("Export completed!", "success");
+  showToast("📥 Export completed!", "success");
 }

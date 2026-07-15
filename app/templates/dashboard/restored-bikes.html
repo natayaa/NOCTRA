@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+
+{% block title %}Restored Bikes | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/pages/restored-bikes.css') }}" />
+{% endblock %}
+
+{% block page_title %}Restored Bikes{% endblock %}
+{% block page_subtitle %}Showcase of completed restoration projects{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     STATS CARDS
+     ============================================================ -->
+<section class="restored-stats">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-motorcycle"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">Total Restored</span>
+            <h2 id="totalRestored">0</h2>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">Completed</span>
+            <h2 id="completedRestored">0</h2>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-clock"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">In Progress</span>
+            <h2 id="inProgressRestored">0</h2>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-trophy"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">Featured</span>
+            <h2 id="featuredRestored">0</h2>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     TOOLBAR
+     ============================================================ -->
+<section class="restored-toolbar glass">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="search" id="searchRestored" placeholder="Search by brand, model, or customer..." />
+        </div>
+        <select id="statusFilter">
+            <option value="">All Status</option>
+            <option value="completed">Completed</option>
+            <option value="in_progress">In Progress</option>
+            <option value="featured">Featured</option>
+        </select>
+        <select id="brandFilter">
+            <option value="">All Brands</option>
+            <!-- Dynamically populated -->
+        </select>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn-primary" id="addRestoredBtn">
+            <i class="fas fa-plus"></i> Add Restored Bike
+        </button>
+    </div>
+</section>
+
+<!-- ============================================================
+     GRID VIEW
+     ============================================================ -->
+<section class="restored-grid" id="restoredGrid">
+    <div class="loading-placeholder">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>Loading restored bikes...</p>
+    </div>
+</section>
+
+<!-- ============================================================
+     PAGINATION
+     ============================================================ -->
+<div class="pagination-container">
+    <button class="pagination-btn" id="prevPageBtn" disabled>
+        <i class="fas fa-chevron-left"></i> Previous
+    </button>
+    <span id="pageInfo">Page 1 of 1</span>
+    <button class="pagination-btn" id="nextPageBtn" disabled>
+        Next <i class="fas fa-chevron-right"></i>
+    </button>
+</div>
+
+<!-- ============================================================
+     MODAL: Add / Edit Restored Bike
+     ============================================================ -->
+<div class="modal-overlay" id="restoredModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <div>
+                <h2 id="modalTitle">Add Restored Bike</h2>
+                <p id="modalSubtitle">Register a completed restoration project</p>
+            </div>
+            <button id="closeModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="restoredForm">
+            <input type="hidden" id="editId" />
+
+            <div class="form-grid">
+                <!-- Basic Info -->
+                <div class="form-group">
+                    <label for="bikeBrand">Brand *</label>
+                    <input type="text" id="bikeBrand" placeholder="e.g. Yamaha" required />
+                </div>
+                <div class="form-group">
+                    <label for="bikeModel">Model *</label>
+                    <input type="text" id="bikeModel" placeholder="e.g. Mio Sporty" required />
+                </div>
+                <div class="form-group">
+                    <label for="bikeYear">Year</label>
+                    <input type="number" id="bikeYear" placeholder="2020" min="1950" max="2035" />
+                </div>
+                <div class="form-group">
+                    <label for="licensePlate">License Plate</label>
+                    <input type="text" id="licensePlate" placeholder="B 1234 XYZ" />
+                </div>
+
+                <!-- Customer & Purchase -->
+                <div class="form-group">
+                    <label for="customerName">Customer Name</label>
+                    <input type="text" id="customerName" placeholder="Customer who owned this bike" />
+                </div>
+                <div class="form-group">
+                    <label for="purchasePrice">Purchase Price (Rp)</label>
+                    <input type="number" id="purchasePrice" step="1000" min="0" placeholder="0" />
+                </div>
+                <div class="form-group">
+                    <label for="purchaseSource">Purchase Source</label>
+                    <input type="text" id="purchaseSource" placeholder="e.g. Marketplace, Owner, Auction" />
+                </div>
+                <div class="form-group">
+                    <label for="initialCondition">Initial Condition</label>
+                    <select id="initialCondition">
+                        <option value="">Select Condition</option>
+                        <option value="poor">Poor</option>
+                        <option value="fair">Fair</option>
+                        <option value="good">Good</option>
+                        <option value="excellent">Excellent</option>
+                    </select>
+                </div>
+
+                <!-- Restoration Details -->
+                <div class="form-group">
+                    <label for="restorationCost">Restoration Cost (Rp)</label>
+                    <input type="number" id="restorationCost" step="1000" min="0" placeholder="0" />
+                </div>
+                <div class="form-group">
+                    <label for="restorationDuration">Duration (days)</label>
+                    <input type="number" id="restorationDuration" min="1" placeholder="e.g. 14" />
+                </div>
+                <div class="form-group">
+                    <label for="technicianName">Lead Technician</label>
+                    <input type="text" id="technicianName" placeholder="Name of lead technician" />
+                </div>
+                <div class="form-group">
+                    <label for="restorationStatus">Status</label>
+                    <select id="restorationStatus">
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed" selected>Completed</option>
+                        <option value="featured">Featured</option>
+                    </select>
+                </div>
+
+                <!-- Description -->
+                <div class="form-group full-width">
+                    <label for="restorationNotes">Restoration Notes</label>
+                    <textarea id="restorationNotes" rows="4" placeholder="Describe the restoration process, challenges, and highlights..."></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+                <button type="submit" class="btn-primary" id="submitBtn">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     DRAWER: Detail Restored Bike
+     ============================================================ -->
+<div class="drawer" id="restoredDrawer">
+    <div class="drawer-header">
+        <div>
+            <h2 id="drawerTitle">Bike Details</h2>
+            <span id="drawerSubtitle">View full restoration details</span>
+        </div>
+        <button id="closeDrawer"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="drawer-tabs">
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="gallery">Gallery</button>
+        <button class="tab-btn" data-tab="documents">Documents</button>
+    </div>
+
+    <div class="drawer-content">
+        <!-- Tab: Overview -->
+        <div class="tab-panel active" id="tab-overview">
+            <section class="detail-card">
+                <h3>Vehicle Information</h3>
+                <div class="detail-grid">
+                    <div class="detail-item"><label>Brand</label><p id="detailBrand">-</p></div>
+                    <div class="detail-item"><label>Model</label><p id="detailModel">-</p></div>
+                    <div class="detail-item"><label>Year</label><p id="detailYear">-</p></div>
+                    <div class="detail-item"><label>License Plate</label><p id="detailPlate">-</p></div>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h3>Customer & Purchase</h3>
+                <div class="detail-grid">
+                    <div class="detail-item"><label>Customer</label><p id="detailCustomer">-</p></div>
+                    <div class="detail-item"><label>Purchase Price</label><p id="detailPurchasePrice">-</p></div>
+                    <div class="detail-item"><label>Source</label><p id="detailPurchaseSource">-</p></div>
+                    <div class="detail-item"><label>Initial Condition</label><p id="detailInitialCondition">-</p></div>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h3>Restoration Details</h3>
+                <div class="detail-grid">
+                    <div class="detail-item"><label>Cost</label><p id="detailRestorationCost">-</p></div>
+                    <div class="detail-item"><label>Duration</label><p id="detailRestorationDuration">-</p></div>
+                    <div class="detail-item"><label>Technician</label><p id="detailTechnician">-</p></div>
+                    <div class="detail-item"><label>Status</label><p id="detailStatus"><span class="status-badge">-</span></p></div>
+                </div>
+                <div style="margin-top:0.75rem;">
+                    <label style="font-size:0.65rem;text-transform:uppercase;color:var(--text-muted);">Notes</label>
+                    <p id="detailNotes" style="margin:0.2rem 0 0;color:var(--text-secondary);white-space:pre-wrap;">-</p>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h3>Actions</h3>
+                <div class="action-section">
+                    <button class="btn-secondary" id="editRestoredBtn"><i class="fas fa-pen"></i> Edit</button>
+                    <button class="btn-danger" id="deleteRestoredBtn"><i class="fas fa-trash"></i> Delete</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Tab: Gallery -->
+        <div class="tab-panel" id="tab-gallery">
+            <section class="detail-card">
+                <h3>Photo Gallery</h3>
+                <div class="gallery-upload">
+                    <div class="upload-zone" id="galleryUploadZone">
+                        <input type="file" id="galleryPhotos" multiple accept="image/*" />
+                        <i class="fas fa-image"></i>
+                        <h4>Upload Photos</h4>
+                        <p>Drag & drop or click to upload (Max 20)</p>
+                    </div>
+                </div>
+                <div class="gallery-grid" id="galleryGrid">
+                    <div class="empty-state">No photos uploaded yet</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Tab: Documents -->
+        <div class="tab-panel" id="tab-documents">
+            <section class="detail-card">
+                <h3>Documents</h3>
+                <div class="document-upload">
+                    <div class="upload-zone" id="documentUploadZone">
+                        <input type="file" id="documentFiles" multiple />
+                        <i class="fas fa-file-upload"></i>
+                        <h4>Upload Documents</h4>
+                        <p>STNK, BPKB, Invoice, etc. (PDF, JPG, PNG)</p>
+                    </div>
+                </div>
+                <div class="document-list" id="documentList">
+                    <div class="empty-state">No documents uploaded</div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    import { initRestoredBikes } from "{{ url_for('static', path='includes/js/pages/restored-bikes/index.js') }}";
+    initRestoredBikes();
+</script>
+{% endblock %}

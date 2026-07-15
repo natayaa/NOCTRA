@@ -1,7 +1,8 @@
-// static/js/pages/settings/api.js
+// static/js/pages/settings/api.js (FIXED - PATH TOAST)
 
 import { CONFIG, state } from "./config.js";
-import { showToast } from "../../pages/shared/toast.js";
+// ✅ Path diperbaiki: naik 3 level ke js/shared/toast.js
+import { showToast } from "../../../js/pages/shared/toast.js";
 
 // ============================================================
 // Base API Helper
@@ -38,7 +39,6 @@ async function apiFetch(endpoint, options = {}) {
 
 export const SettingsAPI = {
   // ==================== WORKSHOP ====================
-
   getWorkshop: async () => {
     try {
       const response = await apiFetch("/settings/workshop");
@@ -48,7 +48,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   updateWorkshop: async (data) => {
     try {
       const response = await apiFetch("/settings/workshop", {
@@ -66,7 +65,6 @@ export const SettingsAPI = {
   },
 
   // ==================== PRICING ====================
-
   getPricing: async () => {
     try {
       const response = await apiFetch("/settings/pricing");
@@ -76,7 +74,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   updatePricing: async (data) => {
     try {
       const response = await apiFetch("/settings/pricing", {
@@ -91,7 +88,6 @@ export const SettingsAPI = {
   },
 
   // ==================== SECURITY ====================
-
   getSecurity: async () => {
     try {
       const response = await apiFetch("/settings/security");
@@ -101,7 +97,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   updateSecurity: async (data) => {
     try {
       const response = await apiFetch("/settings/security", {
@@ -119,7 +114,6 @@ export const SettingsAPI = {
   },
 
   // ==================== WHATSAPP TEMPLATES ====================
-
   getWhatsAppTemplates: async () => {
     try {
       const response = await apiFetch("/settings/whatsapp-templates");
@@ -129,7 +123,6 @@ export const SettingsAPI = {
       return [];
     }
   },
-
   getDefaultWhatsAppTemplate: async () => {
     try {
       const response = await apiFetch("/settings/whatsapp-templates/default");
@@ -139,7 +132,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   createWhatsAppTemplate: async (data) => {
     try {
       const response = await apiFetch("/settings/whatsapp-templates", {
@@ -153,7 +145,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   updateWhatsAppTemplate: async (id, data) => {
     try {
       const response = await apiFetch(`/settings/whatsapp-templates/${id}`, {
@@ -167,7 +158,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   deleteWhatsAppTemplate: async (id) => {
     try {
       await apiFetch(`/settings/whatsapp-templates/${id}`, {
@@ -180,7 +170,6 @@ export const SettingsAPI = {
       return false;
     }
   },
-
   setDefaultTemplate: async (id) => {
     try {
       await apiFetch(`/settings/whatsapp-templates/${id}/set-default`, {
@@ -195,7 +184,6 @@ export const SettingsAPI = {
   },
 
   // ==================== PROJECT TYPES ====================
-
   getProjectTypes: async (includeInactive = false) => {
     try {
       const response = await apiFetch(
@@ -207,7 +195,6 @@ export const SettingsAPI = {
       return [];
     }
   },
-
   createProjectType: async (data) => {
     try {
       const response = await apiFetch("/settings/project-types", {
@@ -221,7 +208,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   updateProjectType: async (id, data) => {
     try {
       const response = await apiFetch(`/settings/project-types/${id}`, {
@@ -235,7 +221,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   deleteProjectType: async (id) => {
     try {
       await apiFetch(`/settings/project-types/${id}`, {
@@ -250,7 +235,6 @@ export const SettingsAPI = {
   },
 
   // ==================== PAYMENT METHODS ====================
-
   getPaymentMethods: async (includeInactive = false) => {
     try {
       const response = await apiFetch(
@@ -262,7 +246,6 @@ export const SettingsAPI = {
       return [];
     }
   },
-
   createPaymentMethod: async (data) => {
     try {
       const response = await apiFetch("/settings/payment-methods", {
@@ -276,7 +259,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   updatePaymentMethod: async (id, data) => {
     try {
       const response = await apiFetch(`/settings/payment-methods/${id}`, {
@@ -290,7 +272,6 @@ export const SettingsAPI = {
       return null;
     }
   },
-
   deletePaymentMethod: async (id) => {
     try {
       await apiFetch(`/settings/payment-methods/${id}`, {
@@ -304,32 +285,7 @@ export const SettingsAPI = {
     }
   },
 
-  // ==================== STATUS WORKFLOW ====================
-
-  getStatusWorkflows: async (includeInactive = false) => {
-    try {
-      const response = await apiFetch(
-        `/settings/status-workflows?include_inactive=${includeInactive}`,
-      );
-      return response.data || [];
-    } catch (error) {
-      console.error("Failed to load status workflows:", error);
-      return [];
-    }
-  },
-
-  getStatusWorkflowMap: async () => {
-    try {
-      const response = await apiFetch("/settings/status-workflows/map");
-      return response.data || {};
-    } catch (error) {
-      console.error("Failed to load status workflow map:", error);
-      return {};
-    }
-  },
-
   // ==================== ALL SETTINGS ====================
-
   getAllSettings: async () => {
     try {
       const response = await apiFetch("/settings/all");
@@ -337,63 +293,6 @@ export const SettingsAPI = {
     } catch (error) {
       showToast("Failed to load settings: " + error.message, "error");
       return null;
-    }
-  },
-};
-
-// ============================================================
-// User API (if not available elsewhere)
-// ============================================================
-
-export const UserAPI = {
-  getUsers: async () => {
-    try {
-      const response = await apiFetch("/users");
-      return response.data || [];
-    } catch (error) {
-      console.error("Failed to load users:", error);
-      return [];
-    }
-  },
-
-  createUser: async (data) => {
-    try {
-      const response = await apiFetch("/users", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
-      showToast("User created!", "success");
-      return response.data;
-    } catch (error) {
-      showToast("Failed to create user: " + error.message, "error");
-      return null;
-    }
-  },
-
-  updateUser: async (id, data) => {
-    try {
-      const response = await apiFetch(`/users/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      });
-      showToast("User updated!", "success");
-      return response.data;
-    } catch (error) {
-      showToast("Failed to update user: " + error.message, "error");
-      return null;
-    }
-  },
-
-  deleteUser: async (id) => {
-    try {
-      await apiFetch(`/users/${id}`, {
-        method: "DELETE",
-      });
-      showToast("User deleted", "info");
-      return true;
-    } catch (error) {
-      showToast("Failed to delete user: " + error.message, "error");
-      return false;
     }
   },
 };

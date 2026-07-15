@@ -9,10 +9,12 @@
   // ─── Constants ──────────────────────────────────────────────
   const API_BASE = "/api/api/inquiries/";
   const PHONE_REGEX = /^(\+62|62|08)\d{8,13}$/;
+  const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   const YEAR_MIN = 1950;
   const MAX_PHOTOS = 10;
   const MIN_DESCRIPTION_LENGTH = 20;
   const MIN_NAME_LENGTH = 2;
+  const MAX_FILE_SIZE_MB = 5;
 
   // ─── Main Class ──────────────────────────────────────────────
   class InquiryWizard {
@@ -20,10 +22,12 @@
     #dom = {};
     #state = {
       currentStep: 0,
-      isSubmitting: false,
       totalSteps: 3,
+      isSubmitting: false,
+      isUploading: false,
     };
     #photoFiles = [];
+    #abortController = null;
 
     // ─── Constructor ──────────────────────────────────────────
     constructor() {
@@ -84,6 +88,7 @@
       refs.servicesCheckboxes = document.querySelectorAll(
         'input[name="services"]',
       );
+      refs.modal = document.getElementById("inquiryModal");
 
       this.#dom = { ...this.#dom, ...refs };
     }
@@ -104,12 +109,25 @@
 
       nextBtn?.addEventListener("click", () => this.#goNext());
       prevBtn?.addEventListener("click", () => this.#goPrev());
+
+      // 🔥 Gunakan event submit biasa, jangan double
       form?.addEventListener("submit", (e) => this.#handleSubmit(e));
 
-      // Phone number formatting - hanya angka dan +
+      // Phone number formatting
       phone_number?.addEventListener("input", (e) => {
-        e.target.value = e.target.value.replace(/[^0-9+]/g, "");
-        e.target.value = e.target.value.replace(/(\+62|62)/, "+62");
+        let val = e.target.value.replace(/[^0-9+]/g, "");
+        // Pastikan +62 di depan
+        if (val.startsWith("62") && !val.startsWith("+")) {
+          val = "+" + val;
+        }
+        if (val.length > 0 && !val.startsWith("+")) {
+          // Jika tidak mulai dengan +, tambahkan +62
+          const numeric = val.replace(/\D/g, "");
+          if (numeric.length > 0) {
+            val = "+62" + numeric;
+          }
+        }
+        e.target.value = val;
       });
 
       // License plate uppercase
@@ -117,7 +135,7 @@
         e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
       });
 
-      // Service cards toggle - click entire card
+      // Service cards toggle
       this.#dom.serviceCards.forEach((card) => {
         const checkbox = card.querySelector('input[type="checkbox"]');
         if (!checkbox) return;
@@ -127,7 +145,6 @@
         };
 
         card.addEventListener("click", (e) => {
-          // Prevent double toggle if checkbox clicked directly
           if (e.target.tagName !== "INPUT") {
             checkbox.checked = !checkbox.checked;
             sync();
@@ -138,7 +155,7 @@
         sync();
       });
 
-      // Brand - Model dependency
+      // Brand → Model filtering
       bike_brand?.addEventListener("change", () => this.#filterModels());
       this.#filterModels();
 
@@ -147,7 +164,7 @@
         this.#handlePhotoUpload(e);
       });
 
-      // Drag and drop support
+      // Drag and drop
       const uploadZone = this.#dom.uploadZone;
       if (uploadZone) {
         uploadZone.addEventListener("dragover", (e) => {
@@ -167,23 +184,31 @@
         });
       }
 
-      // 🔥 FIXED: Enter key support - prevent double submission
+      // 🔥 Enter key → next step atau submit
       form?.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
           e.preventDefault();
-          const currentStep = this.#state.currentStep;
-          if (currentStep === this.#state.totalSteps - 1) {
-            // 🔥 FIX: Gunakan form.dispatchEvent untuk trigger submit
-            // Ini akan memicu event submit yang sudah di-handle oleh form listener
-            // Dan mencegah double trigger karena kita tidak memanggil click() pada submitBtn
-            if (this.#validateStep(currentStep)) {
-              // Gunakan form.requestSubmit() untuk trigger submit secara native
-              // Ini akan memicu event submit yang sama seperti klik tombol submit
+          if (this.#state.currentStep === this.#state.totalSteps - 1) {
+            if (
+              this.#validateStep(this.#state.currentStep) &&
+              !this.#state.isSubmitting
+            ) {
               form.requestSubmit();
             }
           } else {
             nextBtn?.click();
           }
+        }
+      });
+
+      // 🔥 Close modal on backdrop click (dari index.js sudah handle, tapi kita tambahkan safety)
+      const modal = this.#dom.modal;
+      modal?.addEventListener("click", (e) => {
+        if (
+          e.target === modal ||
+          e.target.classList.contains("modal-backdrop")
+        ) {
+          // Tidak langsung close, biar index.js yang handle
         }
       });
     }
@@ -197,22 +222,22 @@
 
       // Validate file count
       if (files.length > MAX_PHOTOS) {
-        this.#showModal(
+        this.#showAlert(
           "warning",
-          "Too Many Photos",
+          "Terlalu Banyak Foto",
           `Maksimal ${MAX_PHOTOS} foto diperbolehkan.`,
         );
         input.value = "";
         return;
       }
 
-      // Validate file size (max 5MB each)
+      // Validate file size
       for (const file of files) {
-        if (file.size > 5 * 1024 * 1024) {
-          this.#showModal(
+        if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+          this.#showAlert(
             "warning",
-            "File Too Large",
-            `File "${file.name}" melebihi 5MB.`,
+            "File Terlalu Besar",
+            `File "${file.name}" melebihi ${MAX_FILE_SIZE_MB}MB.`,
           );
           input.value = "";
           return;
@@ -261,7 +286,6 @@
           removeBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             this.#photoFiles.splice(index, 1);
-            // Update input files
             const dt = new DataTransfer();
             this.#photoFiles.forEach((f) => dt.items.add(f));
             this.#dom.project_photos.files = dt.files;
@@ -297,7 +321,6 @@
         option.style.display = brand === selectedBrand ? "" : "none";
       });
 
-      // Reset selection if current model doesn't match brand
       if (bike_model.value) {
         const selectedOption = bike_model.querySelector(
           `option[value="${bike_model.value}"]`,
@@ -314,7 +337,6 @@
       if (this.#state.currentStep < this.#dom.pages.length - 1) {
         this.#state.currentStep++;
         this.#updateWizard();
-        // Scroll to top of form
         this.#dom.form?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }
@@ -328,6 +350,10 @@
     }
 
     #initWizard() {
+      // Cek source dari query param
+      const urlParams = new URLSearchParams(window.location.search);
+      const source = urlParams.get("source") || "website";
+      console.log(`📊 Source: ${source}`);
       this.#updateWizard();
     }
 
@@ -364,7 +390,6 @@
         progressLine.style.background = `linear-gradient(90deg, #ff6b00 ${percentage}%, rgba(255,255,255,.08) ${percentage}%)`;
       }
 
-      // Update step numbers
       steps.forEach((step, index) => {
         const span = step.querySelector("span");
         if (span) {
@@ -403,12 +428,15 @@
 
       const phone = phone_number?.value.trim() || "";
       if (!PHONE_REGEX.test(phone)) {
-        this.#showError(phone_number, "Masukkan nomor WhatsApp yang valid.");
+        this.#showError(
+          phone_number,
+          "Masukkan nomor WhatsApp yang valid (contoh: +628123456789).",
+        );
         valid = false;
       }
 
       const mail = email?.value.trim() || "";
-      if (!mail || !mail.includes("@") || !mail.includes(".")) {
+      if (!EMAIL_REGEX.test(mail)) {
         this.#showError(email, "Masukkan alamat email yang valid.");
         valid = false;
       }
@@ -425,7 +453,6 @@
         valid = false;
       }
 
-      // Highlight invalid fields
       if (!valid) {
         this.#dom.form?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
@@ -475,10 +502,9 @@
         valid = false;
       }
 
-      // Check if at least one condition is selected
       const conditions = this.#getSelectedConditions();
       if (conditions.length === 0) {
-        this.#showModal(
+        this.#showAlert(
           "warning",
           "Kondisi Kendaraan Diperlukan",
           "Pilih setidaknya satu kondisi kendaraan.",
@@ -530,7 +556,7 @@
 
       const services = this.#getSelectedServices();
       if (services.length === 0) {
-        this.#showModal(
+        this.#showAlert(
           "warning",
           "Layanan Diperlukan",
           "Pilih setidaknya satu layanan.",
@@ -568,48 +594,52 @@
       return valid;
     }
 
-    // ─── Modal System ──────────────────────────────────────────
-    #showModal(type, title, message) {
-      const existingModal = document.querySelector(".custom-modal-overlay");
-      if (existingModal) existingModal.remove();
-
-      const modal = document.createElement("div");
-      modal.className = "custom-modal-overlay";
-
-      const iconMap = {
-        success: "✅",
-        error: "❌",
-        warning: "⚠️",
-        info: "ℹ️",
-      };
-
-      modal.innerHTML = `
-        <div class="custom-modal">
-          <div class="custom-modal-icon">${iconMap[type] || "ℹ️"}</div>
-          <h3>${title}</h3>
-          <p>${message}</p>
-          <button class="custom-modal-btn" id="modalCloseBtn">OK</button>
-        </div>
-      `;
-
-      document.body.appendChild(modal);
-
-      const closeBtn = modal.querySelector("#modalCloseBtn");
-      const closeModal = () => modal.remove();
-
-      closeBtn.addEventListener("click", closeModal);
-      modal.addEventListener("click", (e) => {
-        if (e.target === modal) closeModal();
-      });
-
-      // Close with Escape key
-      const escHandler = (e) => {
-        if (e.key === "Escape") {
-          closeModal();
-          document.removeEventListener("keydown", escHandler);
-        }
-      };
-      document.addEventListener("keydown", escHandler);
+    // ─── Alert System (SweetAlert2) ──────────────────────────
+    #showAlert(type, title, message) {
+      if (typeof Swal !== "undefined") {
+        const iconMap = {
+          success: "success",
+          error: "error",
+          warning: "warning",
+          info: "info",
+        };
+        Swal.fire({
+          title: title,
+          text: message,
+          icon: iconMap[type] || "info",
+          confirmButtonColor: "#ff6b00",
+          background: "#0a0a0a",
+          color: "#f1f5f9",
+          confirmButtonText: "OK",
+        });
+      } else {
+        // Fallback ke modal custom
+        const existing = document.querySelector(".custom-modal-overlay");
+        if (existing) existing.remove();
+        const modal = document.createElement("div");
+        modal.className = "custom-modal-overlay";
+        const iconMap = {
+          success: "✅",
+          error: "❌",
+          warning: "⚠️",
+          info: "ℹ️",
+        };
+        modal.innerHTML = `
+          <div class="custom-modal">
+            <div class="custom-modal-icon">${iconMap[type] || "ℹ️"}</div>
+            <h3>${title}</h3>
+            <p>${message}</p>
+            <button class="custom-modal-btn" id="modalCloseBtn">OK</button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        const closeBtn = modal.querySelector("#modalCloseBtn");
+        const close = () => modal.remove();
+        closeBtn.addEventListener("click", close);
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) close();
+        });
+      }
     }
 
     // ─── Helpers ──────────────────────────────────────────────
@@ -668,8 +698,22 @@
       return isNaN(num) ? null : num;
     }
 
+    // ─── Close Modal (delegasi ke index.js) ──────────────────
+    #closeModal() {
+      const modal = this.#dom.modal;
+      if (modal && modal.classList.contains("active")) {
+        modal.classList.remove("active");
+        document.body.style.overflow = "";
+        document.documentElement.style.overflow = "";
+        document.body.classList.remove("modal-open");
+      }
+    }
+
     // ─── API ──────────────────────────────────────────────────
     async #createInquiry(payload) {
+      const controller = new AbortController();
+      this.#abortController = controller;
+
       const response = await fetch(API_BASE, {
         method: "POST",
         headers: {
@@ -677,6 +721,7 @@
           Accept: "application/json",
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -697,15 +742,19 @@
       const formData = new FormData();
       files.forEach((file) => formData.append("photos", file));
 
+      const controller = new AbortController();
+      this.#abortController = controller;
+
       const response = await fetch(`${API_BASE}${inquiryId}/photos`, {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.message || "Failed to upload photos");
+        throw new Error(data?.message || "Gagal upload foto");
       }
 
       return data;
@@ -713,11 +762,9 @@
 
     // ─── Form Submission ──────────────────────────────────────
     async #handleSubmit(event) {
-      // 🔥 FIX: Prevent multiple submissions
       event.preventDefault();
 
-      // 🔥 FIX: Cek apakah sudah dalam proses submit
-      if (this.#state.isSubmitting) return;
+      if (this.#state.isSubmitting || this.#state.isUploading) return;
 
       if (!this.#validateStep(2)) return;
 
@@ -730,7 +777,11 @@
       }
 
       try {
-        // 🔥 Build payload sesuai dengan CustomerInquiryCreate schema
+        // Get source from query param
+        const urlParams = new URLSearchParams(window.location.search);
+        const source = urlParams.get("source") || "website";
+
+        // Build payload
         const payload = {
           customer_name: this.#dom.fullname?.value.trim() || "",
           customer_phone_number: this.#dom.phone_number?.value.trim() || "",
@@ -755,7 +806,7 @@
           priority: this.#dom.priority?.value || "",
           project_description: this.#dom.project_details?.value.trim() || "",
           reference_link: this.#dom.reference_link?.value.trim() || "",
-          source: "website",
+          source: source,
         };
 
         console.log("📤 Submitting inquiry:", payload);
@@ -764,38 +815,65 @@
         const inquiryId = response?.data?.id;
 
         if (!inquiryId) {
-          throw new Error("No inquiry ID returned from server");
+          throw new Error(
+            "Tidak ada ID inquiry yang dikembalikan dari server.",
+          );
         }
 
         // Upload photos if any
         if (this.#photoFiles.length > 0) {
-          await this.#uploadPhotos(inquiryId, this.#photoFiles);
+          this.#state.isUploading = true;
+          if (submitBtn) {
+            submitBtn.textContent = "Mengupload foto...";
+          }
+          try {
+            await this.#uploadPhotos(inquiryId, this.#photoFiles);
+          } catch (uploadErr) {
+            console.warn("⚠️ Photo upload failed:", uploadErr);
+            // Tampilkan peringatan tapi inquiry sudah terbuat
+            this.#showAlert(
+              "warning",
+              "Foto Gagal Diupload",
+              `Inquiry berhasil dibuat (ID: ${inquiryId}), tetapi foto gagal diupload. Anda bisa mengirim ulang foto melalui WhatsApp.`,
+            );
+            // Lanjut ke sukses
+          } finally {
+            this.#state.isUploading = false;
+          }
         }
 
         // ✅ SUCCESS
-        this.#showModal(
+        this.#showAlert(
           "success",
           "🎉 Project Submitted!",
           `Permintaan Anda (ID: ${inquiryId}) telah berhasil dikirim!\n\nTim kami akan segera menghubungi Anda melalui WhatsApp dalam 1x24 jam.`,
         );
 
+        // Reset form & close modal
         this.#resetForm();
+        this.#closeModal();
       } catch (err) {
         console.error("Submission error:", err);
 
-        // ❌ ERROR
-        this.#showModal(
+        if (err.name === "AbortError") {
+          // User canceled, ignore
+          return;
+        }
+
+        this.#showAlert(
           "error",
           "Gagal Mengirim",
           err.message || "Terjadi kesalahan. Silakan coba lagi.",
         );
       } finally {
         this.#state.isSubmitting = false;
+        this.#state.isUploading = false;
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.textContent = "Mulai Project Saya";
           submitBtn.style.opacity = "1";
         }
+        this.#abortController = null;
       }
     }
 
@@ -825,17 +903,33 @@
       this.#updateWizard();
       this.#filterModels();
 
-      // Reset file input
       const photoInput = this.#dom.project_photos;
       if (photoInput) photoInput.value = "";
 
       // Reset model filter
       this.#filterModels();
     }
+
+    // ─── Abort pending requests ──────────────────────────────
+    #abortRequests() {
+      if (this.#abortController) {
+        this.#abortController.abort();
+        this.#abortController = null;
+      }
+    }
   }
 
   // ─── Instantiate ─────────────────────────────────────────────
+  let wizardInstance = null;
+
   document.addEventListener("DOMContentLoaded", () => {
-    new InquiryWizard();
+    wizardInstance = new InquiryWizard();
+  });
+
+  // 🔥 Jika modal ditutup, abort pending requests
+  document.addEventListener("modalClosed", () => {
+    if (wizardInstance) {
+      wizardInstance.#abortRequests();
+    }
   });
 })();

@@ -6,6 +6,7 @@ import { showToast } from "../toast.js";
 import { state } from "../config.js";
 import { loadProjects } from "../index.js";
 import { renderTasks } from "../renderers/detail/tasks.js";
+import { getProjectById, isProjectComplete } from "../utils.js";
 
 export function openTaskModal(projectId) {
   const projectIdEl = DOM.taskProjectId();
@@ -38,6 +39,12 @@ export async function handleAddTask(e) {
   const projectId = DOM.taskProjectId?.value || "";
   if (!projectId) {
     showToast("Project ID missing", "error");
+    return;
+  }
+
+  const project = getProjectById(projectId);
+  if (isProjectComplete(project)) {
+    showToast("⚠️ Cannot add task: Project is completed.", "error");
     return;
   }
 

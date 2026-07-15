@@ -77,14 +77,14 @@ export function renderItems(items) {
                 <td style="font-weight:500;color:var(--text-primary);">
                     ${Formatter.currency(value)}
                 </td>
-                <td style="text-align:center; white-space:nowrap;">
+                <!--td style="text-align:center; white-space:nowrap;">
                     <button class="btn-action btn-edit" onclick="event.stopPropagation(); window.openEditModal('${item.id}')" title="Edit">
                         <i class="fas fa-pen"></i>
                     </button>
                     <button class="btn-action btn-delete" onclick="event.stopPropagation(); window.confirmDelete('${item.id}')" title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
-                </td>
+                </td-->
             </tr>
         `;
     })

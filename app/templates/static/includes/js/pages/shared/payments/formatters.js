@@ -1,4 +1,6 @@
-// shared/payments/formatters.js
+// ============================================================
+// shared/payments/formatters.js - Payment Formatters (FIXED)
+// ============================================================
 
 export const PaymentFormatter = {
   currency: (amount) => {
@@ -39,7 +41,6 @@ export const PaymentFormatter = {
     }
   },
 
-  // ✅ Match dengan status dari backend
   statusLabel: (status) => {
     const map = {
       pending: "Pending",
@@ -53,7 +54,6 @@ export const PaymentFormatter = {
       failed: "Failed",
       voided: "Voided",
       rejected: "Rejected",
-      // Invoice status
       draft: "Draft",
       sent: "Sent",
       viewed: "Viewed",
@@ -110,7 +110,6 @@ export const PaymentFormatter = {
     return map[status] || "📄";
   },
 
-  // ✅ Match dengan payment_type dari backend
   paymentTypeLabel: (type) => {
     const map = {
       deposit: "Deposit",
@@ -133,7 +132,6 @@ export const PaymentFormatter = {
     return map[key] || "💳";
   },
 
-  // ✅ Invoice status badge class
   invoiceStatusBadgeClass: (status) => {
     const map = {
       draft: "draft",

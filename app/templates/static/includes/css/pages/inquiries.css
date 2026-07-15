@@ -2006,3 +2006,208 @@
     justify-content: flex-start;
   }
 }
+
+/* ============================================================
+   ADDITIONS & FIXES - inquiries.css
+   ============================================================ */
+
+/* ---- Button Variants ---- */
+.btn-success {
+  background: var(--success, #10b981);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.btn-success:hover {
+  background: #059669;
+  transform: translateY(-1px);
+}
+.btn-success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-sm {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+}
+.btn-lg {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+}
+
+/* ---- Toggle Filter (optional) ---- */
+.filter-group {
+  display: flex;
+  align-items: center;
+}
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.toggle-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.toggle-label .toggle-slider {
+  width: 36px;
+  height: 20px;
+  background: var(--bg-input);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.3s;
+}
+.toggle-label .toggle-slider::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s;
+}
+.toggle-label input:checked + .toggle-slider {
+  background: var(--primary);
+}
+.toggle-label input:checked + .toggle-slider::after {
+  transform: translateX(16px);
+}
+
+/* ---- Invoice Item Row (modal) ---- */
+.invoice-item-row {
+  display: grid;
+  grid-template-columns: 2fr 80px 80px 120px 40px;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.invoice-item-row input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.invoice-item-row input:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+}
+.invoice-item-row .remove-item-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.2rem;
+  transition: color 0.2s;
+}
+.invoice-item-row .remove-item-btn:hover {
+  color: #ef4444;
+}
+
+/* ---- Timeline (drawer) ---- */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.timeline-item {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.timeline-item:last-child {
+  border-bottom: none;
+}
+.timeline-item .timeline-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.timeline-item .timeline-content {
+  flex: 1;
+}
+.timeline-item .timeline-content .title {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.timeline-item .timeline-content .desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.timeline-item .timeline-content .time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ---- Detail Row (Confirm/Delete modals) ---- */
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.detail-row:last-child {
+  border-bottom: none;
+}
+.detail-label {
+  color: var(--text-muted);
+}
+.detail-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ---- No Data fallback ---- */
+.no-data {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.75rem 0;
+  text-align: center;
+}
+
+/* ---- Responsive untuk Invoice Items ---- */
+@media (max-width: 768px) {
+  .invoice-item-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .invoice-item-row .remove-item-btn {
+    justify-self: end;
+  }
+}
+@media (max-width: 480px) {
+  .invoice-item-row {
+    grid-template-columns: 1fr;
+  }
+}

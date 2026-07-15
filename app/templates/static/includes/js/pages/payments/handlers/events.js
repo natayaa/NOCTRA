@@ -1,5 +1,5 @@
 // ============================================================
-// payments/handlers/events.js - Event Bindings
+// payments/handlers/events.js - Event Bindings (FIXED)
 // ============================================================
 
 import { DOM } from "../dom.js";
@@ -15,7 +15,15 @@ import {
   bindInvoiceItemEvents,
 } from "./modals.js";
 
+let eventsBound = false;
+
 export function bindEvents() {
+  if (eventsBound) {
+    console.log("⚠️ Events already bound, skipping...");
+    return;
+  }
+  eventsBound = true;
+
   // Tab switching
   const tabPayments = DOM.tabPayments();
   const tabInvoices = DOM.tabInvoices();
@@ -29,6 +37,7 @@ export function bindEvents() {
       tabInvoices?.classList.remove("active");
       paymentsTab.classList.add("active");
       invoicesTab?.classList.remove("active");
+      state.paymentsCurrentPage = 1;
       loadPayments();
     });
   }
@@ -40,6 +49,7 @@ export function bindEvents() {
       tabPayments?.classList.remove("active");
       invoicesTab.classList.add("active");
       paymentsTab?.classList.remove("active");
+      state.invoicesCurrentPage = 1;
       loadPayments();
     });
   }
@@ -51,6 +61,7 @@ export function bindEvents() {
     searchTimeout = setTimeout(() => {
       state.filters.search = e.target.value.trim();
       state.paymentsCurrentPage = 1;
+      state.invoicesCurrentPage = 1;
       loadPayments();
     }, 300);
   });
@@ -59,24 +70,28 @@ export function bindEvents() {
   DOM.statusFilter()?.addEventListener("change", (e) => {
     state.filters.status = e.target.value;
     state.paymentsCurrentPage = 1;
+    state.invoicesCurrentPage = 1;
     loadPayments();
   });
 
   DOM.typeFilter()?.addEventListener("change", (e) => {
     state.filters.type = e.target.value;
     state.paymentsCurrentPage = 1;
+    state.invoicesCurrentPage = 1;
     loadPayments();
   });
 
   DOM.startDateFilter()?.addEventListener("change", (e) => {
     state.filters.startDate = e.target.value;
     state.paymentsCurrentPage = 1;
+    state.invoicesCurrentPage = 1;
     loadPayments();
   });
 
   DOM.endDateFilter()?.addEventListener("change", (e) => {
     state.filters.endDate = e.target.value;
     state.paymentsCurrentPage = 1;
+    state.invoicesCurrentPage = 1;
     loadPayments();
   });
 
@@ -133,6 +148,8 @@ export function bindEvents() {
       loadPayments();
     }
   });
+
+  console.log("✅ All events bound successfully!");
 }
 
 export function bindKeyboardShortcuts() {
@@ -160,4 +177,5 @@ export function bindKeyboardShortcuts() {
       DOM.searchPayment()?.focus();
     }
   });
+  console.log("✅ Keyboard shortcuts bound");
 }

@@ -1,6 +1,4 @@
-// ============================================================
-// inventories/handlers/stock.js - Stock Adjustment
-// ============================================================
+// inventories/handlers/stock.js - FIXED
 
 import { DOM } from "../dom.js";
 import { InventoryAPI } from "../api.js";
@@ -11,7 +9,10 @@ import { selectItem } from "../index.js";
 
 export async function openStockAdjustModal(itemId) {
   const item = await InventoryAPI.fetchItemDetail(itemId);
-  if (!item) return;
+  if (!item) {
+    showToast("Item not found", "error");
+    return;
+  }
 
   const modal = DOM.stockAdjustModal();
   const id = DOM.adjustItemId();
@@ -21,7 +22,8 @@ export async function openStockAdjustModal(itemId) {
   const notes = DOM.adjustNotes();
 
   if (id) id.value = itemId;
-  if (current) current.textContent = `${item.current_stock} ${item.unit || ""}`;
+  if (current)
+    current.textContent = `${item.current_stock || 0} ${item.unit || ""}`;
   if (newStock) newStock.value = item.current_stock || 0;
   if (reason) reason.value = "";
   if (notes) notes.value = "";
@@ -43,10 +45,18 @@ export async function handleStockAdjust(e) {
   const reason = DOM.adjustReasonSelect()?.value;
   const notes = DOM.adjustNotes()?.value?.trim() || "";
 
-  if (!itemId) return showToast("No item selected", "error");
-  if (isNaN(newStock) || newStock < 0)
-    return showToast("Please enter a valid stock quantity", "error");
-  if (!reason) return showToast("Please select a reason", "error");
+  if (!itemId) {
+    showToast("No item selected", "error");
+    return;
+  }
+  if (isNaN(newStock) || newStock < 0) {
+    showToast("Please enter a valid stock quantity", "error");
+    return;
+  }
+  if (!reason) {
+    showToast("Please select a reason", "error");
+    return;
+  }
 
   const result = await InventoryAPI.adjustStock({
     item_id: itemId,
@@ -58,7 +68,7 @@ export async function handleStockAdjust(e) {
   });
 
   if (result) {
-    showToast("Stock updated successfully!", "success");
+    showToast("✅ Stock updated successfully!", "success");
     closeStockAdjustModal();
     await loadInventoryItems();
     if (state.selectedItemId) await selectItem(state.selectedItemId);

@@ -23,11 +23,13 @@ import {
 } from "./tasks.js";
 import { handleConsumeMaterial, handleDeleteMaterial } from "./materials.js";
 import { handleAddLabor, handleDeleteLabor } from "./labor.js";
-import { initHoursKeypad } from "./keypad.js";
-import { initMaterialQtyKeypad } from "./materialKeypad.js";
+import { initKeypad } from "./keypad.js";
 import { autoFillLaborRate } from "./dropdowns.js";
 
+let eventsBound = false;
 export function bindEvents() {
+  if (eventsBound) return;
+  eventsBound = true;
   // ============================================================
   // 1. PAGINATION
   // ============================================================
@@ -107,20 +109,18 @@ export function bindEvents() {
     const valueEl = DOM.progressPopupValue();
     const checkbox = DOM.markCompleteCheckbox();
     const milestones = DOM.progressPopupMilestones();
-
     if (valueEl) valueEl.textContent = val;
     if (checkbox) checkbox.checked = parseInt(val) >= 100;
-
     if (milestones) {
       const items = milestones.querySelectorAll(".milestone-item");
       const progress = parseInt(val);
       const thresholds = [25, 50, 75, 100];
       items.forEach((item, index) => {
-        const checkboxEl = item.querySelector(".checkbox");
-        const labelEl = item.querySelector(".label");
-        const threshold = thresholds[index];
-        if (checkboxEl) checkboxEl.checked = progress >= threshold;
-        if (labelEl) labelEl.classList.toggle("done", progress >= threshold);
+        const cb = item.querySelector(".checkbox");
+        const label = item.querySelector(".label");
+        if (cb) cb.checked = progress >= thresholds[index];
+        if (label)
+          label.classList.toggle("done", progress >= thresholds[index]);
       });
     }
   });
@@ -143,8 +143,6 @@ export function bindEvents() {
   // ============================================================
   DOM.consumeMaterialBtn()?.addEventListener("click", handleConsumeMaterial);
   DOM.addLaborBtn()?.addEventListener("click", handleAddLabor);
-
-  // Labor type change - auto-fill rate
   DOM.laborTypeSelect()?.addEventListener("change", autoFillLaborRate);
 
   // ============================================================
@@ -158,10 +156,10 @@ export function bindEvents() {
   }
 
   // ============================================================
-  // 11. KEYPADS
+  // 11. KEYPADS (MERGED)
   // ============================================================
-  initHoursKeypad();
-  initMaterialQtyKeypad();
+  initKeypad("laborHours", "hoursKeypad", "0", 2);
+  initKeypad("materialQty", "materialQtyKeypad", "0", 2);
 
   console.log("✅ All events bound successfully!");
 }

@@ -461,6 +461,18 @@ export const ProjectAPI = {
     }
   },
 
+  deleteTask: async (taskId) => {
+    try {
+      const response = await apiFetch(`/projects/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+      return response.data || response;
+    } catch (error) {
+      showToast("Failed to delete task: " + error.message, "error");
+      return null;
+    }
+  },
+
   // --- Documents ---
   uploadDocument: async (projectId, formData) => {
     try {

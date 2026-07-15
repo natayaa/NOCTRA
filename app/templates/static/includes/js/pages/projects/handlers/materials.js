@@ -7,11 +7,19 @@ import { state } from "../config.js";
 import { loadProjects } from "../index.js";
 import { renderMaterials } from "../renderers/detail/materials.js";
 import { loadMaterialItems } from "./dropdowns.js";
+import { refreshCurrentProjectContext } from "../drawer.js";
+import { getProjectById, isProjectComplete } from "../utils.js";
 
 export async function handleConsumeMaterial() {
   const projectId = state.currentProjectId;
   if (!projectId) {
     showToast("No project selected", "error");
+    return;
+  }
+
+  const project = getProjectById(projectId);
+  if (isProjectComplete(project)) {
+    showToast("⚠️ Cannot consume material: Project is completed.", "error");
     return;
   }
 
@@ -93,13 +101,7 @@ export async function handleConsumeMaterial() {
 
     // Refresh
     await loadMaterialItems();
-    if (state.currentProjectId) {
-      const projectData = await ProjectAPI.fetchDetail(state.currentProjectId);
-      if (projectData) {
-        state._currentProjectData = projectData;
-        renderMaterials(projectData);
-      }
-    }
+    await refreshCurrentProjectContext();
     await loadProjects();
   }
 }

@@ -25,7 +25,6 @@ let isLoading = false;
 // LOAD INQUIRY DETAIL
 // ============================================================
 export async function loadInquiryDetail(inquiryId) {
-  // ✅ Prevent duplicate loading
   if (isLoading) {
     console.log("⏳ Already loading, skipping...");
     return;
@@ -39,18 +38,12 @@ export async function loadInquiryDetail(inquiryId) {
   isLoading = true;
   state.currentInquiryId = inquiryId;
 
-  // ✅ Show loading state in drawer
   const drawer = DOM.drawer();
-  if (drawer) {
-    drawer.classList.add("active");
-  }
-  if (drawerBackdrop) {
-    drawerBackdrop.classList.add("active");
-  }
+  if (drawer) drawer.classList.add("active");
+  if (drawerBackdrop) drawerBackdrop.classList.add("active");
   document.body.style.overflow = "hidden";
 
   try {
-    // ✅ Fetch inquiry detail
     const inquiry = await InquiryAPI.fetchDetail(inquiryId);
     if (!inquiry) {
       showToast("Failed to load inquiry details", "error");
@@ -58,70 +51,36 @@ export async function loadInquiryDetail(inquiryId) {
       return;
     }
 
-    // console.log("📋 Loaded inquiry:", inquiry.id);
-
-    // ✅ Load inventory items for enrichment
+    // Load inventory items
     try {
       state.inventoryItems = await InquiryAPI.fetchInventoryItems();
-      // console.log("📦 Loaded inventory items:", state.inventoryItems.length);
     } catch (e) {
       console.warn("Failed to load inventory items:", e);
       state.inventoryItems = [];
     }
 
-    // ✅ Load all related data in parallel
+    // Load all related data in parallel
     const [payments, activities, notes, photos] = await Promise.all([
-      PaymentAPI.getByInquiry(inquiryId).catch(() => {
-        console.warn("Failed to load payments");
-        return [];
-      }),
-      InquiryAPI.fetchActivities(inquiryId).catch(() => {
-        console.warn("Failed to load activities");
-        return [];
-      }),
-      InquiryAPI.fetchNotes(inquiryId, true).catch(() => {
-        console.warn("Failed to load notes");
-        return [];
-      }),
-      InquiryAPI.fetchPhotos(inquiryId).catch(() => {
-        console.warn("Failed to load photos");
-        return [];
-      }),
+      PaymentAPI.getByInquiry(inquiryId).catch(() => []),
+      InquiryAPI.fetchActivities(inquiryId).catch(() => []),
+      InquiryAPI.fetchNotes(inquiryId, true).catch(() => []),
+      InquiryAPI.fetchPhotos(inquiryId).catch(() => []),
     ]);
 
-    // console.log("📊 Payments:", payments?.length || 0);
-    // console.log("📋 Activities:", activities?.length || 0);
-    // console.log("📝 Notes:", notes?.length || 0);
-    // console.log("🖼️ Photos:", photos?.length || 0);
-
-    // ✅ Load labor and materials if project exists
+    // Load labor & materials if project exists
     let labor = [];
     let materials = [];
-    let financial = null;
 
-    if (inquiry.project && inquiry.project.id) {
+    if (inquiry.project?.id) {
       const projectId = inquiry.project.id;
-      // console.log("📌 Project found:", projectId);
-
       [labor, materials] = await Promise.all([
-        InquiryAPI.fetchProjectLabor(projectId).catch(() => {
-          console.warn("Failed to load labor for project:", projectId);
-          return [];
-        }),
-        InquiryAPI.fetchProjectMaterialUsage(projectId).catch(() => {
-          console.warn("Failed to load materials for project:", projectId);
-          return [];
-        }),
+        InquiryAPI.fetchProjectLabor(projectId).catch(() => []),
+        InquiryAPI.fetchProjectMaterialUsage(projectId).catch(() => []),
       ]);
-
-      // console.log("👷 Labor items:", labor?.length || 0);
-      //console.log("📦 Material usages:", materials?.length || 0);
-    } else {
-      console.log("📌 No project found for inquiry:", inquiryId);
     }
 
-    // ✅ Auto-update inquiry status if project completed
-    if (inquiry.project && inquiry.project.status === "completed") {
+    // Auto-update inquiry status if project completed
+    if (inquiry.project?.status === "completed") {
       if (
         inquiry.status !== "completed" &&
         inquiry.status !== "project_completed"
@@ -131,26 +90,28 @@ export async function loadInquiryDetail(inquiryId) {
           "completed",
           "Project completed - auto-updated",
         );
-        // Re-fetch inquiry for updated status
-        const updatedInquiry = await InquiryAPI.fetchDetail(inquiryId);
-        if (updatedInquiry) {
-          inquiry.status = updatedInquiry.status;
+        const updated = await InquiryAPI.fetchDetail(inquiryId);
+        if (updated) {
+          inquiry.status = updated.status;
         }
       }
     }
 
-    // ✅ Sembunyikan skeleton setelah data dimuat
+    // Hide skeleton, show content
     const skeleton = document.getElementById("skeletonLoader");
     const content = document.getElementById("drawerContentInner");
-
     if (skeleton) skeleton.style.display = "none";
     if (content) content.style.display = "block";
 
-    // ✅ Calculate financial data
-    financial = calculateFinancialFromData(inquiry, labor, materials, payments);
-    // console.log("📊 Financial data:", financial);
+    // Calculate financial
+    const financial = calculateFinancialFromData(
+      inquiry,
+      labor,
+      materials,
+      payments,
+    );
 
-    // ✅ Render all sections
+    // Render all sections
     renderDrawerCustomer(inquiry);
     renderDrawerVehicle(inquiry);
     renderDrawerFinancial(financial);
@@ -160,15 +121,12 @@ export async function loadInquiryDetail(inquiryId) {
     renderDrawerTimeline(activities);
     renderDrawerNotes(notes);
     renderDrawerBeforeAfter(photos);
-
-    // ✅ Update action buttons
     updateActionButtons(inquiry);
+
     state._currentInquiry = inquiry;
   } catch (error) {
     console.error("❌ Failed to load inquiry detail:", error);
     showToast("Failed to load inquiry details: " + error.message, "error");
-
-    // ✅ Close drawer on error
     closeDrawer();
   } finally {
     isLoading = false;
@@ -176,20 +134,12 @@ export async function loadInquiryDetail(inquiryId) {
 }
 
 // ============================================================
-// ✅ CLOSE DRAWER
+// CLOSE DRAWER
 // ============================================================
 export function closeDrawer() {
-  console.log("🔒 Closing drawer...");
-
   const drawer = DOM.drawer();
-  if (drawer) {
-    drawer.classList.remove("active");
-  }
-
-  if (drawerBackdrop) {
-    drawerBackdrop.classList.remove("active");
-  }
-
+  if (drawer) drawer.classList.remove("active");
+  if (drawerBackdrop) drawerBackdrop.classList.remove("active");
   document.body.style.overflow = "";
   state.currentInquiryId = null;
   state._currentInquiry = null;
@@ -197,12 +147,10 @@ export function closeDrawer() {
 }
 
 // ============================================================
-// ✅ OPEN INQUIRY DRAWER
+// OPEN INQUIRY DRAWER
 // ============================================================
 export async function openInquiryDrawer(inquiryId) {
-  // console.log("🔓 Opening inquiry drawer:", inquiryId);
-
-  // ✅ Jika drawer sudah terbuka dengan inquiry yang sama, jangan reload
+  const drawer = DOM.drawer();
   if (
     state.currentInquiryId === inquiryId &&
     drawer?.classList.contains("active")
@@ -210,16 +158,14 @@ export async function openInquiryDrawer(inquiryId) {
     console.log("📌 Drawer already open for this inquiry");
     return;
   }
-
   await loadInquiryDetail(inquiryId);
 }
 
 // ============================================================
-// ✅ REFRESH INQUIRY DETAIL
+// REFRESH INQUIRY DETAIL
 // ============================================================
 export async function refreshInquiryDetail() {
   if (state.currentInquiryId) {
-    console.log("🔄 Refreshing inquiry detail...");
     await loadInquiryDetail(state.currentInquiryId);
   } else {
     console.warn("⚠️ No inquiry currently open to refresh");
@@ -227,7 +173,7 @@ export async function refreshInquiryDetail() {
 }
 
 // ============================================================
-// ✅ CHECK IF DRAWER IS OPEN
+// CHECK IF DRAWER IS OPEN
 // ============================================================
 export function isDrawerOpen() {
   const drawer = DOM.drawer();
@@ -235,15 +181,12 @@ export function isDrawerOpen() {
 }
 
 // ============================================================
-// ✅ GET CURRENT INQUIRY
+// GET CURRENT INQUIRY
 // ============================================================
 export function getCurrentInquiry() {
   return state._currentInquiry;
 }
 
-// ============================================================
-// ✅ GET CURRENT INQUIRY ID
-// ============================================================
 export function getCurrentInquiryId() {
   return state.currentInquiryId;
 }

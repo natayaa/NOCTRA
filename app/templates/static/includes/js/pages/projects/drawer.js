@@ -13,6 +13,28 @@ import { loadMaterialItems, loadLaborTypes } from "./handlers/dropdowns.js";
 
 let isLoading = false;
 
+// ============================================================
+// REFRESH TERPUSAT (agar handler tidak usah render ulang manual)
+// ============================================================
+export async function refreshCurrentProjectContext() {
+  if (state.currentProjectId && isDrawerOpen()) {
+    const projectData = await ProjectAPI.fetchDetail(state.currentProjectId);
+    if (projectData) {
+      state._currentProjectData = projectData;
+      state._currentProject = projectData.project || projectData;
+
+      // Render ulang semua tab
+      renderOverview(projectData);
+      renderTimeline(projectData);
+      renderMaterials(projectData);
+      renderLabor(projectData);
+      renderTasks(projectData);
+      return true;
+    }
+  }
+  return false;
+}
+
 export function switchTab(tabName) {
   const btns = DOM.tabBtns();
   const panels = DOM.tabPanels; // ✅ BUKAN function, langsung object
@@ -36,23 +58,21 @@ export function switchTab(tabName) {
   }
 }
 
-export async function openProjectDrawer(projectId) {
-  if (isLoading) {
-    console.log("⏳ Already loading, skipping...");
-    return;
-  }
+export async function openProjectDrawer(projectId, force = false) {
+  if (isLoading) return;
 
   if (!projectId) {
     showToast("No project selected", "error");
     return;
   }
 
-  // Jika drawer sudah terbuka dengan project yang sama, jangan reload
+  // Jika drawer sudah terbuka dengan project yang sama, dan tidak dipaksa refresh, skip
   if (
+    !force &&
     state.currentProjectId === projectId &&
     DOM.drawer()?.classList.contains("active")
   ) {
-    console.log("📌 Drawer already open for this project");
+    console.log("📌 Drawer already open for this project (cached)");
     return;
   }
 
@@ -85,6 +105,10 @@ export async function openProjectDrawer(projectId) {
 
     await loadMaterialItems();
     await loadLaborTypes();
+
+    const isComplete =
+      projectData.status === "completed" || projectData.progress >= 100;
+    toggleDrawerActions(!isComplete);
 
     console.log("✅ Project drawer loaded:", projectId);
   } catch (error) {
@@ -124,5 +148,20 @@ export function getCurrentProjectData() {
 export async function refreshDrawer() {
   if (state.currentProjectId && isDrawerOpen()) {
     await openProjectDrawer(state.currentProjectId);
+  }
+}
+
+function toggleDrawerActions(enabled) {
+  const drawer = DOM.drawer();
+  if (!drawer) return;
+  if (enabled) {
+    drawer.classList.remove("drawer-actions-disabled");
+  } else {
+    drawer.classList.add("drawer-actions-disabled");
+    showToast(
+      "🔒 This project is completed. Actions are disabled.",
+      "info",
+      4000,
+    );
   }
 }

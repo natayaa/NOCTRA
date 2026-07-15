@@ -1,10 +1,18 @@
-// shared/payments/utils.js
+// ============================================================
+// shared/payments/utils.js - Payment Utilities (FIXED)
+// ============================================================
 
-/**
- * Calculate payment summary dari list payments
- * Field names match dengan response backend
- */
-// shared/payments/utils.js
+export function ensureArray(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    if (data.data && Array.isArray(data.data)) return data.data;
+    if (data.items && Array.isArray(data.items)) return data.items;
+    if (data.payments && Array.isArray(data.payments)) return data.payments;
+    if (data.invoices && Array.isArray(data.invoices)) return data.invoices;
+    return [data];
+  }
+  return [];
+}
 
 export function calculatePaymentSummary(payments) {
   if (!payments || payments.length === 0) {
@@ -19,9 +27,6 @@ export function calculatePaymentSummary(payments) {
     };
   }
 
-  // console.log("📊 Calculating payment summary from:", payments);
-
-  // ✅ Deposit = payment_type === "deposit" DAN status completed
   const totalDeposit = payments
     .filter((p) => {
       const type = (p.payment_type || p.type || "").toLowerCase();
@@ -33,7 +38,6 @@ export function calculatePaymentSummary(payments) {
     })
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  // ✅ Paid = semua payment yang status completed (termasuk deposit)
   const totalPaid = payments
     .filter((p) => {
       const status = (p.status || "").toLowerCase();
@@ -43,7 +47,6 @@ export function calculatePaymentSummary(payments) {
     })
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  // ✅ Pending = status pending
   const totalPending = payments
     .filter((p) => {
       const status = (p.status || "").toLowerCase();
@@ -56,7 +59,6 @@ export function calculatePaymentSummary(payments) {
     })
     .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  // ✅ Cancelled
   const totalCancelled = payments
     .filter((p) => {
       const status = (p.status || "").toLowerCase();
@@ -69,13 +71,6 @@ export function calculatePaymentSummary(payments) {
     0,
   );
 
-  //console.log("📊 Summary result:", {
-  //  totalDeposit,
-  //  totalPaid,
-  //  totalPending,
-  //  totalAll,
-  // });
-
   return {
     totalDeposit,
     totalPaid,
@@ -86,10 +81,7 @@ export function calculatePaymentSummary(payments) {
     count: payments.length,
   };
 }
-/**
- * Calculate invoice summary dari list invoices
- * Field names match dengan response backend
- */
+
 export function calculateInvoiceSummary(invoices) {
   if (!invoices || invoices.length === 0) {
     return {
@@ -102,13 +94,11 @@ export function calculateInvoiceSummary(invoices) {
     };
   }
 
-  // ✅ Total amount dari semua invoice
   const totalAmount = invoices.reduce(
     (sum, inv) => sum + (Number(inv.total_amount) || 0),
     0,
   );
 
-  // ✅ Total paid dari invoice
   const totalPaid = invoices
     .filter((inv) => {
       const status = (inv.status || "").toLowerCase();
@@ -116,7 +106,6 @@ export function calculateInvoiceSummary(invoices) {
     })
     .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
 
-  // ✅ Overdue invoices
   const overdueInvoices = invoices.filter((inv) => inv.is_overdue === true);
   const overdueAmount = overdueInvoices.reduce(
     (sum, inv) => sum + (Number(inv.total_amount) || 0),
@@ -133,9 +122,6 @@ export function calculateInvoiceSummary(invoices) {
   };
 }
 
-/**
- * Calculate financial summary from payments, invoices, and costs
- */
 export function calculateFinancialSummary(payments, invoices, costs = {}) {
   const paymentSummary = calculatePaymentSummary(payments);
   const invoiceSummary = calculateInvoiceSummary(invoices);

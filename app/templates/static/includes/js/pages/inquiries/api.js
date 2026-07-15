@@ -45,7 +45,7 @@ export const InquiryAPI = {
   fetchInquiries: async (page = 1, filters = {}) => {
     state.isLoading = true;
     const params = new URLSearchParams({
-      page: page,
+      offset: (page - 1) * CONFIG.INQUIRIES_PER_PAGE,
       limit: CONFIG.INQUIRIES_PER_PAGE,
     });
     if (filters.search) params.set("search", filters.search);

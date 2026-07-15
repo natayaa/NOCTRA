@@ -1,38 +1,41 @@
-// projects/handlers/keypad.js (FIXED & IMPROVED)
+// projects/handlers/keypad.js (GABUNGAN + FACTORY)
+let keypadInstances = {};
 
-let keypadInitialized = false;
-let keypadValue = "0";
-let isOpen = false;
-
-export function initHoursKeypad() {
-  const input = document.getElementById("laborHours");
-  const keypad = document.getElementById("hoursKeypad");
+export function initKeypad(
+  inputId,
+  keypadId,
+  initialValue = "0",
+  maxDecimals = 2,
+) {
+  const input = document.getElementById(inputId);
+  const keypad = document.getElementById(keypadId);
 
   if (!input || !keypad) {
-    console.warn("Hours keypad elements not found");
+    console.warn(`Keypad elements not found: ${inputId} / ${keypadId}`);
     return;
   }
 
-  if (keypadInitialized) {
-    console.log("Hours keypad already initialized");
-    return;
-  }
+  // Cegah init ganda per instance
+  const instanceKey = `${inputId}_${keypadId}`;
+  if (keypadInstances[instanceKey]) return;
+  keypadInstances[instanceKey] = true;
 
-  keypadInitialized = true;
-  keypadValue = input.value || "0";
-  input.value = keypadValue;
+  let currentValue = input.value || initialValue;
+  let isOpen = false;
+  let valueBeforeOpen = currentValue;
 
   function updateInput(value) {
-    keypadValue = value;
+    currentValue = value;
     input.value = value;
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   function openKeypad() {
     if (isOpen) return;
+    valueBeforeOpen = input.value || initialValue;
     keypad.classList.add("active");
     input.classList.add("active");
-    keypadValue = input.value || "0";
+    currentValue = input.value || initialValue;
     isOpen = true;
   }
 
@@ -46,38 +49,54 @@ export function initHoursKeypad() {
     }
   }
 
-  // Input click
+  function processInput(value) {
+    switch (value) {
+      case "backspace":
+        return currentValue.length > 1
+          ? currentValue.slice(0, -1)
+          : initialValue === "0"
+            ? "0"
+            : "1";
+      case "clear":
+        return initialValue === "0" ? "0" : "1";
+      case ".":
+        return currentValue.includes(".") ? currentValue : currentValue + ".";
+      default:
+        if (!/^\d$/.test(value)) return currentValue;
+        if (currentValue === initialValue && value !== ".") return value;
+        const [whole, decimal = ""] = currentValue.split(".");
+        if (!currentValue.includes(".") && whole.length >= 8)
+          return currentValue;
+        if (currentValue.includes(".") && decimal.length >= maxDecimals)
+          return currentValue;
+        return currentValue + value;
+    }
+  }
+
+  // Event: Klik input
   input.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (isOpen) {
-      closeKeypad();
-    } else {
-      openKeypad();
-    }
+    if (isOpen) closeKeypad();
+    else openKeypad();
   });
 
-  // Keypad buttons
+  // Event: Klik tombol keypad
   keypad.addEventListener("click", (e) => {
     e.stopPropagation();
     const btn = e.target.closest(".keypad-btn");
     if (!btn) return;
     const value = btn.dataset.value;
-    if (!value) return;
-
     if (value === "enter") {
       closeKeypad(true);
       return;
     }
-
-    const result = processKeypadInput(value, keypadValue);
-    if (result !== null) {
-      updateInput(result);
-    }
+    const result = processInput(value);
+    if (result !== null) updateInput(result);
   });
 
-  // Outside click
+  // Tutup jika klik di luar
   document.addEventListener("click", (e) => {
-    const wrapper = input.closest(".hours-input-wrapper");
+    const wrapper = input.closest(".input-wrapper"); // Sesuaikan class wrapper
     if (isOpen && wrapper && !wrapper.contains(e.target)) {
       closeKeypad();
     }
@@ -87,59 +106,28 @@ export function initHoursKeypad() {
   input.addEventListener("keydown", (e) => {
     e.preventDefault();
     const key = e.key;
-
     if ((key >= "0" && key <= "9") || key === ".") {
-      updateInput(processKeypadInput(key, keypadValue));
+      const result = processInput(key);
+      if (result !== null) updateInput(result);
       return;
     }
-
     if (key === "Backspace") {
-      updateInput(processKeypadInput("backspace", keypadValue));
+      const result = processInput("backspace");
+      if (result !== null) updateInput(result);
       return;
     }
-
     if (key === "Delete") {
-      updateInput("0");
+      updateInput(initialValue === "0" ? "0" : "1");
       return;
     }
-
     if (key === "Enter") {
       closeKeypad(true);
       return;
     }
-
     if (key === "Escape") {
       closeKeypad(false);
     }
   });
 
-  console.log("✅ Hours keypad initialized");
+  console.log(`✅ Keypad initialized: ${inputId}`);
 }
-
-function processKeypadInput(value, currentValue = "0") {
-  switch (value) {
-    case "backspace":
-      return currentValue.length > 1 ? currentValue.slice(0, -1) : "0";
-    case "clear":
-      return "0";
-    case ".":
-      return currentValue.includes(".") ? currentValue : currentValue + ".";
-    default:
-      if (!/^\d$/.test(value)) return currentValue;
-      if (currentValue === "0") return value;
-      const [whole, decimal = ""] = currentValue.split(".");
-      if (!currentValue.includes(".") && whole.length >= 8) return currentValue;
-      if (currentValue.includes(".") && decimal.length >= 2)
-        return currentValue;
-      return currentValue + value;
-  }
-}
-
-window.debugKeypad = () => {
-  console.log({
-    keypadValue,
-    isOpen,
-    initialized: keypadInitialized,
-    inputValue: document.getElementById("laborHours")?.value,
-  });
-};

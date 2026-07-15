@@ -3,15 +3,15 @@
 import { ProjectAPI } from "../api.js";
 import { showToast } from "../toast.js";
 import { state } from "../config.js";
-import { getProjectById } from "../utils.js";
 import { loadProjects } from "../index.js";
 import { closeDrawer } from "../drawer.js";
 import { DOM } from "../dom.js";
+import { getProjectById, isProjectComplete } from "../utils.js";
 
 export async function confirmDeleteProject(projectId) {
   const project = getProjectById(projectId);
-  if (!project) {
-    showToast("Project not found", "error");
+  if (isProjectComplete(project)) {
+    showToast("⚠️ Cannot modify a completed project.", "error");
     return;
   }
 
@@ -27,6 +27,11 @@ export async function confirmDeleteProject(projectId) {
 }
 
 export async function handleDeleteProject(projectId) {
+  const project = getProjectById(projectId);
+  if (isProjectComplete(project)) {
+    showToast("⚠️ Cannot modify a completed project.", "error");
+    return;
+  }
   try {
     const result = await ProjectAPI.delete(projectId);
     if (result) {
@@ -48,6 +53,12 @@ export async function handleDeleteProject(projectId) {
 }
 
 export async function handleArchiveProject(projectId) {
+  const project = getProjectById(projectId);
+  if (isProjectComplete(project)) {
+    showToast("⚠️ Cannot modify a completed project.", "error");
+    return;
+  }
+
   try {
     const result = await ProjectAPI.archive(projectId);
     if (result) {
@@ -63,6 +74,11 @@ export async function handleArchiveProject(projectId) {
 }
 
 export async function handleUnarchiveProject(projectId) {
+  const project = getProjectById(projectId);
+  if (isProjectComplete(project)) {
+    showToast("⚠️ Cannot modify a completed project.", "error");
+    return;
+  }
   try {
     const result = await ProjectAPI.unarchive(projectId);
     if (result) {
@@ -82,8 +98,8 @@ export async function handleUnarchiveProject(projectId) {
 
 export async function handleDuplicateProject(projectId) {
   const project = getProjectById(projectId);
-  if (!project) {
-    showToast("Project not found", "error");
+  if (isProjectComplete(project)) {
+    showToast("⚠️ Cannot modify a completed project.", "error");
     return;
   }
 

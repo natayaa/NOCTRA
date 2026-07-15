@@ -164,3 +164,8 @@ export function truncateText(text, maxLength = 50) {
 export function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 }
+
+export function isProjectComplete(project) {
+  if (!project) return false;
+  return project.status === "completed" || project.progress >= 100;
+}

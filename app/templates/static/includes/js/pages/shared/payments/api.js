@@ -1,13 +1,12 @@
-// shared/payments/api.js
+// ============================================================
+// shared/payments/api.js - Core Payment API (FIXED)
+// Digunakan oleh semua module (Projects, Inquiries, Payments)
+// ============================================================
 
-// ✅ Gunakan API_BASE_URL dari config atau langsung
 const API_BASE_URL = "/api/api";
-
-// ✅ Base API fetch - independen dari module lain
 
 async function apiFetch(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : "/" + endpoint}`;
-  // console.log("🌐 [PaymentAPI] Fetching:", url);
 
   const config = {
     headers: {
@@ -20,20 +19,15 @@ async function apiFetch(endpoint, options = {}) {
   try {
     const response = await fetch(url, config);
 
-    // ✅ Coba parse response
     let data;
     const text = await response.text();
     try {
       data = JSON.parse(text);
     } catch (e) {
-      // Jika bukan JSON, gunakan text
       data = { message: text || `HTTP ${response.status}` };
     }
 
-    // console.log("📦 [PaymentAPI] Response:", { status: response.status, data });
-
     if (!response.ok) {
-      // ✅ Format error dengan benar
       const errorMsg =
         data.detail || data.message || data.error || `HTTP ${response.status}`;
       const error = new Error(errorMsg);
@@ -44,12 +38,10 @@ async function apiFetch(endpoint, options = {}) {
 
     return data;
   } catch (error) {
-    // ✅ Pastikan error selalu string
     if (error instanceof Error) {
       console.error("❌ [PaymentAPI] Error:", error.message);
       throw error;
     }
-    // Jika error bukan Error object
     const errorMsg = typeof error === "string" ? error : JSON.stringify(error);
     console.error("❌ [PaymentAPI] Error:", errorMsg);
     throw new Error(errorMsg);
@@ -112,7 +104,6 @@ export const PaymentAPI = {
   // ✅ POST /api/payments/
   create: async (data) => {
     try {
-      // ✅ Pastikan data valid
       const payload = {
         inquiry_id: data.inquiry_id || data.inquiryId || null,
         project_id: data.project_id || data.projectId || null,
@@ -127,8 +118,6 @@ export const PaymentAPI = {
         payment_proof: data.payment_proof || null,
         status: data.status || "pending",
       };
-
-      // console.log("📤 Creating payment:", payload);
 
       const response = await apiFetch("/payments/", {
         method: "POST",
@@ -181,17 +170,11 @@ export const PaymentAPI = {
         notes: notes || null,
       };
 
-      // console.log("📤 [PaymentAPI] Confirming payment:", {
-      //  paymentId,
-      //  payload,
-      //});
-
       const response = await apiFetch(`/payments/${paymentId}/confirm`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
 
-      // console.log("✅ [PaymentAPI] Payment confirmed:", response);
       return response.data || response;
     } catch (error) {
       console.error(
@@ -209,7 +192,6 @@ export const PaymentAPI = {
         throw new Error("Payment ID is required");
       }
 
-      // ✅ Cek status payment terlebih dahulu
       const payment = await PaymentAPI.getById(paymentId);
       if (
         payment &&
@@ -257,8 +239,13 @@ export const PaymentAPI = {
   // ✅ GET /api/payments/invoices/
   getInvoices: async (params = {}) => {
     try {
-      const query = new URLSearchParams(params).toString();
-      const response = await apiFetch(`/payments/invoices/?${query}`);
+      // Jika status = 'overdue', gunakan endpoint overdue
+      if (params.status === "overdue") {
+        const response = await apiFetch("/payments/invoices/overdue");
+        return response.data || response || [];
+      }
+      // Default: gunakan outstanding
+      const response = await apiFetch("/payments/invoices/outstanding");
       return response.data || response || [];
     } catch (error) {
       console.error("Failed to fetch invoices:", error);
@@ -322,8 +309,6 @@ export const PaymentAPI = {
         items: data.items || [],
         status: data.status || "draft",
       };
-
-      // console.log("📤 Creating invoice:", payload);
 
       const response = await apiFetch("/payments/invoices/", {
         method: "POST",
@@ -420,3 +405,5 @@ export const PaymentAPI = {
     }
   },
 };
+
+export default PaymentAPI;

@@ -1,5 +1,5 @@
 // ============================================================
-// payments/index.js - Main Entry Point
+// payments/index.js - Main Entry Point (FIXED)
 // ============================================================
 
 import { state, CONFIG } from "./config.js";
@@ -25,32 +25,11 @@ export async function loadPayments() {
   const isPaymentsTab = state.activeTab === "payments";
 
   try {
-    // Get data based on active tab
+    showLoadingState(isPaymentsTab ? "payments" : "invoices");
+
     let payments = [];
     let invoices = [];
     let stats = null;
-
-    if (isPaymentsTab) {
-      // Try to get payments - use a dummy inquiry ID or get all
-      // Note: API可能需要inquiry_id, jika tidak ada bisa gunakan endpoint lain
-      // Untuk sekarang kita coba dengan string kosong atau 'all'
-      try {
-        const paymentsData = await PaymentAPI.getByInquiry("all");
-        payments = ensureArray(paymentsData);
-      } catch (e) {
-        console.warn("Could not fetch payments, using empty array:", e);
-        payments = [];
-      }
-    } else {
-      try {
-        // Get invoices
-        const invoicesData = await PaymentAPI.getOutstandingInvoices();
-        invoices = ensureArray(invoicesData);
-      } catch (e) {
-        console.warn("Could not fetch invoices, using empty array:", e);
-        invoices = [];
-      }
-    }
 
     // Get statistics
     try {
@@ -63,18 +42,38 @@ export async function loadPayments() {
       stats = null;
     }
 
-    // Update state
     if (isPaymentsTab) {
+      try {
+        // Try to get payments with filters
+        const params = {
+          status: state.filters.status || undefined,
+          type: state.filters.type || undefined,
+          search: state.filters.search || undefined,
+          limit: CONFIG.PAYMENTS_PER_PAGE,
+          page: state.paymentsCurrentPage,
+        };
+        const response = await PaymentAPI.getAll(params);
+        payments = ensureArray(response?.data || response || []);
+      } catch (e) {
+        console.warn("Could not fetch payments:", e);
+        payments = [];
+      }
+
       state.payments = payments;
       state.paymentsTotalItems = payments.length;
       state.paymentsTotalPages =
         Math.ceil(payments.length / CONFIG.PAYMENTS_PER_PAGE) || 1;
 
-      // Update payments count badge
       const countEl = document.getElementById("paymentsCount");
       if (countEl) countEl.textContent = payments.length;
 
-      renderPayments(payments.slice(0, CONFIG.PAYMENTS_PER_PAGE));
+      const startIndex =
+        (state.paymentsCurrentPage - 1) * CONFIG.PAYMENTS_PER_PAGE;
+      const pageItems = payments.slice(
+        startIndex,
+        startIndex + CONFIG.PAYMENTS_PER_PAGE,
+      );
+      renderPayments(pageItems);
       updatePagination(
         state.paymentsCurrentPage,
         state.paymentsTotalPages,
@@ -82,16 +81,34 @@ export async function loadPayments() {
         "payments",
       );
     } else {
+      try {
+        const response = await PaymentAPI.getInvoices({
+          status: state.filters.status || undefined,
+          search: state.filters.search || undefined,
+          limit: CONFIG.INVOICES_PER_PAGE,
+          page: state.invoicesCurrentPage,
+        });
+        invoices = ensureArray(response?.data || response || []);
+      } catch (e) {
+        console.warn("Could not fetch invoices:", e);
+        invoices = [];
+      }
+
       state.invoices = invoices;
       state.invoicesTotalItems = invoices.length;
       state.invoicesTotalPages =
         Math.ceil(invoices.length / CONFIG.INVOICES_PER_PAGE) || 1;
 
-      // Update invoices count badge
       const countEl = document.getElementById("invoicesCount");
       if (countEl) countEl.textContent = invoices.length;
 
-      renderInvoices(invoices.slice(0, CONFIG.INVOICES_PER_PAGE));
+      const startIndex =
+        (state.invoicesCurrentPage - 1) * CONFIG.INVOICES_PER_PAGE;
+      const pageItems = invoices.slice(
+        startIndex,
+        startIndex + CONFIG.INVOICES_PER_PAGE,
+      );
+      renderInvoices(pageItems);
       updatePagination(
         state.invoicesCurrentPage,
         state.invoicesTotalPages,
@@ -100,9 +117,7 @@ export async function loadPayments() {
       );
     }
 
-    // Update dashboard
     renderDashboard(stats, payments, invoices);
-
     console.log("✅ Payments loaded successfully");
   } catch (error) {
     console.error("❌ Failed to load payments:", error);
@@ -115,72 +130,150 @@ export async function loadPayments() {
 // ============================================================
 
 export async function confirmPayment(paymentId) {
+  if (!paymentId) {
+    showToast("❌ Payment ID is required", "error");
+    return;
+  }
   if (!confirm("Confirm this payment?")) return;
-  const result = await PaymentAPI.confirm(paymentId, "admin");
-  if (result) {
-    showToast("Payment confirmed!", "success");
-    await loadPayments();
+
+  try {
+    const result = await PaymentAPI.confirm(paymentId, "admin");
+    if (result) {
+      showToast("✅ Payment confirmed!", "success");
+      await loadPayments();
+    } else {
+      showToast("❌ Failed to confirm payment", "error");
+    }
+  } catch (error) {
+    showToast("❌ " + (error.message || "Failed to confirm payment"), "error");
   }
 }
 
 export async function cancelPayment(paymentId) {
+  if (!paymentId) {
+    showToast("❌ Payment ID is required", "error");
+    return;
+  }
+
   const reason = prompt("Reason for cancellation:");
   if (reason === null) return;
+
   if (!confirm("Cancel this payment?")) return;
-  const result = await PaymentAPI.cancel(paymentId, reason);
-  if (result) {
-    showToast("Payment cancelled", "info");
-    await loadPayments();
+
+  try {
+    const result = await PaymentAPI.cancel(paymentId, reason);
+    if (result) {
+      showToast("🗑️ Payment cancelled", "info");
+      await loadPayments();
+    } else {
+      showToast("❌ Failed to cancel payment", "error");
+    }
+  } catch (error) {
+    showToast("❌ " + (error.message || "Failed to cancel payment"), "error");
   }
 }
 
 export async function viewPayment(paymentId) {
-  const payment = await PaymentAPI.getDetail(paymentId);
-  if (payment) {
-    showToast(`Payment: ${payment.id} - ${payment.amount}`, "info", 5000);
-    // Bisa dibuka detail drawer di sini
+  if (!paymentId) {
+    showToast("❌ Payment ID is required", "error");
+    return;
+  }
+  try {
+    const payment = await PaymentAPI.getById(paymentId);
+    if (payment) {
+      const amount = payment.amount || 0;
+      const type = payment.payment_type || payment.type || "payment";
+      showToast(
+        `${PaymentFormatter.paymentTypeLabel(type)}: ${PaymentFormatter.currency(amount)}`,
+        "info",
+        5000,
+      );
+    }
+  } catch (error) {
+    showToast("Failed to load payment details", "error");
   }
 }
 
 export async function viewInvoice(invoiceId) {
-  const invoice = await PaymentAPI.getInvoice(invoiceId);
-  if (invoice) {
-    showToast(
-      `Invoice: ${invoice.invoice_number} - ${invoice.total}`,
-      "info",
-      5000,
-    );
-    // Bisa dibuka detail drawer di sini
+  if (!invoiceId) {
+    showToast("❌ Invoice ID is required", "error");
+    return;
+  }
+  try {
+    const invoice = await PaymentAPI.getInvoiceById(invoiceId);
+    if (invoice) {
+      const total = invoice.total_amount || invoice.total || 0;
+      showToast(
+        `Invoice ${invoice.invoice_number || "#"}: ${PaymentFormatter.currency(total)}`,
+        "info",
+        5000,
+      );
+    }
+  } catch (error) {
+    showToast("Failed to load invoice details", "error");
   }
 }
 
 export async function sendInvoice(invoiceId) {
+  if (!invoiceId) {
+    showToast("❌ Invoice ID is required", "error");
+    return;
+  }
   if (!confirm("Send this invoice to customer?")) return;
-  const result = await PaymentAPI.sendInvoice(invoiceId);
-  if (result) {
-    showToast("Invoice sent!", "success");
-    await loadPayments();
+
+  try {
+    const result = await PaymentAPI.sendInvoice(invoiceId);
+    if (result) {
+      showToast("✅ Invoice sent!", "success");
+      await loadPayments();
+    } else {
+      showToast("❌ Failed to send invoice", "error");
+    }
+  } catch (error) {
+    showToast("❌ " + (error.message || "Failed to send invoice"), "error");
   }
 }
 
 export async function markInvoicePaid(invoiceId) {
+  if (!invoiceId) {
+    showToast("❌ Invoice ID is required", "error");
+    return;
+  }
   if (!confirm("Mark this invoice as paid?")) return;
-  const result = await PaymentAPI.markInvoicePaid(invoiceId, {
-    payment_method: "manual",
-    notes: "Marked as paid manually",
-  });
-  if (result) {
-    showToast("Invoice marked as paid!", "success");
-    await loadPayments();
+
+  try {
+    const result = await PaymentAPI.markInvoiceAsPaid(invoiceId);
+    if (result) {
+      showToast("✅ Invoice marked as paid!", "success");
+      await loadPayments();
+    } else {
+      showToast("❌ Failed to mark invoice as paid", "error");
+    }
+  } catch (error) {
+    showToast(
+      "❌ " + (error.message || "Failed to mark invoice as paid"),
+      "error",
+    );
   }
 }
 
 export async function sendInvoiceReminder(invoiceId) {
+  if (!invoiceId) {
+    showToast("❌ Invoice ID is required", "error");
+    return;
+  }
   if (!confirm("Send reminder for this overdue invoice?")) return;
-  const result = await PaymentAPI.sendInvoiceReminder(invoiceId);
-  if (result) {
-    showToast("Reminder sent!", "success");
-    await loadPayments();
+
+  try {
+    const result = await PaymentAPI.sendInvoiceReminder(invoiceId);
+    if (result) {
+      showToast("✅ Reminder sent!", "success");
+      await loadPayments();
+    } else {
+      showToast("❌ Failed to send reminder", "error");
+    }
+  } catch (error) {
+    showToast("❌ " + (error.message || "Failed to send reminder"), "error");
   }
 }
 
@@ -189,14 +282,19 @@ export async function sendInvoiceReminder(invoiceId) {
 // ============================================================
 export function exportPayments() {
   const data = state.payments.map((p) => ({
-    id: p.id,
-    type: p.type || p.payment_type,
-    amount: p.amount,
-    method: p.method || p.payment_method,
-    status: p.status,
+    id: p.id?.substring(0, 8) || "N/A",
+    type: p.type || p.payment_type || "-",
+    amount: p.amount || 0,
+    method: p.method || p.payment_method || "-",
+    status: p.status || "-",
     reference: p.reference_number || "",
-    date: p.created_at || p.paid_at,
+    date: p.created_at || p.paid_at || "",
   }));
+
+  if (data.length === 0) {
+    showToast("No data to export", "warning");
+    return;
+  }
 
   const headers = [
     "ID",
@@ -208,12 +306,12 @@ export function exportPayments() {
     "Date",
   ];
   const rows = data.map((d) => [
-    d.id?.substring(0, 8) || "N/A",
-    d.type || "-",
-    d.amount || 0,
-    d.method || "-",
-    d.status || "-",
-    d.reference || "-",
+    d.id,
+    d.type,
+    d.amount,
+    d.method,
+    d.status,
+    d.reference,
     d.date ? new Date(d.date).toLocaleDateString("id-ID") : "-",
   ]);
 
@@ -225,7 +323,7 @@ export function exportPayments() {
   link.click();
   URL.revokeObjectURL(link.href);
 
-  showToast("Export completed!", "success");
+  showToast("✅ Export completed!", "success");
 }
 
 // ============================================================

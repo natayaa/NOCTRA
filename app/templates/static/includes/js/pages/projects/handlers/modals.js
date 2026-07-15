@@ -148,6 +148,22 @@ export async function handleProjectFormSubmit(e) {
       }
     }
   }
+  if (
+    data.customer_email &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.customer_email)
+  ) {
+    showToast("❌ Invalid email format", "error");
+    DOM.customerEmail()?.focus();
+    return;
+  }
+  if (
+    data.customer_phone &&
+    !/^[0-9+\-\s()]{8,15}$/.test(data.customer_phone)
+  ) {
+    showToast("❌ Invalid phone number (min 8 digits)", "error");
+    DOM.customerPhone()?.focus();
+    return;
+  }
 
   const submitBtn = DOM.submitProjectBtn();
   if (submitBtn) {

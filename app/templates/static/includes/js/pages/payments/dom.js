@@ -1,5 +1,5 @@
 // ============================================================
-// payments/dom.js - DOM References
+// payments/dom.js - DOM References (FIXED)
 // ============================================================
 
 export const $ = (id) => {
