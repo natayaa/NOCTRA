@@ -103,6 +103,12 @@ export async function loadInquiryDetail(inquiryId) {
     if (skeleton) skeleton.style.display = "none";
     if (content) content.style.display = "block";
 
+    // NORMALISASI labor dan material usage adalah array
+    const laborArray = Array.isArray(labor) ? labor : labor?.items || [];
+    const materialsArray = Array.isArray(materials)
+      ? materials
+      : materials?.items || [];
+
     // Calculate financial
     const financial = calculateFinancialFromData(
       inquiry,

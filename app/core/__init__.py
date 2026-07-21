@@ -1,163 +1,202 @@
-# core/__init__.py - UPDATE
-from .base import (
-    Base,
-    UUIDMixin,
-    TimestampMixin,
-    SoftDeleteMixin,
-    BaseRepository,
-    BaseResponse,
-    ErrorResponse,
-    PaginatedResponse,
-    ListResponse,
-    BulkRequest,
-    JSONDict,
+# app/core/__init__.py
+"""
+NOKTRA Autoworks Dashboard - Core Package
+=========================================
+
+Core modules for the NOKTRA Autoworks Dashboard Management System.
+
+Modules:
+    - config: Application configuration
+    - database: Database connection and session management
+    - security: Authentication, authorization, and security utilities
+    - cache: Redis caching implementation
+    - logging: Structured logging system
+    - exceptions: Custom exceptions and error handlers
+    - middleware: FastAPI middleware components
+    - dependencies: Common FastAPI dependencies
+    - constants: Core constants and enums
+"""
+
+from app.core.config import Settings, settings, get_settings, Environment
+from app.core.database import DatabaseManager, Base, db_manager, get_db_session, get_raw_db_session
+from app.core.security import (
+    PasswordHandler,
+    JWTManager,
+    APIKeyManager,
+    security_scheme,
+    get_current_user,
+    get_current_active_user,
+    get_token_from_header,
+    generate_random_token,
+    generate_verification_code,
+    generate_salt,
 )
-from .database import (
-    get_db,
-    AsyncSessionLocal,
-    engine,
-    check_db_connection,  # ✅ Sudah ada
-    create_tables,
-    drop_tables,
+from app.core.cache import CacheManager, cache_manager, cached, invalidate_cache, CacheTTL
+from app.core.logging import (
+    get_logger,
+    logger,
+    setup_logging,
+    LogContext,
+    with_log_context,
+    log_performance,
+    request_id_var,
+    user_id_var,
+    correlation_id_var,
 )
-from .config import Settings, settings
-from .constants import (
-    InquiryStatus,
-    ProjectStatus,
-    ProjectPriority,
-    PaymentType,
-    PaymentStatus,
-    PaymentMethod,
-    InvoiceStatus,
-    InventoryStatus,
-    StockMovementType,
-    ExpenseCategory,
-    ExpenseStatus,
-    PriceListCategory,
-    NotificationType,
-    NotificationStatus,
-    UserStatus,
-    UserRole,
-    DEFAULT_ROLES,
-    DEFAULT_PERMISSIONS,
-)
-from .exceptions import (
-    AppException,
+from app.core.exceptions import (
+    CoreException,
     NotFoundError,
+    DuplicateError,
     ValidationError,
-    ConflictError,
-    UnauthorizedError,
-    ForbiddenError,
-    BusinessError,
+    AuthenticationError,
+    AuthorizationError,
     DatabaseError,
-    ServiceUnavailableError,
+    ServiceError,
     RateLimitError,
-    app_exception_handler,
-    generic_exception_handler,
+    ErrorResponseFormatter,
+    setup_exception_handlers,
 )
-from .dependencies import (
+from app.core.middleware import setup_middleware
+from app.core.constants import (
+    HTTPStatus,
+    APIConstants,
+    RegexPatterns,
+    DateTimeConstants,
+    FileConstants,
+    Messages,
+    CacheKeys,
+    SortOrder,
+    FilterOperators,
+    LogLevel,
+    CORSConstants,
+    ResponseFields,
+)
+from app.core.dependencies import (
     PaginationParams,
-    InquiryQueryParams,
-    ProjectQueryParams,
-    InventoryQueryParams,
-    PaymentQueryParams,
-    PriceListQueryParams,
-    get_session,
-    get_service,
-    success_response,
-    error_response,
-    paginated_response,
-)
-from .logging import setup_logging, get_logger
-from .health import HealthChecker
-from .security import (
-    hash_password,
-    verify_password,
-    create_access_token,
-    create_refresh_token,
-    decode_token,
+    DateRangeParams,
+    FilterParams,
+    get_db,
+    get_transaction_db,
+    get_cache,
+    get_request_logger,
+    get_request_id,
+    get_client_ip,
+    get_user_agent,
+    get_token_from_header as dep_get_token_from_header,
     validate_token,
-    sanitize_input,
+    PaginatedResponse,
+    SuccessResponse,
+    ErrorResponse,
+    validate_uuid,
+    validate_phone,
+    validate_email,
+    validate_plate_number,
+    validate_nik,
+    get_uuid_path,
+    get_optional_uuid_path,
 )
 
+__version__ = "1.0.0"
+__author__ = "NOKTRA Autoworks"
+
+# Package exports
 __all__ = [
-    # Base
-    "Base",
-    "UUIDMixin",
-    "TimestampMixin",
-    "SoftDeleteMixin",
-    "BaseRepository",
-    "BaseResponse",
-    "ErrorResponse",
-    "PaginatedResponse",
-    "ListResponse",
-    "BulkRequest",
-    "JSONDict",
-    # Database
-    "get_db",
-    "AsyncSessionLocal",
-    "engine",
-    "check_db_connection",
-    "create_tables",
-    "drop_tables",
     # Config
     "Settings",
     "settings",
-    # Constants
-    "InquiryStatus",
-    "ProjectStatus",
-    "ProjectPriority",
-    "PaymentType",
-    "PaymentStatus",
-    "PaymentMethod",
-    "InvoiceStatus",
-    "InventoryStatus",
-    "StockMovementType",
-    "ExpenseCategory",
-    "ExpenseStatus",
-    "PriceListCategory",
-    "NotificationType",
-    "NotificationStatus",
-    "UserStatus",
-    "UserRole",
-    "DEFAULT_ROLES",
-    "DEFAULT_PERMISSIONS",
+    "get_settings",
+    "Environment",
+    
+    # Database
+    "DatabaseManager",
+    "Base",
+    "db_manager",
+    "get_db_session",
+    "get_raw_db_session",
+    
+    # Security
+    "PasswordHandler",
+    "JWTManager",
+    "APIKeyManager",
+    "security_scheme",
+    "get_current_user",
+    "get_current_active_user",
+    "get_token_from_header",
+    "generate_random_token",
+    "generate_verification_code",
+    "generate_salt",
+    
+    # Cache
+    "CacheManager",
+    "cache_manager",
+    "cached",
+    "invalidate_cache",
+    "CacheTTL",
+    
+    # Logging
+    "get_logger",
+    "logger",
+    "setup_logging",
+    "LogContext",
+    "with_log_context",
+    "log_performance",
+    "request_id_var",
+    "user_id_var",
+    "correlation_id_var",
+    
     # Exceptions
-    "AppException",
+    "CoreException",
     "NotFoundError",
+    "DuplicateError",
     "ValidationError",
-    "ConflictError",
-    "UnauthorizedError",
-    "ForbiddenError",
-    "BusinessError",
+    "AuthenticationError",
+    "AuthorizationError",
     "DatabaseError",
-    "ServiceUnavailableError",
+    "ServiceError",
     "RateLimitError",
-    "app_exception_handler",
-    "generic_exception_handler",
+    "ErrorResponseFormatter",
+    "setup_exception_handlers",
+    
+    # Middleware
+    "setup_middleware",
+    
+    # Constants
+    "HTTPStatus",
+    "APIConstants",
+    "RegexPatterns",
+    "DateTimeConstants",
+    "FileConstants",
+    "Messages",
+    "CacheKeys",
+    "SortOrder",
+    "FilterOperators",
+    "LogLevel",
+    "CORSConstants",
+    "ResponseFields",
+    
     # Dependencies
     "PaginationParams",
-    "InquiryQueryParams",
-    "ProjectQueryParams",
-    "InventoryQueryParams",
-    "PaymentQueryParams",
-    "PriceListQueryParams",
-    "get_session",
-    "get_service",
-    "success_response",
-    "error_response",
-    "paginated_response",
-    # Logging
-    "setup_logging",
-    "get_logger",
-    # Health
-    "HealthChecker",
-    # Security
-    "hash_password",
-    "verify_password",
-    "create_access_token",
-    "create_refresh_token",
-    "decode_token",
+    "DateRangeParams",
+    "FilterParams",
+    "get_db",
+    "get_transaction_db",
+    "get_cache",
+    "get_request_logger",
+    "get_request_id",
+    "get_client_ip",
+    "get_user_agent",
     "validate_token",
-    "sanitize_input",
+    "PaginatedResponse",
+    "SuccessResponse",
+    "ErrorResponse",
+    "validate_uuid",
+    "validate_phone",
+    "validate_email",
+    "validate_plate_number",
+    "validate_nik",
+    "get_uuid_path",
+    "get_optional_uuid_path",
 ]
+
+# Version info
+__version_info__ = tuple(map(int, __version__.split('.')))

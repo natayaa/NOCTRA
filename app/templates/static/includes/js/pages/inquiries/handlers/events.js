@@ -1,4 +1,4 @@
-// inquiries/handlers/events.js - FINAL FIXED & IMPROVED
+// inquiries/handlers/events.js - FINAL FIXED
 
 import { DOM } from "../dom.js";
 import { state } from "../config.js";
@@ -36,7 +36,7 @@ let pendingConfirmPaymentId = null;
 let pendingDeletePaymentId = null;
 
 // ============================================================
-// UTILITY FUNCTIONS
+// UTILITY
 // ============================================================
 
 function escapeHtml(text) {
@@ -46,15 +46,12 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// ============================================================
-// HELPERS
-// ============================================================
 function getElement(id) {
   return document.getElementById(id);
 }
 
 // ============================================================
-// PAYMENT MODAL HANDLERS
+// PAYMENT MODAL HANDLERS (Close)
 // ============================================================
 
 export function closePaymentModal() {
@@ -78,20 +75,293 @@ export function closeInvoiceModal() {
   if (form) form.reset();
 }
 
-function bindInvoiceItemEvents(container) {
-  const removeBtn = container.querySelector(".remove-item-btn");
-  if (removeBtn) {
-    removeBtn.addEventListener("click", function () {
-      const row = this.closest(".invoice-item-row");
-      if (row && container.children.length > 1) {
-        row.remove();
-        calculateInvoiceTotal();
-      }
-    });
+// ============================================================
+// PAYMENT SUBMIT (FIXED - digunakan di event binding)
+// ============================================================
+
+async function handlePaymentSubmit(e) {
+  e.preventDefault();
+
+  const form = getElement("paymentForm");
+  const submitBtn = form?.querySelector('button[type="submit"]');
+
+  const inquiryId = getElement("paymentInquiryId")?.value || null;
+  const projectId = getElement("paymentProjectId")?.value || null;
+  const invoiceId = getElement("paymentInvoiceId")?.value?.trim() || null;
+  const paymentType = getElement("paymentType")?.value || "payment";
+  const amount = parseFloat(getElement("paymentAmount")?.value) || 0;
+  const method = getElement("paymentMethod")?.value || "bank_transfer";
+  const reference = getElement("paymentReference")?.value || null;
+  const paymentDate = getElement("paymentDate")?.value || null;
+  const dueDate = getElement("paymentDueDate")?.value || null;
+  const notes = getElement("paymentNotes")?.value || null;
+
+  if (!inquiryId) {
+    showToast("❌ Inquiry ID is required", "error");
+    return;
   }
-  container.querySelectorAll("input").forEach((input) => {
-    input.addEventListener("input", calculateInvoiceTotal);
+
+  if (amount <= 0) {
+    showToast("❌ Amount must be greater than 0", "error");
+    return;
+  }
+
+  // Auto-fill project_id
+  let finalProjectId = projectId;
+  if (!finalProjectId && state.currentInquiryId) {
+    const inquiry = state._currentInquiry;
+    if (inquiry?.project?.id) {
+      finalProjectId = inquiry.project.id;
+    }
+  }
+
+  // Auto-fill invoice_id
+  let finalInvoiceId = invoiceId;
+  if (!finalInvoiceId && state.currentInquiryId) {
+    try {
+      const invoices = await PaymentAPI.getInvoicesByInquiry(
+        state.currentInquiryId,
+      );
+      const unpaid = invoices?.find(
+        (inv) => inv.status !== "paid" && inv.status !== "cancelled",
+      );
+      if (unpaid) {
+        finalInvoiceId = unpaid.id;
+      }
+    } catch (error) {
+      console.warn("Failed to auto-fill invoice:", error);
+    }
+  }
+
+  const typeLabel = paymentType === "deposit" ? "Deposit" : "Payment";
+  if (
+    !confirm(
+      `Record ${typeLabel} of ${PaymentFormatter.currency(amount)} for this inquiry?`,
+    )
+  ) {
+    return;
+  }
+
+  const paymentData = {
+    inquiry_id: inquiryId,
+    project_id: finalProjectId || null,
+    invoice_id: finalInvoiceId || null,
+    payment_type: paymentType,
+    amount: amount,
+    payment_method: method,
+    reference_number: reference,
+    notes: notes,
+    paid_at: paymentDate || new Date().toISOString().split("T")[0],
+    due_date: dueDate || null,
+    status: "pending",
+  };
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="ph ph-spinner spin"></i> Saving...';
+  }
+
+  try {
+    const result = await PaymentAPI.create(paymentData);
+    if (result) {
+      const typeIcon = paymentType === "deposit" ? "🏦" : "💳";
+      showToast(
+        `${typeIcon} ${typeLabel} of ${PaymentFormatter.currency(amount)} recorded!`,
+        "success",
+      );
+      closePaymentModal();
+
+      if (
+        state.currentInquiryId &&
+        DOM.drawer()?.classList.contains("active")
+      ) {
+        await loadInquiryDetail(state.currentInquiryId);
+      }
+      await loadInquiries();
+    } else {
+      showToast("❌ Failed to save payment", "error");
+    }
+  } catch (error) {
+    console.error("Payment error:", error);
+    showToast(
+      `❌ Failed to save payment: ${error.message || "Unknown error"}`,
+      "error",
+    );
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = "Save Payment";
+    }
+  }
+}
+
+// ============================================================
+// INVOICE SUBMIT (FIXED)
+// ============================================================
+
+async function handleInvoiceSubmit(e) {
+  e.preventDefault();
+
+  const form = getElement("invoiceForm");
+  const submitBtn = form?.querySelector('button[type="submit"]');
+
+  const itemRows = document.querySelectorAll(".invoice-item-row");
+  const items = [];
+  let hasError = false;
+
+  itemRows.forEach((row) => {
+    const desc = row.querySelector(".item-description")?.value?.trim();
+    const qty = parseFloat(row.querySelector(".item-quantity")?.value) || 1;
+    const unit = row.querySelector(".item-unit")?.value?.trim() || "";
+    const price = parseFloat(row.querySelector(".item-unit-price")?.value) || 0;
+
+    if (desc && price > 0) {
+      items.push({
+        description: desc,
+        quantity: qty,
+        unit: unit,
+        unit_price: price,
+        tax_rate: 0,
+        discount_percentage: 0,
+      });
+    } else if (desc || price > 0) {
+      hasError = true;
+    }
   });
+
+  if (items.length === 0) {
+    showToast("❌ Please add at least one valid invoice item", "error");
+    return;
+  }
+
+  if (hasError) {
+    showToast("⚠️ Some items have missing description or price", "warning");
+    return;
+  }
+
+  const inquiryId = getElement("invoiceInquiryId")?.value || null;
+  const projectId = getElement("invoiceProjectId")?.value || null;
+  const invoiceNumber = getElement("invoiceNumber")?.value?.trim() || null;
+  const paymentTerms = getElement("invoicePaymentTerms")?.value?.trim() || null;
+  const invoiceDate = getElement("invoiceDate")?.value || null;
+  const dueDate = getElement("invoiceDueDate")?.value || null;
+  const notes = getElement("invoiceNotes")?.value?.trim() || null;
+
+  if (!inquiryId) {
+    showToast("❌ Inquiry ID is required", "error");
+    return;
+  }
+
+  if (!invoiceNumber) {
+    showToast("❌ Invoice Number is required", "error");
+    return;
+  }
+
+  let finalProjectId = projectId;
+  if (!finalProjectId && state.currentInquiryId) {
+    const inquiry = state._currentInquiry;
+    if (inquiry?.project?.id) {
+      finalProjectId = inquiry.project.id;
+    }
+  }
+
+  const totalAmount = items.reduce(
+    (sum, item) => sum + item.quantity * item.unit_price,
+    0,
+  );
+  if (
+    !confirm(
+      `Create invoice ${invoiceNumber} for ${PaymentFormatter.currency(totalAmount)}?`,
+    )
+  ) {
+    return;
+  }
+
+  const invoiceData = {
+    inquiry_id: inquiryId,
+    project_id: finalProjectId || null,
+    invoice_number: invoiceNumber,
+    invoice_date: invoiceDate || new Date().toISOString().split("T")[0],
+    due_date: dueDate || null,
+    payment_terms: paymentTerms || null,
+    notes: notes || null,
+    items: items,
+    status: "draft",
+  };
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="ph ph-spinner spin"></i> Creating...';
+  }
+
+  try {
+    const result = await PaymentAPI.createInvoice(invoiceData);
+    if (result) {
+      showToast(
+        `✅ Invoice ${invoiceNumber} created! (${PaymentFormatter.currency(totalAmount)})`,
+        "success",
+      );
+      closeInvoiceModal();
+
+      if (
+        state.currentInquiryId &&
+        DOM.drawer()?.classList.contains("active")
+      ) {
+        await loadInquiryDetail(state.currentInquiryId);
+      }
+      await loadInquiries();
+    } else {
+      showToast("❌ Failed to create invoice", "error");
+    }
+  } catch (error) {
+    console.error("Invoice error:", error);
+    showToast(
+      `❌ Failed to create invoice: ${error.message || "Unknown error"}`,
+      "error",
+    );
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = "Create Invoice";
+    }
+  }
+}
+
+// ============================================================
+// CONFIRM PAYMENT (EXPORTED)
+// ============================================================
+
+export async function confirmPayment(paymentId) {
+  if (!paymentId) {
+    showToast("❌ Payment ID is required", "error");
+    return;
+  }
+
+  if (!confirm("Confirm this payment?")) return;
+
+  showToast("⏳ Confirming payment...", "info");
+
+  try {
+    const result = await PaymentAPI.confirm(paymentId, "admin");
+    if (result) {
+      showToast("✅ Payment confirmed successfully!", "success");
+      if (
+        state.currentInquiryId &&
+        DOM.drawer()?.classList.contains("active")
+      ) {
+        await loadInquiryDetail(state.currentInquiryId);
+      }
+      await loadInquiries();
+    } else {
+      showToast("❌ Failed to confirm payment", "error");
+    }
+  } catch (error) {
+    console.error("Confirm payment error:", error);
+    showToast(
+      `❌ Failed to confirm payment: ${error.message || "Unknown error"}`,
+      "error",
+    );
+  }
 }
 
 // ============================================================
@@ -312,296 +582,7 @@ function bindInvoiceItemRowEvents(row) {
 }
 
 // ============================================================
-// PAYMENT SUBMIT
-// ============================================================
-
-async function handlePaymentSubmit(e) {
-  e.preventDefault();
-
-  const form = getElement("paymentForm");
-  const submitBtn = form?.querySelector('button[type="submit"]');
-
-  const inquiryId = getElement("paymentInquiryId")?.value || null;
-  const projectId = getElement("paymentProjectId")?.value || null;
-  const invoiceId = getElement("paymentInvoiceId")?.value?.trim() || null;
-  const paymentType = getElement("paymentType")?.value || "payment";
-  const amount = parseFloat(getElement("paymentAmount")?.value) || 0;
-  const method = getElement("paymentMethod")?.value || "bank_transfer";
-  const reference = getElement("paymentReference")?.value || null;
-  const paymentDate = getElement("paymentDate")?.value || null;
-  const dueDate = getElement("paymentDueDate")?.value || null;
-  const notes = getElement("paymentNotes")?.value || null;
-
-  if (!inquiryId) {
-    showToast("❌ Inquiry ID is required", "error");
-    return;
-  }
-
-  if (amount <= 0) {
-    showToast("❌ Amount must be greater than 0", "error");
-    return;
-  }
-
-  // Auto-fill project_id
-  let finalProjectId = projectId;
-  if (!finalProjectId && state.currentInquiryId) {
-    const inquiry = state._currentInquiry;
-    if (inquiry?.project?.id) {
-      finalProjectId = inquiry.project.id;
-    }
-  }
-
-  // Auto-fill invoice_id
-  let finalInvoiceId = invoiceId;
-  if (!finalInvoiceId && state.currentInquiryId) {
-    try {
-      const invoices = await PaymentAPI.getInvoicesByInquiry(
-        state.currentInquiryId,
-      );
-      const unpaid = invoices?.find(
-        (inv) => inv.status !== "paid" && inv.status !== "cancelled",
-      );
-      if (unpaid) {
-        finalInvoiceId = unpaid.id;
-      }
-    } catch (error) {
-      console.warn("Failed to auto-fill invoice:", error);
-    }
-  }
-
-  const typeLabel = paymentType === "deposit" ? "Deposit" : "Payment";
-  if (
-    !confirm(
-      `Record ${typeLabel} of ${PaymentFormatter.currency(amount)} for this inquiry?`,
-    )
-  ) {
-    return;
-  }
-
-  const paymentData = {
-    inquiry_id: inquiryId,
-    project_id: finalProjectId || null,
-    invoice_id: finalInvoiceId || null,
-    payment_type: paymentType,
-    amount: amount,
-    payment_method: method,
-    reference_number: reference,
-    notes: notes,
-    paid_at: paymentDate || new Date().toISOString().split("T")[0],
-    due_date: dueDate || null,
-    status: "pending",
-  };
-
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="ph ph-spinner spin"></i> Saving...';
-  }
-
-  try {
-    const result = await PaymentAPI.create(paymentData);
-    if (result) {
-      const typeIcon = paymentType === "deposit" ? "🏦" : "💳";
-      showToast(
-        `${typeIcon} ${typeLabel} of ${PaymentFormatter.currency(amount)} recorded!`,
-        "success",
-      );
-      closePaymentModal();
-
-      if (
-        state.currentInquiryId &&
-        DOM.drawer()?.classList.contains("active")
-      ) {
-        await loadInquiryDetail(state.currentInquiryId);
-      }
-      await loadInquiries();
-    } else {
-      showToast("❌ Failed to save payment", "error");
-    }
-  } catch (error) {
-    console.error("Payment error:", error);
-    showToast(
-      `❌ Failed to save payment: ${error.message || "Unknown error"}`,
-      "error",
-    );
-  } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = "Save Payment";
-    }
-  }
-}
-
-// ============================================================
-// INVOICE SUBMIT
-// ============================================================
-
-async function handleInvoiceSubmit(e) {
-  e.preventDefault();
-
-  const form = getElement("invoiceForm");
-  const submitBtn = form?.querySelector('button[type="submit"]');
-
-  const itemRows = document.querySelectorAll(".invoice-item-row");
-  const items = [];
-  let hasError = false;
-
-  itemRows.forEach((row) => {
-    const desc = row.querySelector(".item-description")?.value?.trim();
-    const qty = parseFloat(row.querySelector(".item-quantity")?.value) || 1;
-    const unit = row.querySelector(".item-unit")?.value?.trim() || "";
-    const price = parseFloat(row.querySelector(".item-unit-price")?.value) || 0;
-
-    if (desc && price > 0) {
-      items.push({
-        description: desc,
-        quantity: qty,
-        unit: unit,
-        unit_price: price,
-        tax_rate: 0,
-        discount_percentage: 0,
-      });
-    } else if (desc || price > 0) {
-      hasError = true;
-    }
-  });
-
-  if (items.length === 0) {
-    showToast("❌ Please add at least one valid invoice item", "error");
-    return;
-  }
-
-  if (hasError) {
-    showToast("⚠️ Some items have missing description or price", "warning");
-    return;
-  }
-
-  const inquiryId = getElement("invoiceInquiryId")?.value || null;
-  const projectId = getElement("invoiceProjectId")?.value || null;
-  const invoiceNumber = getElement("invoiceNumber")?.value?.trim() || null;
-  const paymentTerms = getElement("invoicePaymentTerms")?.value?.trim() || null;
-  const invoiceDate = getElement("invoiceDate")?.value || null;
-  const dueDate = getElement("invoiceDueDate")?.value || null;
-  const notes = getElement("invoiceNotes")?.value?.trim() || null;
-
-  if (!inquiryId) {
-    showToast("❌ Inquiry ID is required", "error");
-    return;
-  }
-
-  if (!invoiceNumber) {
-    showToast("❌ Invoice Number is required", "error");
-    return;
-  }
-
-  let finalProjectId = projectId;
-  if (!finalProjectId && state.currentInquiryId) {
-    const inquiry = state._currentInquiry;
-    if (inquiry?.project?.id) {
-      finalProjectId = inquiry.project.id;
-    }
-  }
-
-  const totalAmount = items.reduce(
-    (sum, item) => sum + item.quantity * item.unit_price,
-    0,
-  );
-  if (
-    !confirm(
-      `Create invoice ${invoiceNumber} for ${PaymentFormatter.currency(totalAmount)}?`,
-    )
-  ) {
-    return;
-  }
-
-  const invoiceData = {
-    inquiry_id: inquiryId,
-    project_id: finalProjectId || null,
-    invoice_number: invoiceNumber,
-    invoice_date: invoiceDate || new Date().toISOString().split("T")[0],
-    due_date: dueDate || null,
-    payment_terms: paymentTerms || null,
-    notes: notes || null,
-    items: items,
-    status: "draft",
-  };
-
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="ph ph-spinner spin"></i> Creating...';
-  }
-
-  try {
-    const result = await PaymentAPI.createInvoice(invoiceData);
-    if (result) {
-      showToast(
-        `✅ Invoice ${invoiceNumber} created! (${PaymentFormatter.currency(totalAmount)})`,
-        "success",
-      );
-      closeInvoiceModal();
-
-      if (
-        state.currentInquiryId &&
-        DOM.drawer()?.classList.contains("active")
-      ) {
-        await loadInquiryDetail(state.currentInquiryId);
-      }
-      await loadInquiries();
-    } else {
-      showToast("❌ Failed to create invoice", "error");
-    }
-  } catch (error) {
-    console.error("Invoice error:", error);
-    showToast(
-      `❌ Failed to create invoice: ${error.message || "Unknown error"}`,
-      "error",
-    );
-  } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = "Create Invoice";
-    }
-  }
-}
-
-// ============================================================
-// CONFIRM PAYMENT (EXPORTED)
-// ============================================================
-
-export async function confirmPayment(paymentId) {
-  if (!paymentId) {
-    showToast("❌ Payment ID is required", "error");
-    return;
-  }
-
-  if (!confirm("Confirm this payment?")) return;
-
-  showToast("⏳ Confirming payment...", "info");
-
-  try {
-    const result = await PaymentAPI.confirm(paymentId, "admin");
-    if (result) {
-      showToast("✅ Payment confirmed successfully!", "success");
-      if (
-        state.currentInquiryId &&
-        DOM.drawer()?.classList.contains("active")
-      ) {
-        await loadInquiryDetail(state.currentInquiryId);
-      }
-      await loadInquiries();
-    } else {
-      showToast("❌ Failed to confirm payment", "error");
-    }
-  } catch (error) {
-    console.error("Confirm payment error:", error);
-    showToast(
-      `❌ Failed to confirm payment: ${error.message || "Unknown error"}`,
-      "error",
-    );
-  }
-}
-
-// ============================================================
-// BIND EVENTS
+// BIND EVENTS (FIXED)
 // ============================================================
 
 export function bindEvents() {
@@ -678,18 +659,34 @@ export function bindEvents() {
     if (state.currentInquiryId) openConvertModal(state.currentInquiryId);
   });
 
-  // Payment Modal
-  const paymentModal = getElement("paymentModal");
-  const paymentForm = getElement("paymentForm");
+  // ============================================================
+  // ✅ FIX: Payment Form Submit
+  // ============================================================
+  const paymentForm = document.getElementById("paymentForm");
+  if (paymentForm) {
+    paymentForm.addEventListener("submit", handlePaymentSubmit);
+  }
+
+  // ============================================================
+  // ✅ FIX: Invoice Form Submit
+  // ============================================================
+  const invoiceForm = document.getElementById("invoiceForm");
+  if (invoiceForm) {
+    invoiceForm.addEventListener("submit", handleInvoiceSubmit);
+  }
+
+  // Payment Modal close
   getElement("closePaymentModal")?.addEventListener("click", closePaymentModal);
   getElement("cancelPaymentBtn")?.addEventListener("click", closePaymentModal);
-  paymentModal?.addEventListener("click", (e) => {
-    if (e.target === paymentModal) closePaymentModal();
+  getElement("paymentModal")?.addEventListener("click", (e) => {
+    if (e.target === getElement("paymentModal")) closePaymentModal();
   });
-  paymentForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    // Implementation would call PaymentAPI.create
-    // Similar to projects module
+
+  // Invoice Modal close
+  getElement("closeInvoiceModal")?.addEventListener("click", closeInvoiceModal);
+  getElement("cancelInvoiceBtn")?.addEventListener("click", closeInvoiceModal);
+  getElement("invoiceModal")?.addEventListener("click", (e) => {
+    if (e.target === getElement("invoiceModal")) closeInvoiceModal();
   });
 
   // Confirm Payment Modal
@@ -767,7 +764,7 @@ export function bindEvents() {
     if (modal) modal.classList.add("active");
   });
 
-  // Invoice Modal
+  // Invoice Modal open
   DOM.viewInvoicesBtn()?.addEventListener("click", () => {
     const inquiryId = state.currentInquiryId;
     if (!inquiryId) {
@@ -788,6 +785,9 @@ export function bindEvents() {
     if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
     if (modal) modal.classList.add("active");
   });
+
+  // Add invoice item
+  getElement("addInvoiceItemBtn")?.addEventListener("click", addInvoiceItemRow);
 
   // Lightbox
   DOM.lightboxClose()?.addEventListener("click", closeLightbox);

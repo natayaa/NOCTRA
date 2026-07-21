@@ -39,9 +39,12 @@ const MAX_TOASTS = 5;
  */
 export function showToast(message, type = "info", duration = null) {
   const container = DOM.toastContainer();
+  // ✅ Jika container tidak ada, buat secara dinamis
   if (!container) {
-    console.warn("Toast container not found");
-    return;
+    container = document.createElement("div");
+    container.id = "toastContainer";
+    document.body.appendChild(container);
+    // Tapi pastikan tidak ada duplikasi
   }
 
   // ✅ Limit active toasts

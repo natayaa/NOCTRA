@@ -33,10 +33,6 @@ export async function apiFetch(endpoint, options = {}) {
 }
 
 // ============================================================
-// Export Inquiries
-// ============================================================
-
-// ============================================================
 // Inquiry API Services
 // ============================================================
 
@@ -265,20 +261,35 @@ export const InquiryAPI = {
   fetchProjectLabor: async (projectId) => {
     try {
       const response = await apiFetch(`/projects/${projectId}/labor`);
-      return response.data || response || [];
-    } catch (error) {
-      console.error("Failed to load labor:", error);
+      let data = response.data || response;
+      if (
+        data &&
+        typeof data === "object" &&
+        !Array.isArray(data) &&
+        data.items
+      ) {
+        return data.items;
+      }
+      return Array.isArray(data) ? data : [];
+    } catch {
       return [];
     }
   },
 
-  // ✅ GET /api/inventory/usage/project/{project_id}
   fetchProjectMaterialUsage: async (projectId) => {
     try {
       const response = await apiFetch(`/inventory/usage/project/${projectId}`);
-      return response.data || response || [];
-    } catch (error) {
-      console.error("Failed to load material usage:", error);
+      let data = response.data || response;
+      if (
+        data &&
+        typeof data === "object" &&
+        !Array.isArray(data) &&
+        data.items
+      ) {
+        return data.items;
+      }
+      return Array.isArray(data) ? data : [];
+    } catch {
       return [];
     }
   },

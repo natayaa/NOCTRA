@@ -19,42 +19,14 @@ export async function handleUpdateStatus(inquiryId, status, note = "") {
     return;
   }
 
-  // ✅ Validasi transisi status
-  const validTransitions = {
-    new: ["under_review", "contacted", "rejected"],
-    under_review: ["contacted", "quoted", "rejected"],
-    contacted: ["quoted", "rejected"],
-    quoted: ["approved", "rejected"],
-    approved: ["converted", "rejected"],
-    converted: ["completed", "rejected"],
-    rejected: ["closed"],
-    closed: [],
-    completed: [],
-  };
-
-  // Ambil status saat ini
-  const inquiry = await InquiryAPI.fetchDetail(inquiryId);
-  if (!inquiry) {
-    showToast("Inquiry not found", "error");
-    return;
-  }
-
-  const currentStatus = inquiry.status || "new";
-  const allowed = validTransitions[currentStatus] || [];
-
-  if (!allowed.includes(status)) {
-    showToast(
-      `Cannot transition from "${currentStatus}" to "${status}"`,
-      "warning",
-    );
-    return;
-  }
-
+  // ✅ HAPUS validasi client-side, serahkan ke server
   try {
     const result = await InquiryAPI.updateStatus(inquiryId, status, note);
     if (result) {
-      const statusLabel = Formatter.statusLabel(status);
-      showToast(`✅ Status updated to ${statusLabel}`, "success");
+      showToast(
+        `✅ Status updated to ${Formatter.statusLabel(status)}`,
+        "success",
+      );
       await loadInquiries();
       if (DOM.drawer()?.classList.contains("active")) {
         await loadInquiryDetail(inquiryId);
@@ -65,7 +37,6 @@ export async function handleUpdateStatus(inquiryId, status, note = "") {
     showToast("❌ Failed to update status: " + error.message, "error");
   }
 }
-
 /**
  * Mark as Under Review
  */

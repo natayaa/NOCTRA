@@ -86,58 +86,61 @@ export function calculateFinancialFromData(
   materials,
   payments,
 ) {
-  //console.log("📊 Calculating financial from:", {
-  //inquiry: inquiry?.id,
-  //laborCount: labor?.length || 0,
-  // materialsCount: materials?.length || 0,
-  // paymentsCount: payments?.length || 0,
-  // });
+  // Normalisasi labor & materials menjadi array
+  const laborArray = Array.isArray(labor) ? labor : labor?.items || [];
+  const materialsArray = Array.isArray(materials)
+    ? materials
+    : materials?.items || [];
 
   const project = inquiry?.project || {};
 
+  // Ambil dari inquiry/project (backend sudah menghitung)
   const estimatedCost = Number(inquiry.estimated_cost) || 0;
   const depositAmount = Number(inquiry.deposit_amount) || 0;
-  const actualRevenue = Number(inquiry.actual_revenue) || 0;
   const estimatedRevenue = Number(inquiry.estimated_revenue) || 0;
+  const actualRevenue = Number(inquiry.actual_revenue) || 0;
 
-  // Hitung actual cost dari labor + material
-  const totalLaborCost = (labor || []).reduce((sum, item) => {
+  // Hitung actual cost dari labor + material (backend tidak menyediakan)
+  const totalLaborCost = laborArray.reduce((sum, item) => {
     return sum + (Number(item.hours) || 0) * (Number(item.rate_per_hour) || 0);
   }, 0);
 
-  const totalMaterialCost = (materials || []).reduce((sum, item) => {
-    return sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+  const totalMaterialCost = materialsArray.reduce((sum, item) => {
+    const qty = Number(item.quantity) || 0;
+    const price =
+      Number(item.unit_price) ||
+      Number(item.price) ||
+      Number(item.cost_price) ||
+      0;
+    return sum + qty * price;
   }, 0);
 
-  // ✅ Other Expenses - dari project expenses
-  const otherExpenses =
-    Number(project.other_expenses) || Number(inquiry.other_expenses) || 0;
+  // other_expenses tidak ada di backend, default 0
+  const otherExpenses = 0;
 
-  const actualCost = totalLaborCost + totalMaterialCost;
+  const actualCost = totalLaborCost + totalMaterialCost + otherExpenses;
 
-  // ✅ Payments summary - pakai fungsi dari shared/payments
+  // Payment summary (dari payments list)
   const paymentSummary = calculatePaymentSummary(payments || []);
-  //console.log("💰 Payment Summary:", paymentSummary);
-
-  // ✅ Total Paid = semua payment yang completed (termasuk deposit)
   const totalPaid = paymentSummary.totalPaid;
   const totalDeposit = paymentSummary.totalDeposit;
   const totalPending = paymentSummary.totalPending;
 
-  // ✅ Remaining = actual cost - total paid (termasuk deposit)
   const remaining = Math.max(0, actualCost - totalPaid);
-
-  // ✅ Deposit paid status
   const depositPaid =
     totalDeposit > 0 || (depositAmount > 0 && totalDeposit >= depositAmount);
 
-  // console.log("📊 Final financial:", {
-  //  estimatedCost,
-  //  actualCost,
-  //  totalPaid,
-  //  totalDeposit,
-  //  remaining,
-  //});
+  console.log("📊 Financial calculation:", {
+    estimatedCost,
+    actualCost,
+    estimatedRevenue,
+    actualRevenue,
+    depositAmount,
+    totalPaid,
+    remaining,
+    totalLaborCost,
+    totalMaterialCost,
+  });
 
   return {
     estimated_cost: estimatedCost,

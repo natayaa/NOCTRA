@@ -1,935 +1,904 @@
-/**
- * NOCTRA Inquiry Wizard
- * Multi-step form with API integration for customer inquiries.
- * Based on CustomerInquiryCreate schema
- */
+// inquiry.js - NOCTRA AUTOWORKS Inquiry Form
+// Complete implementation with 2-step submission (JSON + Photo Upload)
+
 (function () {
   "use strict";
 
-  // ─── Constants ──────────────────────────────────────────────
-  const API_BASE = "/api/api/inquiries/";
-  const PHONE_REGEX = /^(\+62|62|08)\d{8,13}$/;
-  const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  const YEAR_MIN = 1950;
-  const MAX_PHOTOS = 10;
-  const MIN_DESCRIPTION_LENGTH = 20;
-  const MIN_NAME_LENGTH = 2;
-  const MAX_FILE_SIZE_MB = 5;
-
-  // ─── Main Class ──────────────────────────────────────────────
-  class InquiryWizard {
-    // ─── Private fields ──────────────────────────────────────
-    #dom = {};
-    #state = {
-      currentStep: 0,
-      totalSteps: 3,
-      isSubmitting: false,
-      isUploading: false,
-    };
-    #photoFiles = [];
-    #abortController = null;
-
-    // ─── Constructor ──────────────────────────────────────────
-    constructor() {
-      const form = document.getElementById("inquiryForm");
-      if (!form) {
-        console.warn("Inquiry form not found. Wizard not initialized.");
-        return;
-      }
-      this.#dom.form = form;
-      this.#cacheDomRefs();
-      this.#bindEvents();
-      this.#initWizard();
-      console.log("✅ Inquiry Wizard initialized");
-    }
-
-    // ─── DOM Caching ──────────────────────────────────────────
-    #cacheDomRefs() {
-      const ids = [
-        "fullname",
-        "phone_number",
-        "email",
-        "province",
-        "city",
-        "bike_brand",
-        "bike_model",
-        "bike_year",
-        "plate_number",
-        "previous_repaint",
-        "bike_modified",
-        "project_type",
-        "desired_finish",
-        "desired_color",
-        "estimated_budget",
-        "deadline",
-        "priority",
-        "project_details",
-        "reference_link",
-        "project_photos",
-        "nextBtn",
-        "prevBtn",
-        "submitBtn",
-        "progressLine",
-        "agreementCheck",
-        "photoPreviewGrid",
-        "uploadParagraph",
-        "uploadZone",
-      ];
-      const refs = {};
-      ids.forEach((id) => {
-        refs[id] = document.getElementById(id);
-      });
-      refs.pages = document.querySelectorAll(".wizard-page");
-      refs.steps = document.querySelectorAll(".step");
-      refs.serviceCards = document.querySelectorAll(".service-card");
-      refs.conditionCheckboxes = document.querySelectorAll(
-        'input[name="condition"]',
-      );
-      refs.servicesCheckboxes = document.querySelectorAll(
-        'input[name="services"]',
-      );
-      refs.modal = document.getElementById("inquiryModal");
-
-      this.#dom = { ...this.#dom, ...refs };
-    }
-
-    // ─── Event Binding ────────────────────────────────────────
-    #bindEvents() {
-      const {
-        form,
-        nextBtn,
-        prevBtn,
-        submitBtn,
-        phone_number,
-        plate_number,
-        project_photos,
-        bike_brand,
-        bike_model,
-      } = this.#dom;
-
-      nextBtn?.addEventListener("click", () => this.#goNext());
-      prevBtn?.addEventListener("click", () => this.#goPrev());
-
-      // 🔥 Gunakan event submit biasa, jangan double
-      form?.addEventListener("submit", (e) => this.#handleSubmit(e));
-
-      // Phone number formatting
-      phone_number?.addEventListener("input", (e) => {
-        let val = e.target.value.replace(/[^0-9+]/g, "");
-        // Pastikan +62 di depan
-        if (val.startsWith("62") && !val.startsWith("+")) {
-          val = "+" + val;
-        }
-        if (val.length > 0 && !val.startsWith("+")) {
-          // Jika tidak mulai dengan +, tambahkan +62
-          const numeric = val.replace(/\D/g, "");
-          if (numeric.length > 0) {
-            val = "+62" + numeric;
-          }
-        }
-        e.target.value = val;
-      });
-
-      // License plate uppercase
-      plate_number?.addEventListener("input", (e) => {
-        e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-      });
-
-      // Service cards toggle
-      this.#dom.serviceCards.forEach((card) => {
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        if (!checkbox) return;
-
-        const sync = () => {
-          card.classList.toggle("selected", checkbox.checked);
-        };
-
-        card.addEventListener("click", (e) => {
-          if (e.target.tagName !== "INPUT") {
-            checkbox.checked = !checkbox.checked;
-            sync();
-          }
-        });
-
-        checkbox.addEventListener("change", sync);
-        sync();
-      });
-
-      // Brand → Model filtering
-      bike_brand?.addEventListener("change", () => this.#filterModels());
-      this.#filterModels();
-
-      // Photo upload
-      project_photos?.addEventListener("change", (e) => {
-        this.#handlePhotoUpload(e);
-      });
-
-      // Drag and drop
-      const uploadZone = this.#dom.uploadZone;
-      if (uploadZone) {
-        uploadZone.addEventListener("dragover", (e) => {
-          e.preventDefault();
-          uploadZone.classList.add("dragover");
-        });
-        uploadZone.addEventListener("dragleave", () => {
-          uploadZone.classList.remove("dragover");
-        });
-        uploadZone.addEventListener("drop", (e) => {
-          e.preventDefault();
-          uploadZone.classList.remove("dragover");
-          if (e.dataTransfer.files.length > 0) {
-            this.#dom.project_photos.files = e.dataTransfer.files;
-            this.#handlePhotoUpload({ target: this.#dom.project_photos });
-          }
-        });
-      }
-
-      // 🔥 Enter key → next step atau submit
-      form?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
-          e.preventDefault();
-          if (this.#state.currentStep === this.#state.totalSteps - 1) {
-            if (
-              this.#validateStep(this.#state.currentStep) &&
-              !this.#state.isSubmitting
-            ) {
-              form.requestSubmit();
-            }
-          } else {
-            nextBtn?.click();
-          }
-        }
-      });
-
-      // 🔥 Close modal on backdrop click (dari index.js sudah handle, tapi kita tambahkan safety)
-      const modal = this.#dom.modal;
-      modal?.addEventListener("click", (e) => {
-        if (
-          e.target === modal ||
-          e.target.classList.contains("modal-backdrop")
-        ) {
-          // Tidak langsung close, biar index.js yang handle
-        }
-      });
-    }
-
-    // ─── Photo Handling ──────────────────────────────────────
-    #handlePhotoUpload(event) {
-      const input = event.target;
-      const files = input.files;
-
-      if (!files || files.length === 0) return;
-
-      // Validate file count
-      if (files.length > MAX_PHOTOS) {
-        this.#showAlert(
-          "warning",
-          "Terlalu Banyak Foto",
-          `Maksimal ${MAX_PHOTOS} foto diperbolehkan.`,
-        );
-        input.value = "";
-        return;
-      }
-
-      // Validate file size
-      for (const file of files) {
-        if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-          this.#showAlert(
-            "warning",
-            "File Terlalu Besar",
-            `File "${file.name}" melebihi ${MAX_FILE_SIZE_MB}MB.`,
-          );
-          input.value = "";
-          return;
-        }
-      }
-
-      this.#photoFiles = Array.from(files);
-      this.#updatePhotoPreview();
-    }
-
-    #updatePhotoPreview() {
-      const grid = this.#dom.photoPreviewGrid;
-      const paragraph = this.#dom.uploadParagraph;
-      if (!grid) return;
-
-      grid.innerHTML = "";
-      const files = this.#photoFiles;
-
-      if (!files || files.length === 0) {
-        grid.style.display = "none";
-        if (paragraph) {
-          paragraph.textContent =
-            "Drag & drop foto di sini atau klik untuk mencari. (Max 10)";
-        }
-        return;
-      }
-
-      grid.style.display = "grid";
-
-      files.forEach((file, index) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = document.createElement("img");
-          img.src = e.target.result;
-          img.alt = `Photo ${index + 1}`;
-          img.loading = "lazy";
-
-          const wrapper = document.createElement("div");
-          wrapper.className = "preview-item";
-
-          const removeBtn = document.createElement("button");
-          removeBtn.type = "button";
-          removeBtn.className = "remove-photo";
-          removeBtn.innerHTML = "×";
-          removeBtn.title = "Hapus foto";
-          removeBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            this.#photoFiles.splice(index, 1);
-            const dt = new DataTransfer();
-            this.#photoFiles.forEach((f) => dt.items.add(f));
-            this.#dom.project_photos.files = dt.files;
-            this.#updatePhotoPreview();
-          });
-
-          wrapper.appendChild(img);
-          wrapper.appendChild(removeBtn);
-          grid.appendChild(wrapper);
-        };
-        reader.readAsDataURL(file);
-      });
-
-      if (paragraph) {
-        paragraph.textContent = `${files.length} foto terpilih (Max ${MAX_PHOTOS})`;
-      }
-    }
-
-    // ─── Model Filtering ──────────────────────────────────────
-    #filterModels() {
-      const { bike_brand, bike_model } = this.#dom;
-      if (!bike_brand || !bike_model) return;
-
-      const selectedBrand = bike_brand.value;
-      const options = bike_model.querySelectorAll("option");
-
-      options.forEach((option) => {
-        if (option.value === "") {
-          option.style.display = "";
-          return;
-        }
-        const brand = option.dataset.brand;
-        option.style.display = brand === selectedBrand ? "" : "none";
-      });
-
-      if (bike_model.value) {
-        const selectedOption = bike_model.querySelector(
-          `option[value="${bike_model.value}"]`,
-        );
-        if (selectedOption && selectedOption.style.display === "none") {
-          bike_model.value = "";
-        }
-      }
-    }
-
-    // ─── Wizard Navigation ────────────────────────────────────
-    #goNext() {
-      if (!this.#validateStep(this.#state.currentStep)) return;
-      if (this.#state.currentStep < this.#dom.pages.length - 1) {
-        this.#state.currentStep++;
-        this.#updateWizard();
-        this.#dom.form?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }
-
-    #goPrev() {
-      if (this.#state.currentStep > 0) {
-        this.#state.currentStep--;
-        this.#updateWizard();
-        this.#dom.form?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }
-
-    #initWizard() {
-      // Cek source dari query param
-      const urlParams = new URLSearchParams(window.location.search);
-      const source = urlParams.get("source") || "website";
-      console.log(`📊 Source: ${source}`);
-      this.#updateWizard();
-    }
-
-    #updateWizard() {
-      const { pages, steps, prevBtn, nextBtn, submitBtn, progressLine } =
-        this.#dom;
-      const current = this.#state.currentStep;
-      const total = pages.length - 1;
-
-      pages.forEach((page, index) => {
-        page.classList.toggle("active", index === current);
-      });
-
-      steps.forEach((step, index) => {
-        step.classList.toggle("active", index <= current);
-        const small = step.querySelector("small");
-        if (small) {
-          small.style.color = index <= current ? "#ffffff" : "#7a7a7a";
-        }
-      });
-
-      if (prevBtn) {
-        prevBtn.style.display = current === 0 ? "none" : "inline-flex";
-      }
-      if (nextBtn) {
-        nextBtn.style.display = current === total ? "none" : "inline-flex";
-      }
-      if (submitBtn) {
-        submitBtn.style.display = current === total ? "inline-flex" : "none";
-      }
-
-      if (progressLine) {
-        const percentage = total <= 0 ? 0 : (current / total) * 100;
-        progressLine.style.background = `linear-gradient(90deg, #ff6b00 ${percentage}%, rgba(255,255,255,.08) ${percentage}%)`;
-      }
-
-      steps.forEach((step, index) => {
-        const span = step.querySelector("span");
-        if (span) {
-          span.textContent = index + 1;
-        }
-      });
-    }
-
-    // ─── Validation ───────────────────────────────────────────
-    #validateStep(step) {
-      this.#clearErrors();
-      switch (step) {
-        case 0:
-          return this.#validateStepOne();
-        case 1:
-          return this.#validateStepTwo();
-        case 2:
-          return this.#validateStepThree();
-        default:
-          return true;
-      }
-    }
-
-    #validateStepOne() {
-      const { fullname, phone_number, email, province, city } = this.#dom;
-      let valid = true;
-
-      const name = fullname?.value.trim() || "";
-      if (name.length < MIN_NAME_LENGTH) {
-        this.#showError(
-          fullname,
-          `Nama lengkap minimal ${MIN_NAME_LENGTH} karakter.`,
-        );
-        valid = false;
-      }
-
-      const phone = phone_number?.value.trim() || "";
-      if (!PHONE_REGEX.test(phone)) {
-        this.#showError(
-          phone_number,
-          "Masukkan nomor WhatsApp yang valid (contoh: +628123456789).",
-        );
-        valid = false;
-      }
-
-      const mail = email?.value.trim() || "";
-      if (!EMAIL_REGEX.test(mail)) {
-        this.#showError(email, "Masukkan alamat email yang valid.");
-        valid = false;
-      }
-
-      const provinceVal = province?.value.trim() || "";
-      if (provinceVal.length < 2) {
-        this.#showError(province, "Provinsi harus diisi.");
-        valid = false;
-      }
-
-      const cityVal = city?.value.trim() || "";
-      if (cityVal.length < 2) {
-        this.#showError(city, "Kota / Kabupaten harus diisi.");
-        valid = false;
-      }
-
-      if (!valid) {
-        this.#dom.form?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-
-      return valid;
-    }
-
-    #validateStepTwo() {
-      const {
-        bike_brand,
-        bike_model,
-        bike_year,
-        previous_repaint,
-        bike_modified,
-      } = this.#dom;
-      let valid = true;
-
-      if (!bike_brand?.value) {
-        this.#showError(bike_brand, "Pilih merek motor.");
-        valid = false;
-      }
-
-      if (!bike_model?.value || bike_model.value.trim().length < 1) {
-        this.#showError(bike_model, "Model motor harus diisi.");
-        valid = false;
-      }
-
-      if (bike_year?.value) {
-        const year = parseInt(bike_year.value, 10);
-        const currentYear = new Date().getFullYear();
-        if (isNaN(year) || year < YEAR_MIN || year > currentYear + 1) {
-          this.#showError(
-            bike_year,
-            `Masukkan tahun produksi yang valid (${YEAR_MIN} - ${currentYear + 1}).`,
-          );
-          valid = false;
-        }
-      }
-
-      if (!previous_repaint?.value) {
-        this.#showError(previous_repaint, "Pilih riwayat repaint.");
-        valid = false;
-      }
-
-      if (!bike_modified?.value) {
-        this.#showError(bike_modified, "Pilih status modifikasi.");
-        valid = false;
-      }
-
-      const conditions = this.#getSelectedConditions();
-      if (conditions.length === 0) {
-        this.#showAlert(
-          "warning",
-          "Kondisi Kendaraan Diperlukan",
-          "Pilih setidaknya satu kondisi kendaraan.",
-        );
-        valid = false;
-      }
-
-      if (!valid) {
-        this.#dom.form?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-
-      return valid;
-    }
-
-    #validateStepThree() {
-      const {
-        project_type,
-        priority,
-        project_details,
-        reference_link,
-        desired_color,
-        agreementCheck,
-      } = this.#dom;
-      let valid = true;
-
-      if (!project_type?.value) {
-        this.#showError(project_type, "Pilih tipe project.");
-        valid = false;
-      }
-
-      if (!priority?.value) {
-        this.#showError(priority, "Pilih prioritas utama Anda.");
-        valid = false;
-      }
-
-      const color = desired_color?.value.trim() || "";
-      if (!color || color.length < 2) {
-        this.#showError(desired_color, "Masukkan warna yang diinginkan.");
-        valid = false;
-      }
-
-      if (!agreementCheck?.checked) {
-        this.#showError(
-          agreementCheck,
-          "Anda harus menyetujui syarat untuk melanjutkan.",
-        );
-        valid = false;
-      }
-
-      const services = this.#getSelectedServices();
-      if (services.length === 0) {
-        this.#showAlert(
-          "warning",
-          "Layanan Diperlukan",
-          "Pilih setidaknya satu layanan.",
-        );
-        valid = false;
-      }
-
-      const desc = project_details?.value.trim() || "";
-      if (desc.length < MIN_DESCRIPTION_LENGTH) {
-        this.#showError(
-          project_details,
-          `Deskripsi project minimal ${MIN_DESCRIPTION_LENGTH} karakter.`,
-        );
-        valid = false;
-      }
-
-      const ref = reference_link?.value.trim() || "";
-      if (ref && !this.#isValidUrl(ref)) {
-        this.#showError(reference_link, "Masukkan URL yang valid.");
-        valid = false;
-      }
-
-      if (this.#photoFiles.length > MAX_PHOTOS) {
-        this.#showError(
-          this.#dom.project_photos,
-          `Maksimal ${MAX_PHOTOS} foto diperbolehkan.`,
-        );
-        valid = false;
-      }
-
-      if (!valid) {
-        this.#dom.form?.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-
-      return valid;
-    }
-
-    // ─── Alert System (SweetAlert2) ──────────────────────────
-    #showAlert(type, title, message) {
-      if (typeof Swal !== "undefined") {
-        const iconMap = {
-          success: "success",
-          error: "error",
-          warning: "warning",
-          info: "info",
-        };
-        Swal.fire({
-          title: title,
-          text: message,
-          icon: iconMap[type] || "info",
-          confirmButtonColor: "#ff6b00",
-          background: "#0a0a0a",
-          color: "#f1f5f9",
-          confirmButtonText: "OK",
-        });
-      } else {
-        // Fallback ke modal custom
-        const existing = document.querySelector(".custom-modal-overlay");
-        if (existing) existing.remove();
-        const modal = document.createElement("div");
-        modal.className = "custom-modal-overlay";
-        const iconMap = {
-          success: "✅",
-          error: "❌",
-          warning: "⚠️",
-          info: "ℹ️",
-        };
-        modal.innerHTML = `
-          <div class="custom-modal">
-            <div class="custom-modal-icon">${iconMap[type] || "ℹ️"}</div>
-            <h3>${title}</h3>
-            <p>${message}</p>
-            <button class="custom-modal-btn" id="modalCloseBtn">OK</button>
-          </div>
-        `;
-        document.body.appendChild(modal);
-        const closeBtn = modal.querySelector("#modalCloseBtn");
-        const close = () => modal.remove();
-        closeBtn.addEventListener("click", close);
-        modal.addEventListener("click", (e) => {
-          if (e.target === modal) close();
-        });
-      }
-    }
-
-    // ─── Helpers ──────────────────────────────────────────────
-    #clearErrors() {
-      document.querySelectorAll(".error-message").forEach((el) => el.remove());
-      document.querySelectorAll("input, textarea, select").forEach((field) => {
-        field.style.borderColor = "";
-      });
-    }
-
-    #showError(field, message) {
-      if (!field) return;
-      field.style.borderColor = "#ff4d4f";
-
-      let parent = field.parentElement;
-      if (field.type === "checkbox") {
-        parent =
-          field.closest(".checkbox-label") || field.closest(".input-group");
-      }
-
-      if (!parent) return;
-      const existing = parent.querySelector(".error-message");
-      if (existing) existing.remove();
-
-      const error = document.createElement("small");
-      error.className = "error-message";
-      error.textContent = message;
-      parent.appendChild(error);
-    }
-
-    #isValidUrl(url) {
-      try {
-        new URL(url);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    #getSelectedConditions() {
-      return Array.from(
-        document.querySelectorAll('input[name="condition"]:checked'),
-      ).map((cb) => cb.value);
-    }
-
-    #getSelectedServices() {
-      return Array.from(
-        document.querySelectorAll('input[name="services"]:checked'),
-      ).map((cb) => cb.value);
-    }
-
-    #parseBudgetValue() {
-      const select = this.#dom.estimated_budget;
-      if (!select || !select.value) return null;
-      const num = parseInt(select.value, 10);
-      return isNaN(num) ? null : num;
-    }
-
-    // ─── Close Modal (delegasi ke index.js) ──────────────────
-    #closeModal() {
-      const modal = this.#dom.modal;
-      if (modal && modal.classList.contains("active")) {
-        modal.classList.remove("active");
-        document.body.style.overflow = "";
-        document.documentElement.style.overflow = "";
-        document.body.classList.remove("modal-open");
-      }
-    }
-
-    // ─── API ──────────────────────────────────────────────────
-    async #createInquiry(payload) {
-      const controller = new AbortController();
-      this.#abortController = controller;
-
-      const response = await fetch(API_BASE, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data?.message ||
-            data?.error ||
-            data?.detail ||
-            `HTTP ${response.status}`,
-        );
-      }
-
-      return data;
-    }
-
-    async #uploadPhotos(inquiryId, files) {
-      const formData = new FormData();
-      files.forEach((file) => formData.append("photos", file));
-
-      const controller = new AbortController();
-      this.#abortController = controller;
-
-      const response = await fetch(`${API_BASE}${inquiryId}/photos`, {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Gagal upload foto");
-      }
-
-      return data;
-    }
-
-    // ─── Form Submission ──────────────────────────────────────
-    async #handleSubmit(event) {
-      event.preventDefault();
-
-      if (this.#state.isSubmitting || this.#state.isUploading) return;
-
-      if (!this.#validateStep(2)) return;
-
-      this.#state.isSubmitting = true;
-      const submitBtn = this.#dom.submitBtn;
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Mengirim...";
-        submitBtn.style.opacity = "0.7";
-      }
-
-      try {
-        // Get source from query param
-        const urlParams = new URLSearchParams(window.location.search);
-        const source = urlParams.get("source") || "website";
-
-        // Build payload
-        const payload = {
-          customer_name: this.#dom.fullname?.value.trim() || "",
-          customer_phone_number: this.#dom.phone_number?.value.trim() || "",
-          customer_email: this.#dom.email?.value.trim() || "",
-          province: this.#dom.province?.value.trim() || "",
-          city: this.#dom.city?.value.trim() || "",
-          vehicle_brand: this.#dom.bike_brand?.value || "",
-          vehicle_model: this.#dom.bike_model?.value.trim() || "",
-          vehicle_year: this.#dom.bike_year?.value
-            ? parseInt(this.#dom.bike_year.value, 10)
-            : null,
-          vehicle_license_plate: this.#dom.plate_number?.value.trim() || "",
-          previous_repaint: this.#dom.previous_repaint?.value || "",
-          bike_modified: this.#dom.bike_modified?.value || "",
-          vehicle_condition: this.#getSelectedConditions().join(", "),
-          project_type: this.#dom.project_type?.value || "",
-          services: this.#getSelectedServices().join(", "),
-          desired_finish: this.#dom.desired_finish?.value || "",
-          desired_color: this.#dom.desired_color?.value.trim() || "",
-          estimated_budget: this.#parseBudgetValue(),
-          deadline: this.#dom.deadline?.value || "",
-          priority: this.#dom.priority?.value || "",
-          project_description: this.#dom.project_details?.value.trim() || "",
-          reference_link: this.#dom.reference_link?.value.trim() || "",
-          source: source,
-        };
-
-        console.log("📤 Submitting inquiry:", payload);
-
-        const response = await this.#createInquiry(payload);
-        const inquiryId = response?.data?.id;
-
-        if (!inquiryId) {
-          throw new Error(
-            "Tidak ada ID inquiry yang dikembalikan dari server.",
-          );
-        }
-
-        // Upload photos if any
-        if (this.#photoFiles.length > 0) {
-          this.#state.isUploading = true;
-          if (submitBtn) {
-            submitBtn.textContent = "Mengupload foto...";
-          }
-          try {
-            await this.#uploadPhotos(inquiryId, this.#photoFiles);
-          } catch (uploadErr) {
-            console.warn("⚠️ Photo upload failed:", uploadErr);
-            // Tampilkan peringatan tapi inquiry sudah terbuat
-            this.#showAlert(
-              "warning",
-              "Foto Gagal Diupload",
-              `Inquiry berhasil dibuat (ID: ${inquiryId}), tetapi foto gagal diupload. Anda bisa mengirim ulang foto melalui WhatsApp.`,
-            );
-            // Lanjut ke sukses
-          } finally {
-            this.#state.isUploading = false;
-          }
-        }
-
-        // ✅ SUCCESS
-        this.#showAlert(
-          "success",
-          "🎉 Project Submitted!",
-          `Permintaan Anda (ID: ${inquiryId}) telah berhasil dikirim!\n\nTim kami akan segera menghubungi Anda melalui WhatsApp dalam 1x24 jam.`,
-        );
-
-        // Reset form & close modal
-        this.#resetForm();
-        this.#closeModal();
-      } catch (err) {
-        console.error("Submission error:", err);
-
-        if (err.name === "AbortError") {
-          // User canceled, ignore
-          return;
-        }
-
-        this.#showAlert(
-          "error",
-          "Gagal Mengirim",
-          err.message || "Terjadi kesalahan. Silakan coba lagi.",
-        );
-      } finally {
-        this.#state.isSubmitting = false;
-        this.#state.isUploading = false;
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Mulai Project Saya";
-          submitBtn.style.opacity = "1";
-        }
-        this.#abortController = null;
-      }
-    }
-
-    #resetForm() {
-      const form = this.#dom.form;
-      if (form) form.reset();
-
-      document
-        .querySelectorAll(".service-card")
-        .forEach((c) => c.classList.remove("selected"));
-
-      this.#photoFiles = [];
-      const grid = this.#dom.photoPreviewGrid;
-      if (grid) {
-        grid.innerHTML = "";
-        grid.style.display = "none";
-      }
-
-      const p = this.#dom.uploadParagraph;
-      if (p) {
-        p.textContent =
-          "Drag & drop foto di sini atau klik untuk mencari. (Max 10)";
-      }
-
-      this.#state.currentStep = 0;
-      this.#clearErrors();
-      this.#updateWizard();
-      this.#filterModels();
-
-      const photoInput = this.#dom.project_photos;
-      if (photoInput) photoInput.value = "";
-
-      // Reset model filter
-      this.#filterModels();
-    }
-
-    // ─── Abort pending requests ──────────────────────────────
-    #abortRequests() {
-      if (this.#abortController) {
-        this.#abortController.abort();
-        this.#abortController = null;
-      }
+  // ===== STATE MANAGEMENT =====
+  const state = {
+    currentStep: 1,
+    totalSteps: 0,
+    selectedFiles: [],
+    maxFiles: 10,
+    isSubmitting: false,
+    abortController: null,
+  };
+
+  // ===== DOM CACHE =====
+  const dom = {};
+
+  function cacheDom() {
+    dom.form = document.getElementById("inquiryForm");
+    dom.pages = document.querySelectorAll(".wizard-page");
+    dom.steps = document.querySelectorAll(".step");
+    dom.prevBtn = document.getElementById("prevBtn");
+    dom.nextBtn = document.getElementById("nextBtn");
+    dom.submitBtn = document.getElementById("submitBtn");
+    dom.progressLine = document.querySelector(".progress-line");
+    dom.uploadZone = document.getElementById("uploadZone");
+    dom.photoInput = document.getElementById("project_photos");
+    dom.photoPreviewGrid = document.getElementById("photoPreviewGrid");
+    dom.agreementCheck = document.getElementById("agreementCheck");
+    dom.brandSelect = document.getElementById("bike_brand");
+    dom.modelSelect = document.getElementById("bike_model");
+
+    state.totalSteps = dom.pages.length;
+  }
+
+  // ===== CLEANUP UTILITIES =====
+  function removeElement(element) {
+    if (element && element.parentNode) {
+      element.parentNode.removeChild(element);
     }
   }
 
-  // ─── Instantiate ─────────────────────────────────────────────
-  let wizardInstance = null;
+  function clearErrors(container) {
+    if (!container) return;
+    container.querySelectorAll(".error-message").forEach(removeElement);
+    container
+      .querySelectorAll(".error")
+      .forEach((el) => el.classList.remove("error"));
+  }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    wizardInstance = new InquiryWizard();
-  });
+  function revokeObjectURLs() {
+    dom.photoPreviewGrid?.querySelectorAll("img").forEach((img) => {
+      if (img.src && img.src.startsWith("blob:")) {
+        URL.revokeObjectURL(img.src);
+      }
+    });
+  }
 
-  // 🔥 Jika modal ditutup, abort pending requests
-  document.addEventListener("modalClosed", () => {
-    if (wizardInstance) {
-      wizardInstance.#abortRequests();
+  function abortPendingRequest() {
+    if (state.abortController) {
+      state.abortController.abort();
+      state.abortController = null;
     }
+  }
+
+  // ===== STEP MANAGEMENT =====
+  function updateStep(step) {
+    const progressPercent = ((step - 1) / (state.totalSteps - 1)) * 100;
+
+    dom.pages.forEach((page, index) => {
+      page.classList.toggle("active", index === step - 1);
+    });
+
+    dom.steps.forEach((s, index) => {
+      s.classList.toggle("active", index <= step - 1);
+    });
+
+    dom.progressLine.style.background = `linear-gradient(90deg, #ff6b00 ${progressPercent}%, rgba(255,255,255,0.08) ${progressPercent}%)`;
+
+    dom.prevBtn.style.display = step === 1 ? "none" : "inline-block";
+    dom.nextBtn.style.display =
+      step === state.totalSteps ? "none" : "inline-block";
+    dom.submitBtn.style.display =
+      step === state.totalSteps ? "inline-block" : "none";
+
+    dom.form?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function goToStep(step) {
+    if (step < 1 || step > state.totalSteps) return;
+
+    if (step > state.currentStep && !validateStep(state.currentStep)) {
+      return;
+    }
+
+    state.currentStep = step;
+    updateStep(state.currentStep);
+  }
+
+  // ===== VALIDATION =====
+  function validateStep(step) {
+    const page = dom.pages[step - 1];
+    if (!page) return false;
+
+    clearErrors(page);
+    let isValid = true;
+
+    const inputs = page.querySelectorAll(
+      "input[required], select[required], textarea[required]",
+    );
+
+    inputs.forEach((input) => {
+      if (input.offsetParent === null || input.disabled) return;
+
+      if (input.type === "checkbox") {
+        if (!input.checked) {
+          isValid = false;
+          input.classList.add("error");
+          const label = input.closest(".checkbox-label");
+          if (label && !label.querySelector(".error-message")) {
+            const error = document.createElement("span");
+            error.className = "error-message";
+            error.textContent = "Please confirm the agreement";
+            label.appendChild(error);
+          }
+        }
+        return;
+      }
+
+      if (input.type === "file") return;
+
+      const value = input.value.trim();
+
+      if (input.type === "email" && value) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value)) {
+          isValid = false;
+          input.classList.add("error");
+          showError(input, "Please enter a valid email address");
+        }
+        return;
+      }
+
+      if (input.id === "phone_number" && value) {
+        const phoneRegex = /^(\+62|62|08)\d{8,13}$/;
+        if (!phoneRegex.test(value.replace(/\s/g, ""))) {
+          isValid = false;
+          input.classList.add("error");
+          showError(
+            input,
+            "Format nomor telepon tidak valid (contoh: 081234567890 atau +6281234567890)",
+          );
+        }
+        return;
+      }
+
+      if (!value) {
+        isValid = false;
+        input.classList.add("error");
+        showError(input, "This field is required");
+      }
+    });
+
+    if (step === 2) {
+      const brand = dom.brandSelect?.value;
+      const model = dom.modelSelect?.value;
+      if (brand && model) {
+        const validModels = Array.from(dom.modelSelect.options).filter(
+          (opt) => opt.dataset.brand === brand && opt.value,
+        );
+        const isValidModel = validModels.some((opt) => opt.value === model);
+        if (!isValidModel) {
+          isValid = false;
+          dom.modelSelect.classList.add("error");
+          showError(
+            dom.modelSelect,
+            "Please select a valid model for the selected brand",
+          );
+        }
+      }
+    }
+
+    if (step === 3) {
+      const services = page.querySelectorAll('input[name="services"]:checked');
+      if (services.length === 0) {
+        isValid = false;
+        const grid = page.querySelector(".service-grid");
+        if (grid && !grid.parentNode.querySelector(".error-message")) {
+          const error = document.createElement("span");
+          error.className = "error-message";
+          error.textContent = "Please select at least one service";
+          grid.parentNode.appendChild(error);
+        }
+      }
+    }
+
+    return isValid;
+  }
+
+  function showError(input, message) {
+    if (!input || input.parentNode.querySelector(".error-message")) return;
+    const error = document.createElement("span");
+    error.className = "error-message";
+    error.textContent = message;
+    input.parentNode.appendChild(error);
+  }
+
+  // ===== FORM DATA COLLECTION =====
+  function collectFormData() {
+    const getValue = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.value.trim() : "";
+    };
+    const getSelectValue = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.value : "";
+    };
+    const getCheckboxValues = (name) => {
+      return Array.from(
+        document.querySelectorAll(`input[name="${name}"]:checked`),
+      )
+        .map((cb) => cb.value)
+        .join(", ");
+    };
+
+    return {
+      customer_name: getValue("fullname"),
+      customer_phone_number: getValue("phone_number"),
+      customer_email: getValue("email") || null,
+      province: getValue("province") || null,
+      city: getValue("city") || null,
+      vehicle_brand: getSelectValue("bike_brand"),
+      vehicle_model: getSelectValue("bike_model"),
+      vehicle_year: parseInt(getValue("bike_year")) || null,
+      vehicle_license_plate: getValue("plate_number") || null,
+      previous_repaint: getSelectValue("previous_repaint") || null,
+      bike_modified: getSelectValue("bike_modified") || null,
+      vehicle_condition: getCheckboxValues("condition") || null,
+      project_type: getSelectValue("project_type"),
+      services: getCheckboxValues("services") || null,
+      desired_finish: getSelectValue("desired_finish") || null,
+      desired_color: getValue("desired_color") || null,
+      estimated_budget: parseInt(getSelectValue("estimated_budget")) || null,
+      deadline: getSelectValue("deadline") || null,
+      priority: getSelectValue("priority") || null,
+      project_description: getValue("project_details"),
+      reference_link: getValue("reference_link") || null,
+      source: "website_inquiry",
+    };
+  }
+
+  // ===== SUBMIT - 2 Step Process =====
+  async function submitForm() {
+    if (state.isSubmitting) return;
+
+    if (!validateStep(state.currentStep)) return;
+
+    const formData = collectFormData();
+
+    // Validate required fields
+    const required = [
+      "customer_name",
+      "customer_phone_number",
+      "vehicle_brand",
+      "vehicle_model",
+      "project_type",
+      "project_description",
+    ];
+
+    const missing = required.filter((field) => !formData[field]);
+    if (missing.length > 0) {
+      showToast("Please fill in all required fields", "error");
+      return;
+    }
+
+    // Validate phone
+    const phoneRegex = /^(\+62|62|08)\d{8,13}$/;
+    if (!phoneRegex.test(formData.customer_phone_number.replace(/\s/g, ""))) {
+      showToast("Format nomor telepon tidak valid", "error");
+      return;
+    }
+
+    // Validate email if provided
+    if (formData.customer_email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.customer_email)) {
+        showToast("Please enter a valid email address", "error");
+        return;
+      }
+    }
+
+    state.isSubmitting = true;
+    dom.submitBtn.disabled = true;
+    dom.submitBtn.innerHTML = '<span class="spinner"></span> Submitting...';
+
+    abortPendingRequest();
+    state.abortController = new AbortController();
+
+    try {
+      // ============================================================
+      // STEP 1: Create Inquiry (JSON)
+      // ============================================================
+      const payload = {
+        customer_name: formData.customer_name,
+        customer_phone_number: formData.customer_phone_number,
+        customer_email: formData.customer_email,
+        province: formData.province,
+        city: formData.city,
+        vehicle_brand: formData.vehicle_brand,
+        vehicle_model: formData.vehicle_model,
+        vehicle_year: formData.vehicle_year,
+        vehicle_license_plate: formData.vehicle_license_plate,
+        previous_repaint: formData.previous_repaint,
+        bike_modified: formData.bike_modified,
+        vehicle_condition: formData.vehicle_condition,
+        project_type: formData.project_type,
+        services: formData.services,
+        desired_finish: formData.desired_finish,
+        desired_color: formData.desired_color,
+        estimated_budget: formData.estimated_budget,
+        deadline: formData.deadline,
+        priority: formData.priority,
+        project_description: formData.project_description,
+        reference_link: formData.reference_link,
+        source: formData.source,
+      };
+
+      const response = await fetch("/api/api/inquiries/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: state.abortController.signal,
+      });
+
+      // Handle response as text first (avoid bytes issue)
+      const responseText = await response.text();
+      let result;
+      try {
+        result = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        result = { message: responseText || "Submission received" };
+      }
+
+      if (!response.ok) {
+        const errorMsg =
+          result.detail || result.message || `Server error: ${response.status}`;
+        showToast(errorMsg, "error");
+        return;
+      }
+
+      const inquiryId = result.data?.id;
+      if (!inquiryId) {
+        showToast("Failed to create inquiry: No ID returned", "error");
+        return;
+      }
+
+      // ============================================================
+      // STEP 2: Upload Photos (if any)
+      // ============================================================
+      if (state.selectedFiles.length > 0) {
+        const photoFormData = new FormData();
+        state.selectedFiles.forEach((file) => {
+          photoFormData.append("photos", file);
+        });
+
+        const photoResponse = await fetch(
+          `/api/api/inquiries/${inquiryId}/photos?stage=initial`,
+          {
+            method: "POST",
+            body: photoFormData,
+            signal: state.abortController.signal,
+          },
+        );
+
+        if (!photoResponse.ok) {
+          // Photos failed but inquiry created - log but continue
+          console.warn(
+            "Photo upload failed but inquiry was created successfully",
+          );
+          const photoText = await photoResponse.text();
+          console.warn("Photo upload error:", photoText);
+        }
+      }
+
+      // ============================================================
+      // SUCCESS
+      // ============================================================
+      showSuccessModal();
+      resetForm();
+    } catch (error) {
+      if (error.name === "AbortError") {
+        return;
+      }
+      console.error("Submission error:", error);
+      showToast(
+        "Network error. Please check your connection and try again.",
+        "error",
+      );
+    } finally {
+      state.isSubmitting = false;
+      dom.submitBtn.disabled = false;
+      dom.submitBtn.textContent = "Start My Project";
+      state.abortController = null;
+    }
+  }
+
+  // ===== RESET FORM =====
+  function resetForm() {
+    dom.form?.reset();
+    revokeObjectURLs();
+    state.selectedFiles = [];
+    if (dom.photoPreviewGrid) {
+      dom.photoPreviewGrid.innerHTML = "";
+      dom.photoPreviewGrid.style.display = "none";
+    }
+    updateUploadText();
+    goToStep(1);
+    if (dom.submitBtn) dom.submitBtn.disabled = true;
+    clearErrors(dom.form);
+    document.querySelectorAll(".service-card").forEach((card) => {
+      card.classList.remove("selected");
+    });
+  }
+
+  // ===== PHOTO HANDLING =====
+  function handleFileUpload(files) {
+    const validFiles = Array.from(files).filter((f) =>
+      f.type.startsWith("image/"),
+    );
+
+    if (state.selectedFiles.length + validFiles.length > state.maxFiles) {
+      showToast(`Maximum ${state.maxFiles} photos allowed.`, "error");
+      return;
+    }
+
+    state.selectedFiles = [...state.selectedFiles, ...validFiles];
+    renderPhotoPreviews();
+    updateUploadText();
+  }
+
+  function renderPhotoPreviews() {
+    const grid = dom.photoPreviewGrid;
+    if (!grid) return;
+
+    revokeObjectURLs();
+    grid.innerHTML = "";
+
+    if (state.selectedFiles.length === 0) {
+      grid.style.display = "none";
+      return;
+    }
+
+    grid.style.display = "grid";
+
+    state.selectedFiles.forEach((file, index) => {
+      const url = URL.createObjectURL(file);
+      const item = document.createElement("div");
+      item.className = "preview-item";
+
+      item.innerHTML = `
+                <img src="${url}" alt="Preview ${index + 1}" loading="lazy">
+                <button class="remove-photo" data-index="${index}" aria-label="Remove photo">×</button>
+            `;
+
+      grid.appendChild(item);
+
+      item.querySelector(".remove-photo")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const idx = parseInt(e.target.dataset.index);
+        if (!isNaN(idx)) {
+          state.selectedFiles.splice(idx, 1);
+          renderPhotoPreviews();
+          updateUploadText();
+        }
+      });
+    });
+  }
+
+  function updateUploadText() {
+    const p = document.getElementById("uploadParagraph");
+    if (p) {
+      p.textContent =
+        state.selectedFiles.length > 0
+          ? `${state.selectedFiles.length} photo(s) selected. Click to add more.`
+          : "Front • Rear • Left Side • Right Side • Dashboard • Damaged Area";
+    }
+  }
+
+  // ===== BRAND/MODEL FILTER =====
+  function filterModelsByBrand(brand) {
+    if (!dom.modelSelect) return;
+
+    const options = dom.modelSelect.querySelectorAll("option[data-brand]");
+    let hasVisible = false;
+
+    options.forEach((opt) => {
+      if (brand && opt.dataset.brand === brand) {
+        opt.style.display = "";
+        hasVisible = true;
+      } else {
+        opt.style.display = "none";
+      }
+    });
+
+    const currentOpt = dom.modelSelect.querySelector(
+      `option[value="${dom.modelSelect.value}"]`,
+    );
+    if (currentOpt && currentOpt.style.display === "none") {
+      dom.modelSelect.value = "";
+    }
+
+    // Reset placeholder visibility
+    const placeholder = dom.modelSelect.querySelector('option[value=""]');
+    if (placeholder) {
+      placeholder.style.display = "";
+    }
+  }
+
+  // ===== TOAST =====
+  function showToast(message, type = "info") {
+    const existing = document.querySelector(".custom-toast");
+    if (existing) removeElement(existing);
+
+    const toast = document.createElement("div");
+    toast.className = `custom-toast toast-${type}`;
+    toast.setAttribute("role", "alert");
+    toast.innerHTML = `
+            <div class="toast-content">
+                <span class="toast-icon">${type === "error" ? "⚠️" : "ℹ️"}</span>
+                <span class="toast-message">${message}</span>
+            </div>
+            <button class="toast-close" aria-label="Close notification">&times;</button>
+        `;
+
+    Object.assign(toast.style, {
+      position: "fixed",
+      bottom: "30px",
+      right: "30px",
+      background: type === "error" ? "#2a1215" : "#1a1a1a",
+      color: "#fff",
+      padding: "16px 20px",
+      borderRadius: "12px",
+      border: `1px solid ${type === "error" ? "#ff4d4f" : "#ff6b00"}`,
+      boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+      zIndex: "99999",
+      maxWidth: "400px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "16px",
+      animation: "slideUp 0.3s ease",
+      fontFamily: "'Inter', sans-serif",
+    });
+
+    document.body.appendChild(toast);
+
+    const close = () => {
+      if (toast.parentNode) {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(20px)";
+        setTimeout(() => removeElement(toast), 300);
+      }
+    };
+
+    toast.querySelector(".toast-close")?.addEventListener("click", close);
+    setTimeout(close, 5000);
+  }
+
+  // ===== SUCCESS MODAL =====
+  function showSuccessModal() {
+    const existing = document.querySelector(".custom-modal-overlay");
+    if (existing) removeElement(existing);
+
+    const overlay = document.createElement("div");
+    overlay.className = "custom-modal-overlay";
+    overlay.innerHTML = `
+            <div class="custom-modal" role="dialog" aria-modal="true">
+                <div class="custom-modal-icon">🚀</div>
+                <h3>Project Submitted!</h3>
+                <p>Thank you for choosing NOCTRA AUTOWORKS.
+
+Our team will review your project details and contact you via WhatsApp within 24 hours.</p>
+                <button class="custom-modal-btn">Got it!</button>
+            </div>
+        `;
+
+    document.body.appendChild(overlay);
+
+    const closeModal = () => removeElement(overlay);
+    overlay
+      .querySelector(".custom-modal-btn")
+      ?.addEventListener("click", closeModal);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closeModal();
+    });
+  }
+
+  // ===== EVENT SETUP =====
+  function setupEvents() {
+    // Navigation
+    dom.prevBtn?.addEventListener("click", () =>
+      goToStep(state.currentStep - 1),
+    );
+    dom.nextBtn?.addEventListener("click", () =>
+      goToStep(state.currentStep + 1),
+    );
+
+    // Submit
+    dom.submitBtn?.addEventListener("click", submitForm);
+    dom.form?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      submitForm();
+    });
+
+    // Keyboard shortcut - Enter to advance
+    dom.form?.addEventListener("keydown", (e) => {
+      if (
+        e.key === "Enter" &&
+        (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")
+      ) {
+        const isTextArea = e.target.tagName === "TEXTAREA";
+        if (!isTextArea) {
+          e.preventDefault();
+          state.currentStep === state.totalSteps
+            ? submitForm()
+            : goToStep(state.currentStep + 1);
+        }
+      }
+    });
+
+    // Brand/Model filtering
+    dom.brandSelect?.addEventListener("change", function () {
+      filterModelsByBrand(this.value);
+    });
+
+    // Service cards toggle
+    document
+      .querySelectorAll('.service-card input[type="checkbox"]')
+      .forEach((cb) => {
+        cb.addEventListener("change", function () {
+          this.closest(".service-card")?.classList.toggle(
+            "selected",
+            this.checked,
+          );
+        });
+      });
+
+    // Upload zone click
+    dom.uploadZone?.addEventListener("click", () => dom.photoInput?.click());
+
+    // Drag and drop
+    dom.uploadZone?.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dom.uploadZone.classList.add("dragover");
+    });
+
+    dom.uploadZone?.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      dom.uploadZone.classList.remove("dragover");
+    });
+
+    dom.uploadZone?.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dom.uploadZone.classList.remove("dragover");
+      if (e.dataTransfer.files.length) {
+        handleFileUpload(e.dataTransfer.files);
+      }
+    });
+
+    // File input change
+    dom.photoInput?.addEventListener("change", function () {
+      if (this.files.length) {
+        handleFileUpload(this.files);
+        this.value = "";
+      }
+    });
+
+    // Agreement checkbox
+    dom.agreementCheck?.addEventListener("change", function () {
+      if (dom.submitBtn) {
+        dom.submitBtn.disabled = !this.checked;
+      }
+    });
+  }
+
+  // ===== INIT =====
+  function init() {
+    cacheDom();
+
+    if (!dom.form) {
+      console.warn("Inquiry form not found");
+      return;
+    }
+
+    // Initial setup
+    filterModelsByBrand(dom.brandSelect?.value || "");
+    updateStep(1);
+    if (dom.submitBtn) dom.submitBtn.disabled = true;
+
+    injectStyles();
+    setupEvents();
+
+    console.log("NOCTRA AUTOWORKS Inquiry initialized");
+  }
+
+  // ===== STYLES =====
+  function injectStyles() {
+    const styleId = "inquiry-dynamic-styles";
+    if (document.getElementById(styleId)) return;
+
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+            .custom-toast {
+                font-family: 'Inter', sans-serif !important;
+            }
+            .custom-toast.toast-error {
+                border-color: #ff4d4f !important;
+            }
+            .custom-toast.toast-error .toast-icon {
+                color: #ff4d4f;
+            }
+            .custom-toast.toast-info .toast-icon {
+                color: #ff6b00;
+            }
+            .custom-modal-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.85);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 99999;
+                padding: 20px;
+                backdrop-filter: blur(8px);
+                animation: fadeIn 0.3s ease;
+            }
+            .custom-modal {
+                background: #1a1a1a;
+                border: 1px solid rgba(255,255,255,0.1);
+                border-radius: 20px;
+                padding: 40px;
+                max-width: 450px;
+                width: 100%;
+                text-align: center;
+                animation: slideUp 0.4s ease;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            }
+            .custom-modal-icon { font-size: 64px; margin-bottom: 16px; }
+            .custom-modal h3 { color: #fff; margin-bottom: 12px; font-size: 24px; font-weight: 600; }
+            .custom-modal p { color: #aaa; margin-bottom: 24px; line-height: 1.8; white-space: pre-line; font-size: 0.95rem; }
+            .custom-modal-btn {
+                background: #ff6b00;
+                color: #fff;
+                border: none;
+                padding: 14px 40px;
+                border-radius: 12px;
+                font-weight: 600;
+                font-size: 16px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                font-family: inherit;
+            }
+            .custom-modal-btn:hover {
+                background: #ff7a1a;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 16px rgba(255,107,0,0.3);
+            }
+            .spinner {
+                display: inline-block;
+                width: 16px;
+                height: 16px;
+                border: 2px solid rgba(255,255,255,0.3);
+                border-top-color: #fff;
+                border-radius: 50%;
+                animation: spin 0.6s linear infinite;
+                margin-right: 8px;
+                vertical-align: middle;
+            }
+            .upload-zone.dragover {
+                border-color: #ff6b00 !important;
+                background: rgba(255,107,0,0.08) !important;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes slideUp {
+                from { opacity: 0; transform: translateY(40px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+            .error-message {
+                color: #ff4d4f;
+                font-size: 0.75rem;
+                margin-top: 4px;
+                display: block;
+                animation: fadeIn 0.2s ease;
+            }
+            input.error, select.error, textarea.error {
+                border-color: #ff4d4f !important;
+            }
+            .photo-preview-grid {
+                display: none;
+                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+                gap: 10px;
+                margin-top: 15px;
+            }
+            .preview-item {
+                position: relative;
+                border-radius: 8px;
+                overflow: hidden;
+                aspect-ratio: 1;
+                border: 1px solid rgba(255,255,255,0.08);
+                transition: all 0.2s ease;
+            }
+            .preview-item:hover {
+                border-color: #ff6b00;
+                transform: scale(1.02);
+            }
+            .preview-item img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+            .remove-photo {
+                position: absolute;
+                top: 4px;
+                right: 4px;
+                background: rgba(0,0,0,0.7);
+                border: none;
+                color: white;
+                border-radius: 50%;
+                width: 24px;
+                height: 24px;
+                font-size: 16px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: 0.2s;
+                line-height: 1;
+                font-weight: 700;
+            }
+            .remove-photo:hover {
+                background: #ff4d4f;
+                transform: scale(1.1);
+            }
+            @media (max-width: 768px) {
+                .custom-modal {
+                    padding: 30px 20px;
+                    margin: 20px;
+                }
+                .custom-modal-icon { font-size: 48px; }
+                .custom-modal h3 { font-size: 20px; }
+                .photo-preview-grid {
+                    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+                }
+                .preview-item {
+                    aspect-ratio: 1;
+                }
+                .remove-photo {
+                    width: 20px;
+                    height: 20px;
+                    font-size: 12px;
+                }
+            }
+            @media (max-width: 480px) {
+                .photo-preview-grid {
+                    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+                    gap: 6px;
+                }
+                .remove-photo {
+                    width: 18px;
+                    height: 18px;
+                    font-size: 10px;
+                }
+            }
+        `;
+    document.head.appendChild(style);
+  }
+
+  // ===== CLEANUP ON UNLOAD =====
+  window.addEventListener("beforeunload", () => {
+    abortPendingRequest();
+    revokeObjectURLs();
+    document
+      .querySelectorAll(".custom-toast, .custom-modal-overlay")
+      .forEach(removeElement);
   });
+
+  // ===== START =====
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 })();
