@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/dashboard.css') }}" />
+{% endblock %}
+
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Workshop overview & key metrics{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     STATS CARDS
+     ============================================================ -->
+<section class="dashboard-stats">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-wallet"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">Revenue (This Month)</span>
+            <h2 class="stat-value" id="statRevenue">Rp 0</h2>
+            <span class="stat-change positive">↑ 12.5% from last month</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-briefcase"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">Active Projects</span>
+            <h2 class="stat-value" id="statActiveProjects">0</h2>
+            <span class="stat-change" id="statActiveProjectsChange">—</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-gear"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">In Production</span>
+            <h2 class="stat-value" id="statInProduction">0</h2>
+            <span class="stat-change" id="statInProductionChange">—</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-file-signature"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">Pending Inquiries</span>
+            <h2 class="stat-value" id="statPendingInquiries">0</h2>
+            <span class="stat-change" id="statPendingInquiriesChange">—</span>
+        </div>
+    </div>
+    <div class="stat-card warning">
+        <div class="stat-icon"><i class="fas fa-file-invoice"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">Overdue Invoices</span>
+            <h2 class="stat-value" id="statOverdueInvoices">0</h2>
+            <span class="stat-change negative" id="statOverdueInvoicesChange">⚠️ Action required</span>
+        </div>
+    </div>
+    <div class="stat-card danger">
+        <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="stat-content">
+            <span class="stat-label">Low Stock Items</span>
+            <h2 class="stat-value" id="statLowStock">0</h2>
+            <span class="stat-change negative" id="statLowStockChange">Need reorder</span>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     CHARTS ROW
+     ============================================================ -->
+<section class="dashboard-charts">
+    <div class="chart-card">
+        <div class="chart-header">
+            <h3>Revenue Trend</h3>
+            <span class="chart-period">Last 6 Months</span>
+        </div>
+        <div class="chart-container">
+            <canvas id="revenueChart"></canvas>
+        </div>
+    </div>
+    <div class="chart-card">
+        <div class="chart-header">
+            <h3>Project Status</h3>
+            <span class="chart-period">Distribution</span>
+        </div>
+        <div class="chart-container">
+            <canvas id="projectStatusChart"></canvas>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     RECENT ACTIVITIES & QUICK LINKS
+     ============================================================ -->
+<section class="dashboard-bottom">
+    <!-- Recent Activities -->
+    <div class="activity-card">
+        <div class="card-header">
+            <h3><i class="fas fa-clock"></i> Recent Activities</h3>
+            <a href="/management/activities" class="btn-link">View All</a>
+        </div>
+        <div class="activity-timeline" id="recentActivities">
+            <div class="activity-item">
+                <div class="activity-icon"><i class="fas fa-spinner fa-spin"></i></div>
+                <div class="activity-content">
+                    <p class="activity-text">Loading activities...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Links & Stats -->
+    <div class="quick-actions-card">
+        <div class="card-header">
+            <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+        </div>
+        <div class="quick-grid">
+            <a href="/management/inquiries" class="quick-btn">
+                <i class="fas fa-file-signature"></i>
+                <span>New Inquiry</span>
+            </a>
+            <a href="/management/projects" class="quick-btn">
+                <i class="fas fa-briefcase"></i>
+                <span>New Project</span>
+            </a>
+            <a href="/management/billing" class="quick-btn">
+                <i class="fas fa-file-invoice"></i>
+                <span>Create Invoice</span>
+            </a>
+            <a href="/management/inventories" class="quick-btn">
+                <i class="fas fa-boxes"></i>
+                <span>Add Stock</span>
+            </a>
+        </div>
+
+        <div style="margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid var(--border);">
+            <div class="mini-stats">
+                <div>
+                    <span class="label">Projects Completed</span>
+                    <strong id="miniCompleted">0</strong>
+                </div>
+                <div>
+                    <span class="label">Quotes Sent</span>
+                    <strong id="miniQuotesSent">0</strong>
+                </div>
+                <div>
+                    <span class="label">Total Customers</span>
+                    <strong id="miniCustomers">0</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     RECENT PROJECTS & INVOICES (Optional / Dapat ditambahkan nanti)
+     ============================================================ -->
+<section class="dashboard-tables">
+    <div class="table-card">
+        <div class="card-header">
+            <h3><i class="fas fa-briefcase"></i> Recent Projects</h3>
+            <a href="/management/projects" class="btn-link">View All</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Project</th>
+                        <th>Customer</th>
+                        <th>Status</th>
+                        <th>Progress</th>
+                    </tr>
+                </thead>
+                <tbody id="recentProjects">
+                    <tr><td colspan="4" class="loading-placeholder">Loading projects...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="card-header">
+            <h3><i class="fas fa-file-invoice"></i> Recent Invoices</h3>
+            <a href="/management/billing" class="btn-link">View All</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Invoice #</th>
+                        <th>Customer</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="recentInvoices">
+                    <tr><td colspan="4" class="loading-placeholder">Loading invoices...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="module">
+    import { initDashboard } from "{{ url_for('static', path='includes/js/pages/dashboard/index.js') }}";
+    initDashboard();
+</script>
+{% endblock %}

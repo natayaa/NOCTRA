@@ -1,0 +1,133 @@
+{% extends "base.html" %} {% block title %} Work Orders {% endblock %} {%
+block extra_css %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', path='css/work_orders.css') }}"
+/>
+{% endblock %} {% block page_title %} Work Orders {% endblock %} {% block
+page_subtitle %} Production Management {% endblock %} {% block content %}
+
+<div class="workorder-toolbar">
+  <button class="btn-primary" id="createWO">Create Work Order</button>
+</div>
+
+<div class="wo-grid">
+  <!-- ACTIVE -->
+
+  <div class="wo-column">
+    <div class="column-header">
+      <h3>Active</h3>
+    </div>
+
+    <div class="wo-list" id="activeList">
+      <div class="wo-card">
+        <h4>WO-2026-001</h4>
+
+        <p>Mio Sporty Restoration</p>
+
+        <span> Painter: Andi </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN PROGRESS -->
+
+  <div class="wo-column">
+    <div class="column-header">
+      <h3>In Progress</h3>
+    </div>
+
+    <div class="wo-list" id="progressList"></div>
+  </div>
+
+  <!-- QA -->
+
+  <div class="wo-column">
+    <div class="column-header">
+      <h3>QA</h3>
+    </div>
+
+    <div class="wo-list" id="qaList"></div>
+  </div>
+
+  <!-- COMPLETED -->
+
+  <div class="wo-column">
+    <div class="column-header">
+      <h3>Completed</h3>
+    </div>
+
+    <div class="wo-list" id="completedList"></div>
+  </div>
+</div>
+
+<!-- DETAIL DRAWER -->
+
+<div class="drawer" id="woDrawer">
+  <div class="drawer-header">
+    <h2>Work Order Details</h2>
+
+    <button id="closeDrawer">×</button>
+  </div>
+
+  <div class="drawer-body">
+    <div class="detail-section">
+      <label> Assigned Staff </label>
+
+      <select>
+        <option>Andi</option>
+
+        <option>Rizki</option>
+
+        <option>Budi</option>
+      </select>
+    </div>
+
+    <div class="detail-section">
+      <label> Progress </label>
+
+      <input type="range" min="0" max="100" value="50" />
+    </div>
+
+    <div class="detail-section">
+      <label> Checklist </label>
+
+      <div class="checklist">
+        <label>
+          <input type="checkbox" />
+          Body Repair
+        </label>
+
+        <label>
+          <input type="checkbox" />
+          Primer
+        </label>
+
+        <label>
+          <input type="checkbox" />
+          Basecoat
+        </label>
+
+        <label>
+          <input type="checkbox" />
+          Clear Coat
+        </label>
+
+        <label>
+          <input type="checkbox" />
+          Polishing
+        </label>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <label> Notes </label>
+
+      <textarea rows="5"></textarea>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', path='js/work_orders.js') }}"></script>
+{% endblock %}

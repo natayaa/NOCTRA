@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Calendar | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/calendar.css') }}" />
+{% endblock %}
+
+{% block page_title %}Calendar{% endblock %}
+{% block page_subtitle %}Project Scheduling &amp; Timeline{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     TOOLBAR
+     ============================================================ -->
+<div class="calendar-toolbar glass">
+    <div class="toolbar-left">
+        <button class="btn-secondary btn-sm" id="prevMonthBtn">
+            <i class="fas fa-chevron-left"></i>
+        </button>
+        <h2 id="currentMonthYear">June 2026</h2>
+        <button class="btn-secondary btn-sm" id="nextMonthBtn">
+            <i class="fas fa-chevron-right"></i>
+        </button>
+        <button class="btn-primary btn-sm" id="todayBtn">Today</button>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn-primary" id="addEventBtn">
+            <i class="fas fa-plus"></i> Add Schedule
+        </button>
+    </div>
+</div>
+
+<!-- ============================================================
+     CALENDAR LAYOUT
+     ============================================================ -->
+<div class="calendar-layout">
+
+    <!-- ============================================================
+         CALENDAR GRID
+         ============================================================ -->
+    <div class="calendar-card">
+        <div class="calendar-header">
+            <div class="calendar-weekdays">
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+                <span>Sun</span>
+            </div>
+        </div>
+
+        <div class="calendar-grid" id="calendarGrid">
+            <!-- JS akan render calendar cells -->
+            <div class="loading-placeholder">Loading calendar...</div>
+        </div>
+
+        <!-- Legend -->
+        <div class="calendar-legend">
+            <span><span class="legend-dot project"></span> Project</span>
+            <span><span class="legend-dot delivery"></span> Delivery</span>
+            <span><span class="legend-dot followup"></span> Follow-up</span>
+            <span><span class="legend-dot meeting"></span> Meeting</span>
+            <span><span class="legend-dot holiday"></span> Holiday</span>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         SCHEDULE SIDEBAR
+         ============================================================ -->
+    <div class="schedule-card">
+        <div class="schedule-header">
+            <h3>Upcoming Activities</h3>
+            <span id="scheduleCount">0 events</span>
+        </div>
+
+        <div class="schedule-list" id="scheduleList">
+            <!-- JS akan render schedule items -->
+            <div class="loading-placeholder-sm">Loading schedules...</div>
+        </div>
+
+        <!-- Upcoming Stats -->
+        <div class="schedule-stats">
+            <div class="stat-item">
+                <span>This Week</span>
+                <strong id="weekCount">0</strong>
+            </div>
+            <div class="stat-item">
+                <span>This Month</span>
+                <strong id="monthCount">0</strong>
+            </div>
+            <div class="stat-item">
+                <span>Overdue</span>
+                <strong id="overdueCount" style="color:var(--color-danger);">0</strong>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Add / Edit Event
+     ============================================================ -->
+<div class="modal-overlay" id="calendarModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h2 id="eventModalTitle">Add Schedule</h2>
+            <button id="closeCalendarModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="calendarForm">
+            <input type="hidden" id="editEventId" />
+
+            <div class="form-group">
+                <label>Title *</label>
+                <input type="text" id="eventTitle" required placeholder="e.g. Mio Sporty Restoration" />
+            </div>
+
+            <div class="form-group">
+                <label>Date *</label>
+                <input type="date" id="eventDate" required />
+            </div>
+
+            <div class="form-group">
+                <label>Time</label>
+                <input type="time" id="eventTime" />
+            </div>
+
+            <div class="form-group">
+                <label>Type</label>
+                <select id="eventType">
+                    <option value="project">Project</option>
+                    <option value="delivery">Delivery</option>
+                    <option value="followup">Follow-up</option>
+                    <option value="meeting">Meeting</option>
+                    <option value="holiday">Holiday</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="eventDescription" rows="3" placeholder="Event details..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Project (optional)</label>
+                <select id="eventProject">
+                    <option value="">Select Project</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelEventBtn">Cancel</button>
+                <button type="button" class="btn-danger" id="deleteEventBtn" style="display:none;">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                <button type="submit" class="btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     EVENT DETAIL POPUP (Click on date)
+     ============================================================ -->
+<div class="modal-overlay" id="eventDetailModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h2 id="detailEventTitle">Event</h2>
+            <button id="closeEventDetail"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-row">
+                <span class="label">Date</span>
+                <span id="detailEventDate">-</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Type</span>
+                <span id="detailEventType">-</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Description</span>
+                <p id="detailEventDescription">-</p>
+            </div>
+            <div class="detail-row">
+                <span class="label">Project</span>
+                <a id="detailEventProject" href="#">-</a>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" id="editEventDetailBtn">
+                <i class="fas fa-pen"></i> Edit
+            </button>
+            <button type="button" class="btn-danger" id="deleteEventDetailBtn">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+            <button type="button" class="btn-secondary" id="closeEventDetailBtn">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='js/pages/calendar.js') }}"></script>
+{% endblock %}

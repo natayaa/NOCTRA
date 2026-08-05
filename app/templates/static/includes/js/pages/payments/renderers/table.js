@@ -1,0 +1,214 @@
+// ============================================================
+// payments/renderers/table.js - Table Rendering (FIXED)
+// ============================================================
+
+import { DOM } from "../dom.js";
+import {
+  PaymentFormatter,
+  escapeHtml,
+} from "../../shared/payments/formatters.js";
+
+export function showLoadingState(tableType = "payments") {
+  const body =
+    tableType === "payments" ? DOM.paymentsBody() : DOM.invoicesBody();
+  if (!body) return;
+
+  body.innerHTML = `
+    <tr>
+      <td colspan="8" style="text-align:center;padding:2rem;">
+        <i class="ph ph-spinner" style="font-size:1.5rem;animation:spin 1s linear infinite;display:block;margin-bottom:0.5rem;"></i>
+        <p style="color:var(--text-muted);">Loading ${tableType}...</p>
+      </td>
+    </tr>
+  `;
+}
+
+export function renderPayments(payments) {
+  const body = DOM.paymentsBody();
+  if (!body) return;
+
+  if (!payments || payments.length === 0) {
+    body.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted);">
+          <i class="ph ph-credit-card" style="font-size:2rem;display:block;margin-bottom:0.5rem;"></i>
+          No payments found
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  body.innerHTML = payments
+    .map((payment) => {
+      const status = payment.status || "pending";
+      const statusLabel = PaymentFormatter.statusLabel(status);
+      const statusColor = PaymentFormatter.statusColor(status);
+      const statusIcon = PaymentFormatter.statusIcon(status);
+      const typeLabel = PaymentFormatter.paymentTypeLabel(
+        payment.type || payment.payment_type || "payment",
+      );
+      const typeIcon = PaymentFormatter.paymentTypeIcon(
+        payment.type || payment.payment_type || "payment",
+      );
+
+      return `
+        <tr class="fade-in">
+          <td>
+            <strong style="font-size:0.8rem;">${escapeHtml(payment.id?.substring(0, 8) || "N/A")}</strong>
+            ${payment.reference_number ? `<br><small style="color:var(--text-muted);">${escapeHtml(payment.reference_number)}</small>` : ""}
+          </td>
+          <td>
+            <span style="display:flex;align-items:center;gap:0.3rem;">
+              ${typeIcon} ${escapeHtml(typeLabel)}
+            </span>
+          </td>
+          <td style="font-weight:600;color:var(--text-primary);">
+            ${PaymentFormatter.currency(payment.amount)}
+          </td>
+          <td>${escapeHtml(payment.method || payment.payment_method || "-")}</td>
+          <td>
+            <span class="status-badge" style="background:${statusColor}25;color:${statusColor};padding:0.15rem 0.6rem;border-radius:var(--radius-full);font-size:0.7rem;font-weight:600;display:inline-flex;align-items:center;gap:0.3rem;">
+              ${statusIcon} ${statusLabel}
+            </span>
+          </td>
+          <td style="font-size:0.8rem;color:var(--text-secondary);">
+            ${payment.inquiry_id ? `Inq: ${escapeHtml(payment.inquiry_id?.substring(0, 8))}` : ""}
+            ${payment.project_id ? `<br>Proj: ${escapeHtml(payment.project_id?.substring(0, 8))}` : ""}
+          </td>
+          <td style="font-size:0.8rem;color:var(--text-muted);">
+            ${PaymentFormatter.date(payment.created_at || payment.paid_at)}
+          </td>
+          <td style="text-align:center;white-space:nowrap;">
+            <button class="action-btn" onclick="window.confirmPayment('${payment.id}')" title="Confirm" ${["completed", "confirmed", "paid", "settled"].includes(status) ? "disabled" : ""}>
+              <i class="ph ph-check-circle"></i>
+            </button>
+            <button class="action-btn" onclick="window.viewPayment('${payment.id}')" title="View">
+              <i class="ph ph-eye"></i>
+            </button>
+            ${
+              ["pending", "awaiting_confirmation", "processing"].includes(
+                status,
+              )
+                ? `
+              <button class="action-btn danger" onclick="window.cancelPayment('${payment.id}')" title="Cancel">
+                <i class="ph ph-x-circle"></i>
+              </button>
+            `
+                : ""
+            }
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+export function renderInvoices(invoices) {
+  const body = DOM.invoicesBody();
+  if (!body) return;
+
+  if (!invoices || invoices.length === 0) {
+    body.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted);">
+          <i class="ph ph-file-text" style="font-size:2rem;display:block;margin-bottom:0.5rem;"></i>
+          No invoices found
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  body.innerHTML = invoices
+    .map((invoice) => {
+      const status = invoice.status || "draft";
+      const statusLabel = PaymentFormatter.statusLabel(status);
+      const statusColor = PaymentFormatter.statusColor(status);
+      const statusIcon = PaymentFormatter.statusIcon(status);
+      const total = invoice.total_amount || invoice.total || 0;
+      const paid = invoice.paid_amount || invoice.paid || 0;
+
+      return `
+        <tr class="fade-in">
+          <td>
+            <strong>${escapeHtml(invoice.invoice_number || "#")}</strong>
+          </td>
+          <td>${escapeHtml(invoice.customer_name || invoice.inquiry?.customer_name || "-")}</td>
+          <td style="font-weight:600;color:var(--text-primary);">
+            ${PaymentFormatter.currency(total)}
+          </td>
+          <td>${PaymentFormatter.currency(paid)}</td>
+          <td>
+            <span class="status-badge" style="background:${statusColor}25;color:${statusColor};padding:0.15rem 0.6rem;border-radius:var(--radius-full);font-size:0.7rem;font-weight:600;display:inline-flex;align-items:center;gap:0.3rem;">
+              ${statusIcon} ${statusLabel}
+            </span>
+          </td>
+          <td style="font-size:0.8rem;color:${status === "overdue" ? "#ef4444" : "var(--text-muted)"};">
+            ${PaymentFormatter.date(invoice.due_date)}
+            ${status === "overdue" ? " ⚠️" : ""}
+          </td>
+          <td style="text-align:center;white-space:nowrap;">
+            <button class="action-btn" onclick="window.viewInvoice('${invoice.id}')" title="View">
+              <i class="ph ph-eye"></i>
+            </button>
+            ${
+              status === "draft"
+                ? `
+              <button class="action-btn" onclick="window.sendInvoice('${invoice.id}')" title="Send">
+                <i class="ph ph-paper-plane"></i>
+              </button>
+            `
+                : ""
+            }
+            ${
+              !["paid", "cancelled", "refunded"].includes(status)
+                ? `
+              <button class="action-btn success" onclick="window.markInvoicePaid('${invoice.id}')" title="Mark Paid">
+                <i class="ph ph-check-circle"></i>
+              </button>
+            `
+                : ""
+            }
+            ${
+              status === "overdue"
+                ? `
+              <button class="action-btn warning" onclick="window.sendInvoiceReminder('${invoice.id}')" title="Send Reminder">
+                <i class="ph ph-bell"></i>
+              </button>
+            `
+                : ""
+            }
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+export function updatePagination(
+  page,
+  totalPages,
+  totalItems,
+  type = "payments",
+) {
+  const info =
+    type === "payments" ? DOM.pageInfoPayments() : DOM.pageInfoInvoices();
+  const prev =
+    type === "payments" ? DOM.prevPagePayments() : DOM.prevPageInvoices();
+  const next =
+    type === "payments" ? DOM.nextPagePayments() : DOM.nextPageInvoices();
+
+  if (info) {
+    info.textContent = `Page ${page} of ${Math.max(1, totalPages)} (${totalItems} items)`;
+  }
+  if (prev) {
+    prev.disabled = page <= 1;
+    prev.style.opacity = page <= 1 ? "0.5" : "1";
+  }
+  if (next) {
+    const isLast = page >= totalPages || totalPages === 0;
+    next.disabled = isLast;
+    next.style.opacity = isLast ? "0.5" : "1";
+  }
+}

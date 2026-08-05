@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Invoices | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/invoice.css') }}" />
+{% endblock %}
+
+{% block page_title %}Invoice Management{% endblock %}
+{% block page_subtitle %}Billing &amp; Payments Tracking{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     INVOICE STATS
+     ============================================================ -->
+<div class="invoice-stats">
+    <div class="stat-card">
+        <span>Total Invoices</span>
+        <h2 id="totalInvoices">0</h2>
+    </div>
+    <div class="stat-card">
+        <span>Outstanding</span>
+        <h2 id="outstandingAmount">Rp 0</h2>
+    </div>
+    <div class="stat-card">
+        <span>Paid</span>
+        <h2 id="paidAmount">Rp 0</h2>
+    </div>
+    <div class="stat-card">
+        <span>Overdue</span>
+        <h2 id="overdueAmount" style="color:var(--color-danger);">Rp 0</h2>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOOLBAR
+     ============================================================ -->
+<div class="invoice-toolbar glass">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="search" id="searchInvoice" placeholder="Search invoice number, customer..." />
+        </div>
+        <select id="statusFilter">
+            <option value="">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="viewed">Viewed</option>
+            <option value="partial">Partial</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
+            <option value="cancelled">Cancelled</option>
+        </select>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn-secondary" id="exportInvoicesBtn">
+            <i class="fas fa-file-export"></i> Export
+        </button>
+        <button class="btn-primary" id="createInvoiceBtn">
+            <i class="fas fa-plus"></i> Create Invoice
+        </button>
+    </div>
+</div>
+
+<!-- ============================================================
+     INVOICE TABLE
+     ============================================================ -->
+<div class="invoice-table-wrapper">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Invoice</th>
+                    <th>Customer</th>
+                    <th>Project</th>
+                    <th>Total</th>
+                    <th>Paid</th>
+                    <th>Remaining</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th style="text-align:center;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="invoiceBody">
+                <tr><td colspan="9" class="loading-placeholder">Loading invoices...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="table-pagination">
+        <button class="page-btn" id="prevPage" disabled>Prev</button>
+        <span id="pageInfo">Page 1 of 1</span>
+        <button class="page-btn" id="nextPage" disabled>Next</button>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Create Invoice
+     ============================================================ -->
+<div class="modal-overlay" id="invoiceModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <div>
+                <h2>Create Invoice</h2>
+                <p>Generate invoice for customer</p>
+            </div>
+            <button id="closeInvoiceModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="invoiceForm">
+            <input type="hidden" id="editInvoiceId" />
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Invoice Number *</label>
+                    <input type="text" id="invoiceNumber" required placeholder="INV-2026-0001" />
+                </div>
+                <div class="form-group">
+                    <label>Invoice Date</label>
+                    <input type="date" id="invoiceDate" />
+                </div>
+                <div class="form-group">
+                    <label>Due Date</label>
+                    <input type="date" id="invoiceDueDate" />
+                </div>
+                <div class="form-group">
+                    <label>Customer *</label>
+                    <select id="invoiceCustomer" required>
+                        <option value="">Select Customer</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Project</label>
+                    <select id="invoiceProject">
+                        <option value="">Select Project</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Payment Terms</label>
+                    <select id="invoiceTerms">
+                        <option value="Net 7 days">Net 7 days</option>
+                        <option value="Net 14 days" selected>Net 14 days</option>
+                        <option value="Net 30 days">Net 30 days</option>
+                        <option value="Cash on Delivery">Cash on Delivery</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Invoice Items -->
+            <div class="invoice-items">
+                <h4>Items</h4>
+                <div id="invoiceItemsList">
+                    <div class="invoice-item-row">
+                        <input type="text" class="item-desc" placeholder="Description" />
+                        <input type="number" class="item-qty" placeholder="Qty" value="1" />
+                        <input type="number" class="item-price" placeholder="Price" step="1000" />
+                        <input type="number" class="item-tax" placeholder="Tax %" value="11" step="0.5" />
+                        <button type="button" class="btn-danger btn-sm remove-item-btn">×</button>
+                    </div>
+                </div>
+                <button type="button" class="btn-secondary btn-sm" id="addItemRowBtn">
+                    <i class="fas fa-plus"></i> Add Item
+                </button>
+            </div>
+
+            <!-- Totals -->
+            <div class="invoice-totals">
+                <div class="total-row">
+                    <span>Subtotal</span>
+                    <span id="invoiceSubtotal">Rp 0</span>
+                </div>
+                <div class="total-row">
+                    <span>Tax (11%)</span>
+                    <span id="invoiceTax">Rp 0</span>
+                </div>
+                <div class="total-row total">
+                    <span>Total</span>
+                    <span id="invoiceTotal">Rp 0</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Notes</label>
+                <textarea id="invoiceNotes" rows="3" placeholder="Additional notes..."></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelInvoiceBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Create Invoice</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Invoice Detail
+     ============================================================ -->
+<div class="modal-overlay" id="invoiceDetailModal">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <div>
+                <h2 id="detailInvoiceNumber">INV-2026-0001</h2>
+                <p id="detailInvoiceStatus"><span class="status-badge">Sent</span></p>
+            </div>
+            <button id="closeInvoiceDetail"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-grid">
+                <div><label>Customer</label><p id="detailCustomer">-</p></div>
+                <div><label>Project</label><p id="detailProject">-</p></div>
+                <div><label>Date</label><p id="detailDate">-</p></div>
+                <div><label>Due Date</label><p id="detailDueDate">-</p></div>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr><th>Description</th><th>Qty</th><th>Price</th><th>Total</th></tr>
+                    </thead>
+                    <tbody id="detailItemsBody"></tbody>
+                </table>
+            </div>
+
+            <div class="invoice-totals detail">
+                <div class="total-row"><span>Subtotal</span><span id="detailSubtotal">Rp 0</span></div>
+                <div class="total-row"><span>Tax</span><span id="detailTax">Rp 0</span></div>
+                <div class="total-row total"><span>Total</span><span id="detailTotal">Rp 0</span></div>
+                <div class="total-row paid"><span>Paid</span><span id="detailPaid">Rp 0</span></div>
+                <div class="total-row remaining"><span>Remaining</span><span id="detailRemaining">Rp 0</span></div>
+            </div>
+
+            <div class="detail-actions">
+                <button class="btn-success" id="detailMarkPaid"><i class="fas fa-check"></i> Mark as Paid</button>
+                <button class="btn-primary" id="detailSendReminder"><i class="fas fa-bell"></i> Send Reminder</button>
+                <button class="btn-secondary" id="detailDownloadPDF"><i class="fas fa-download"></i> Download PDF</button>
+                <button class="btn-danger" id="detailCancelInvoice"><i class="fas fa-times"></i> Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='js/pages/invoices.js') }}"></script>
+{% endblock %}

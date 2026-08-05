@@ -1,0 +1,682 @@
+{% extends "base.html" %}
+
+{% block title %}Projects | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/pages/projects.css') }}" />
+{% endblock %}
+
+{% block page_title %}Projects{% endblock %}
+{% block page_subtitle %}Manage restorations, paint jobs, fabrication, and production workflow{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     DASHBOARD / OVERVIEW CARDS
+     ============================================================ -->
+<section class="project-dashboard" aria-label="Project overview statistics">
+    <div class="overview-card">
+        <div class="overview-icon"><i class="ph ph-briefcase" aria-hidden="true"></i></div>
+        <div>
+            <span>Active Projects</span>
+            <h2 id="activeCount">0</h2>
+            <small>Total active</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="ph ph-gear-six" aria-hidden="true"></i></div>
+        <div>
+            <span>In Production</span>
+            <h2 id="prodCount">0</h2>
+            <small>Currently running</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="ph ph-check-circle" aria-hidden="true"></i></div>
+        <div>
+            <span>Completed</span>
+            <h2 id="completedCount">0</h2>
+            <small>This month</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="ph ph-wallet" aria-hidden="true"></i></div>
+        <div>
+            <span>Revenue</span>
+            <h2 id="revenueTotal">Rp 0</h2>
+            <small>Estimated gross</small>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     TOOLBAR
+     ============================================================ -->
+<section class="projects-toolbar glass" role="toolbar" aria-label="Project search and filter controls">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+            <input type="search" id="projectSearch" placeholder="Search customer, vehicle, project..." aria-label="Search projects" />
+        </div>
+        <select id="statusFilter" aria-label="Filter by project status">
+            <option value="">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="active">Active</option>
+            <option value="in_progress">In Progress</option>
+            <option value="on_hold">On Hold</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+        </select>
+        <select id="priorityFilter" aria-label="Filter by priority">
+            <option value="">All Priority</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+        </select>
+    </div>
+    <!--div class="toolbar-right">
+        <button class="btn-primary" id="createProjectBtn"><i class="ph ph-plus"></i> New Project</button>
+    </div-->
+</section>
+
+<!-- ============================================================
+     PROJECT CARDS GRID
+     ============================================================ -->
+<section class="card-wrapper" aria-label="Project cards">
+    <div class="card-grid" id="projectCardGrid">
+        <!-- JS akan render project cards di sini -->
+        <div class="loading-placeholder" style="grid-column:1/-1; text-align:center; padding:3rem 0;">
+            <i class="ph ph-spinner" style="font-size:2rem; animation: spin 1s linear infinite;"></i>
+            <p>Loading projects...</p>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     PAGINATION
+     ============================================================ -->
+<div class="pagination-container" id="paginationContainer">
+    <button class="pagination-btn" id="prevPageBtn" disabled>
+        <i class="ph ph-caret-left"></i> Previous
+    </button>
+    <span id="pageInfo">Page 1 of 1</span>
+    <button class="pagination-btn" id="nextPageBtn" disabled>
+        Next <i class="ph ph-caret-right"></i>
+    </button>
+</div>
+
+<!-- ============================================================
+     MODAL: Create / Edit Project
+     ============================================================ -->
+<div class="modal-overlay" id="projectModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <div>
+                <h2 id="modalTitle">Create New Project</h2>
+                <p id="modalSubtitle">Register workshop project and production schedule</p>
+            </div>
+            <button id="closeModal" aria-label="Close modal">×</button>
+        </div>
+        <form id="projectForm" novalidate>
+            <input type="hidden" id="editProjectId" value="" />
+
+            <div class="form-grid">
+                <!-- ======== PROJECT INFO ======== -->
+                <div class="form-group">
+                    <label for="projectName">Project Name *</label>
+                    <input type="text" id="projectName" required placeholder="e.g. Mio Sporty Restoration" />
+                </div>
+                <div class="form-group">
+                    <label for="customerName">Customer Name *</label>
+                    <input type="text" id="customerName" required />
+                </div>
+                <div class="form-group">
+                    <label for="customerPhone">Phone Number</label>
+                    <input type="text" id="customerPhone" placeholder="e.g. 08123456789" />
+                </div>
+                <div class="form-group">
+                    <label for="customerEmail">Email</label>
+                    <input type="email" id="customerEmail" placeholder="customer@email.com" />
+                </div>
+
+                <!-- ======== STATUS & PRIORITY ======== -->
+                <div class="form-group">
+                    <label for="projectStatus">Status</label>
+                    <select id="projectStatus">
+                        <option value="draft">Draft</option>
+                        <option value="active" selected>Active</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="on_hold">On Hold</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="projectPriority">Priority</label>
+                    <select id="projectPriority">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+
+                <!-- ======== VEHICLE DETAILS ======== -->
+                <div class="form-group">
+                    <label for="vehicleBrand">Vehicle Brand *</label>
+                    <input type="text" id="vehicleBrand" required placeholder="e.g. Yamaha" />
+                </div>
+                <div class="form-group">
+                    <label for="vehicleModel">Vehicle Model *</label>
+                    <input type="text" id="vehicleModel" required placeholder="e.g. Mio Sporty" />
+                </div>
+                <div class="form-group">
+                    <label for="vehicleYear">Year</label>
+                    <input type="number" id="vehicleYear" placeholder="e.g. 2020" min="1950" max="2035" />
+                </div>
+                <div class="form-group">
+                    <label for="licensePlate">License Plate</label>
+                    <input type="text" id="licensePlate" placeholder="e.g. B 1234 XYZ" />
+                </div>
+
+                <!-- ======== FINANCIAL ======== -->
+                <div class="form-group">
+                    <label for="estimatedCost">Estimated Cost (Rp)</label>
+                    <input type="number" id="estimatedCost" placeholder="0" min="0" step="1000" />
+                </div>
+                <div class="form-group">
+                    <label for="estimatedRevenue">Estimated Revenue (Rp)</label>
+                    <input type="number" id="estimatedRevenue" placeholder="0" min="0" step="1000" />
+                </div>
+
+                <!-- ======== DATES ======== -->
+                <div class="form-group">
+                    <label for="startDate">Start Date</label>
+                    <input type="date" id="startDate" />
+                </div>
+                <div class="form-group">
+                    <label for="targetDelivery">Target Delivery</label>
+                    <input type="date" id="targetDelivery" />
+                </div>
+
+                <!-- ======== NOTES ======== -->
+                <div class="form-group" style="grid-column: span 2;">
+                    <label for="projectNotes">Notes / Description</label>
+                    <textarea id="projectNotes" rows="4" placeholder="Add any notes or description..."></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+                <button type="submit" class="btn-primary" id="submitProjectBtn">Create Project</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     PROJECT DRAWER (Detail dengan Tabs)
+     ============================================================ -->
+<aside class="drawer" id="projectDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+    <div class="drawer-header">
+        <div>
+            <h2 id="drawerTitle">Project Details</h2>
+            <span id="drawerSubtitle">View full project information</span>
+        </div>
+        <button id="closeDrawer" aria-label="Close drawer">×</button>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="drawer-tabs" role="tablist" aria-label="Project information tabs">
+        <button class="tab-btn active" role="tab" aria-selected="true" data-tab="overview" id="tab-overview-btn">Overview</button>
+        <!--button class="tab-btn" role="tab" aria-selected="false" data-tab="financial" id="tab-financial-btn">Financial</button-->
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="material" id="tab-material-btn">Material</button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="labor" id="tab-labor-btn">Labor</button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="timeline" id="tab-timeline-btn">Timeline</button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="tasks" id="tab-tasks-btn">Tasks</button>
+    </div>
+
+    <div class="drawer-content">
+
+        <!-- ============================================================
+             TAB 1: OVERVIEW
+             ============================================================ -->
+        <div class="tab-panel active" role="tabpanel" aria-labelledby="tab-overview-btn" id="tab-overview">
+            <section class="detail-card">
+                <h3>Customer &amp; Vehicle</h3>
+                <div class="detail-grid">
+                    <div class="detail-item"><label>Customer</label><p id="drawerCustomer">-</p></div>
+                    <div class="detail-item"><label>Phone</label><p id="drawerPhone">-</p></div>
+                    <div class="detail-item"><label>Email</label><p id="drawerEmail">-</p></div>
+                    <div class="detail-item"><label>Brand</label><p id="drawerBrand">-</p></div>
+                    <div class="detail-item"><label>Model</label><p id="drawerModel">-</p></div>
+                    <div class="detail-item"><label>Year</label><p id="drawerYear">-</p></div>
+                    <div class="detail-item"><label>License Plate</label><p id="drawerPlate">-</p></div>
+                    <div class="detail-item">
+                        <label>Status</label>
+                        <p id="drawerStatus"><span class="status-badge">-</span></p>
+                    </div>
+                    <div class="detail-item">
+                        <label>Priority</label>
+                        <p id="drawerPriority"><span class="priority-badge">-</span></p>
+                    </div>
+                    <div class="detail-item" style="grid-column: span 2;">
+                        <label>Progress</label>
+                        <div class="progress-small">
+                            <div class="bar"><div class="fill" id="drawerProgressFill" style="width:0%;"></div></div>
+                            <span id="drawerProgressText">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h3>Notes</h3>
+                <p id="drawerNotes" style="white-space:pre-wrap; color: var(--text-secondary);">-</p>
+            </section>
+        </div>
+
+        <!-- ============================================================
+             TAB 2: FINANCIAL
+             ============================================================ -->
+        <!--div class="tab-panel" role="tabpanel" aria-labelledby="tab-financial-btn" id="tab-financial">
+            <section class="detail-card">
+                <h3>Financial Summary</h3>
+                <div class="detail-grid">
+                    <div class="detail-item"><label>Estimated Cost</label><p id="drawerEstCost">-</p></div>
+                    <div class="detail-item"><label>Actual Cost</label><p id="drawerActualCost">-</p></div>
+                    <div class="detail-item"><label>Estimated Revenue</label><p id="drawerEstRevenue">-</p></div>
+                    <div class="detail-item"><label>Actual Revenue</label><p id="drawerActualRevenue">-</p></div>
+                    <div class="detail-item"><label>Deposit Amount</label><p id="drawerDeposit">-</p></div>
+                    <div class="detail-item"><label>Deposit Paid</label><p id="drawerDepositPaid">-</p></div>
+                    <div class="detail-item" style="grid-column: span 2;">
+                        <label>Profit</label>
+                        <p id="drawerProfit">-</p>
+                    </div>
+                    <div class="detail-item" style="grid-column: span 2;">
+                        <label>Margin</label>
+                        <p id="drawerMargin">-</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h4>Cost Breakdown</h4>
+                <div class="breakdown-grid">
+                    <div class="breakdown-item">
+                        <span class="label">Material Cost</span>
+                        <span class="value" id="drawerMaterialCost">-</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="label">Labor Cost</span>
+                        <span class="value" id="drawerLaborCost">-</span>
+                    </div>
+                    <div class="breakdown-item">
+                        <span class="label">Other Expenses</span>
+                        <span class="value" id="drawerOtherExpenses">-</span>
+                    </div>
+                    <div class="breakdown-item total">
+                        <span class="label">Total Cost</span>
+                        <span class="value" id="drawerTotalCost">-</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <div class="budget-progress">
+                    <div class="budget-progress-header">
+                        <span>Budget Usage</span>
+                        <span id="budgetPercentage">0%</span>
+                    </div>
+                    <div class="budget-progress-bar">
+                        <div class="budget-progress-fill" id="budgetProgressFillFinancial" style="width:0%;"></div>
+                    </div>
+                    <div class="budget-progress-labels">
+                        <span>Rp 0</span>
+                        <span>Rp 0</span>
+                    </div>
+                </div>
+            </section>
+        </div-->
+
+        <!-- ============================================================
+             TAB 3: MATERIAL
+             ============================================================ -->
+        <div class="tab-panel" role="tabpanel" aria-labelledby="tab-material-btn" id="tab-material">
+            <section class="detail-card">
+                <h3>Consume Material</h3>
+                <div class="material-form">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label for="materialSelect">Select Material *</label>
+                        <select id="materialSelect" class="form-control" aria-label="Select material">
+                            <option value="">Select Material</option>
+                        </select>
+                    </div>
+                    
+                    <!-- ✅ Quantity dengan keypad -->
+                    <div class="form-group material-qty-group">
+                        <label for="materialQty">Quantity *</label>
+                        <div class="material-qty-wrapper">
+                            <input type="text" id="materialQty" class="form-control material-qty-display" 
+                                value="1" readonly placeholder="Tap to enter" />
+                            <span class="keypad-toggle-hint">⌨ tap</span>
+                            
+                            <div class="numeric-keypad" id="materialQtyKeypad">
+                                <div class="keypad-row">
+                                    <button type="button" class="keypad-btn" data-value="1">1</button>
+                                    <button type="button" class="keypad-btn" data-value="2">2</button>
+                                    <button type="button" class="keypad-btn" data-value="3">3</button>
+                                    <button type="button" class="keypad-btn" data-value="backspace">⌫</button>
+                                </div>
+                                <div class="keypad-row">
+                                    <button type="button" class="keypad-btn" data-value="4">4</button>
+                                    <button type="button" class="keypad-btn" data-value="5">5</button>
+                                    <button type="button" class="keypad-btn" data-value="6">6</button>
+                                    <button type="button" class="keypad-btn" data-value="clear">✕</button>
+                                </div>
+                                <div class="keypad-row">
+                                    <button type="button" class="keypad-btn" data-value="7">7</button>
+                                    <button type="button" class="keypad-btn" data-value="8">8</button>
+                                    <button type="button" class="keypad-btn" data-value="9">9</button>
+                                    <button type="button" class="keypad-btn" data-value="0" style="flex:2;">0</button>
+                                </div>
+                                <div class="keypad-row">
+                                    <button type="button" class="keypad-btn keypad-dot" data-value=".">.</button>
+                                    <button type="button" class="keypad-btn keypad-enter" data-value="enter">✓ OK</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="materialUnit">Unit</label>
+                        <select id="materialUnit" class="form-control" aria-label="Select unit">
+                            <option value="pcs">PCS</option>
+                            <option value="liter">Liter</option>
+                            <option value="ml">ml</option>
+                            <option value="kg">KG</option>
+                            <option value="gram">Gram</option>
+                            <option value="meter">Meter</option>
+                            <option value="roll">Roll</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn-primary" id="consumeMaterialBtn" style="grid-column: span 1;">
+                        <i class="ph ph-check" aria-hidden="true"></i> Consume
+                    </button>
+                </div>
+                <div class="material-hint">
+                    💡 <span id="materialHint">Select a material first</span>
+                </div>
+            </section>
+
+            <!-- Material History -->
+            <section class="detail-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                    <h3 style="margin:0;">Material Usage History</h3>
+                    <span id="materialCount" style="font-size:0.8rem; color:var(--text-muted);">0 entries</span>
+                </div>
+                <div id="drawerMaterialsList">
+                    <div class="material-empty" style="display:flex; flex-direction:column; align-items:center; gap:0.5rem; padding:2rem 1rem; color:var(--text-muted); text-align:center;">
+                        <i class="ph ph-package" style="font-size:2rem; opacity:0.4;"></i>
+                        <p>No materials consumed yet.</p>
+                        <small style="font-size:0.8rem;">Consume materials using the form above</small>
+                    </div>
+                </div>
+                <div id="materialSummaryContainer" style="display:none;">
+                    <div class="material-summary" style="display:flex; justify-content:space-between; padding:0.75rem 1rem; background:rgba(var(--primary-rgb),0.06); border-radius:var(--radius-sm); border:1px solid rgba(var(--primary-rgb),0.1); margin-top:0.75rem; font-size:0.85rem;">
+                        <span class="label" style="color:var(--text-secondary);">Total Material Cost</span>
+                        <span class="value" id="totalMaterialCost" style="font-weight:700; color:var(--primary);">Rp 0</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ============================================================
+             TAB 4: LABOR
+        ================================================================= -->
+        <div class="tab-panel" role="tabpanel" aria-labelledby="tab-labor-btn" id="tab-labor">
+            <section class="detail-card">
+                <h3>Add Labor</h3>
+                <div class="labor-section">
+                    <div class="labor-form">
+                        <!-- Labor Type -->
+                        <div class="form-group">
+                            <label for="laborTypeSelect">Labor Type *</label>
+                            <select id="laborTypeSelect" class="form-control">
+                                <option value="">Select Labor Type</option>
+                            </select>
+                        </div>
+
+                        <!-- Hours - DENGAN KEYPAD -->
+                        <div class="form-group hours-group">
+                            <label for="laborHours">Hours *</label>
+                            <div class="hours-input-wrapper">
+                                <input type="text" id="laborHours" class="form-control hours-display" 
+                                    value="0" readonly placeholder="Tap to enter hours" />
+                                <span class="keypad-toggle-hint">⌨ tap</span>
+                                
+                                <!-- ✅ KEYPAD - PASTIKAN INI ADA -->
+                                <div class="numeric-keypad" id="hoursKeypad">
+                                    <div class="keypad-row">
+                                        <button type="button" class="keypad-btn" data-value="1">1</button>
+                                        <button type="button" class="keypad-btn" data-value="2">2</button>
+                                        <button type="button" class="keypad-btn" data-value="3">3</button>
+                                        <button type="button" class="keypad-btn" data-value="backspace">
+                                            <i class="ph ph-backspace"></i>
+                                        </button>
+                                    </div>
+                                    <div class="keypad-row">
+                                        <button type="button" class="keypad-btn" data-value="4">4</button>
+                                        <button type="button" class="keypad-btn" data-value="5">5</button>
+                                        <button type="button" class="keypad-btn" data-value="6">6</button>
+                                        <button type="button" class="keypad-btn" data-value="clear">
+                                            <i class="ph ph-x"></i>
+                                        </button>
+                                    </div>
+                                    <div class="keypad-row">
+                                        <button type="button" class="keypad-btn" data-value="7">7</button>
+                                        <button type="button" class="keypad-btn" data-value="8">8</button>
+                                        <button type="button" class="keypad-btn" data-value="9">9</button>
+                                        <button type="button" class="keypad-btn" data-value="0" style="flex:2;">0</button>
+                                    </div>
+                                    <div class="keypad-row">
+                                        <button type="button" class="keypad-btn keypad-dot" data-value=".">.</button>
+                                        <button type="button" class="keypad-btn keypad-enter" data-value="enter">
+                                            <i class="ph ph-check"></i> OK
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Rate per Hour -->
+                        <div class="form-group">
+                            <label for="laborRate">Rate / Hour *</label>
+                            <input type="number" id="laborRate" class="form-control" 
+                                step="1000" min="0" placeholder="Auto-filled" />
+                        </div>
+
+                        <!-- Add Button -->
+                        <button class="btn-primary" id="addLaborBtn">
+                            <i class="ph ph-plus" aria-hidden="true"></i> Add
+                        </button>
+
+                        <!-- Hint -->
+                        <div id="laborRateHint">
+                            <span class="hint-icon">💡</span> 
+                            Rate will be auto-filled from selected labor type
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Labor History -->
+            <section class="detail-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                    <h3 style="margin:0;">Labor History</h3>
+                    <span id="laborCount" style="font-size:0.8rem; color:var(--text-muted);">0 entries</span>
+                </div>
+                <div id="laborList">
+                    <div class="labor-empty">
+                        <i class="ph ph-users"></i>
+                        <p>No labor recorded yet.</p>
+                        <small style="font-size:0.8rem;">Add labor using the form above</small>
+                    </div>
+                </div>
+                <div id="laborSummaryContainer" style="display:none;">
+                    <div class="labor-summary">
+                        <span class="label">Total Labor Cost</span>
+                        <span class="value" id="totalLaborCost">Rp 0</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ============================================================
+             TAB 5: TIMELINE
+             ============================================================ -->
+        <div class="tab-panel" role="tabpanel" aria-labelledby="tab-timeline-btn" id="tab-timeline">
+            <section class="detail-card">
+                <h3>Project Timeline</h3>
+                <div class="detail-grid">
+                    <div class="detail-item"><label>Start Date</label><p id="drawerStartDate">-</p></div>
+                    <div class="detail-item"><label>Target Delivery</label><p id="drawerDelivery">-</p></div>
+                    <div class="detail-item"><label>Actual Delivery</label><p id="drawerActualDelivery">-</p></div>
+                    <div class="detail-item"><label>Completed At</label><p id="drawerCompletedAt">-</p></div>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h3>Milestones</h3>
+                <div id="drawerMilestones">
+                    <p style="color:var(--text-muted);">No milestones set.</p>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h3>Activities</h3>
+                <div id="drawerActivities" class="timeline-list">
+                    <p style="color:var(--text-muted);">No activities recorded.</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- ============================================================
+             TAB 6: TASKS
+             ============================================================ -->
+        <div class="tab-panel" role="tabpanel" aria-labelledby="tab-tasks-btn" id="tab-tasks">
+            <section class="detail-card">
+                <div class="tasks-header">
+                    <h3>Task Management</h3>
+                    <button class="btn-primary btn-sm" id="addTaskBtn"><i class="ph ph-plus"></i> Add Task</button>
+                </div>
+                <div id="drawerTasks">
+                    <p style="color:var(--text-muted);">No tasks created yet.</p>
+                </div>
+            </section>
+        </div>
+    </div>
+</aside>
+
+<!-- ============================================================
+     PROGRESS POPUP
+     ============================================================ -->
+<div class="modal-overlay" id="progressPopup" role="dialog" aria-modal="true" aria-labelledby="progressPopupTitle">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <div>
+                <h2 id="progressPopupTitle">Update Progress</h2>
+                <p id="progressPopupSubtitle">Drag the slider to update progress</p>
+            </div>
+            <button id="closeProgressPopup" aria-label="Close progress popup">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="progressPopupSlider">
+                    Progress: <span id="progressPopupValue">0</span>%
+                </label>
+                <input type="range" id="progressPopupSlider" min="0" max="100" value="0" />
+            </div>
+
+            <div id="progressPopupMilestones" class="milestones-list" aria-label="Project milestones">
+                <!-- rendered by JS -->
+            </div>
+
+            <div class="form-group">
+                <label for="progressPopupNote">Quick Note</label>
+                <textarea id="progressPopupNote" rows="3" placeholder="Add a quick update note..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="markCompleteCheckbox" />
+                    <span>Mark as Completed (when progress reaches 100%)</span>
+                </label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelProgressBtn">Cancel</button>
+                <button type="button" class="btn-primary" id="saveProgressBtn">Save Progress</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     ADD TASK MODAL
+     ============================================================ -->
+<div class="modal-overlay" id="taskModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h2>Add Task</h2>
+            <button id="closeTaskModal">×</button>
+        </div>
+        <form id="taskForm">
+            <input type="hidden" id="taskProjectId" />
+            <div class="form-group">
+                <label for="taskTitle">Task Title *</label>
+                <input type="text" id="taskTitle" required placeholder="e.g. Sanding & Priming" />
+            </div>
+            <div class="form-group">
+                <label for="taskDescription">Description</label>
+                <textarea id="taskDescription" rows="3" placeholder="Task details..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="taskAssignee">Assign To</label>
+                <input type="text" id="taskAssignee" placeholder="e.g. John" />
+            </div>
+            <div class="form-group">
+                <label for="taskPriority">Priority</label>
+                <select id="taskPriority">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="taskDueDate">Due Date</label>
+                <input type="date" id="taskDueDate" />
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelTaskBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Add Task</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    import { initProjects } from "{{ url_for('static', path='includes/js/pages/projects/index.js') }}";
+    initProjects();
+</script>
+{% endblock %}

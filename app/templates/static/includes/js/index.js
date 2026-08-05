@@ -1,19 +1,61 @@
-AOS.init({
-  duration: 1000,
-  once: true
+const modal = document.getElementById("inquiryModal");
+const openBtn = document.getElementById("openInquiry");
+const closeBtn = document.getElementById("closeInquiry");
+
+function lockScroll() {
+  document.body.style.overflow = "hidden";
+  document.documentElement.style.overflow = "hidden";
+  document.body.classList.add("modal-open");
+}
+
+function unlockScroll() {
+  document.body.style.overflow = "";
+  document.documentElement.style.overflow = "";
+  document.body.classList.remove("modal-open");
+}
+
+function isOpen() {
+  return modal?.classList.contains("active");
+}
+
+function openModal() {
+  if (!modal || isOpen()) return;
+
+  modal.classList.add("active");
+  lockScroll();
+}
+
+function closeModal() {
+  if (!modal || !isOpen()) return;
+
+  modal.classList.remove("active");
+  unlockScroll();
+
+  // 🔥 Trigger event untuk inquiry.js agar membatalkan request
+  document.dispatchEvent(new CustomEvent("modalClosed"));
+}
+
+/* OPEN / CLOSE */
+openBtn?.addEventListener("click", openModal);
+closeBtn?.addEventListener("click", closeModal);
+
+/* BACKDROP CLOSE */
+modal?.addEventListener("click", (e) => {
+  const isBackdrop =
+    e.target === modal || e.target.classList.contains("modal-backdrop");
+
+  if (isBackdrop) closeModal();
 });
 
-const navbar = document.querySelector("nav");
+/* ESC CLOSE (only when active) */
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!isOpen()) return;
 
-window.addEventListener("scroll", () => {
+  closeModal();
+});
 
-  if(window.scrollY > 30){
-
-    navbar.style.background = "rgba(4,8,22,.92)";
-
-  } else {
-
-    navbar.style.background = "rgba(4,8,22,.6)";
-  }
-
+/* SAFETY: restore scroll if DOM state mismatch */
+window.addEventListener("load", () => {
+  if (!isOpen()) unlockScroll();
 });

@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block title %}Price List | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/price_list.css') }}" />
+{% endblock %}
+
+{% block page_title %}Price List{% endblock %}
+{% block page_subtitle %}Manage prices for services, materials, labor, and bike models{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     PRICE LIST OVERVIEW CARDS
+     ============================================================ -->
+<section class="price-overview">
+    <div class="overview-card">
+        <div class="overview-icon"><i class="fas fa-tags"></i></div>
+        <div class="overview-content">
+            <span>Total Items</span>
+            <h2 id="totalItems">0</h2>
+            <small>All price items</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="fas fa-check-circle"></i></div>
+        <div class="overview-content">
+            <span>Active Items</span>
+            <h2 id="activeItems">0</h2>
+            <small>Currently active</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="fas fa-clock"></i></div>
+        <div class="overview-content">
+            <span>Expiring Soon</span>
+            <h2 id="expiringItems">0</h2>
+            <small>Expire in 30 days</small>
+        </div>
+    </div>
+    <div class="overview-card">
+        <div class="overview-icon"><i class="fas fa-chart-simple"></i></div>
+        <div class="overview-content">
+            <span>Categories</span>
+            <h2 id="categoryCount">0</h2>
+            <small>Unique categories</small>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     TOOLBAR
+     ============================================================ -->
+<section class="price-toolbar glass">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="search" id="searchPrice" placeholder="Search by name or description..." />
+        </div>
+        <select id="categoryFilter">
+            <option value="">All Categories</option>
+            <option value="service">Service</option>
+            <option value="material">Material</option>
+            <option value="labor">Labor</option>
+            <option value="bike_model">Bike Model</option>
+            <option value="paint">Paint</option>
+            <option value="finish">Finish</option>
+            <option value="accessory">Accessory</option>
+        </select>
+        <select id="statusFilter">
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+        </select>
+        <select id="vehicleFilter">
+            <option value="">All Vehicle</option>
+            <option value="Honda">Honda</option>
+            <option value="Yamaha">Yamaha</option>
+            <option value="Kawasaki">Kawasaki</option>
+            <option value="Suzuki">Suzuki</option>
+            <option value="Ducati">Ducati</option>
+            <option value="Other">Other</option>
+        </select>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn-secondary" id="exportPriceBtn">
+            <i class="fas fa-file-export"></i> Export
+        </button>
+        <button class="btn-primary" id="addPriceBtn">
+            <i class="fas fa-plus"></i> Add Price
+        </button>
+    </div>
+</section>
+
+<!-- ============================================================
+     PRICE LIST TABLE
+     ============================================================ -->
+<section class="table-wrapper">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Price</th>
+                    <th>Unit</th>
+                    <th>Vehicle</th>
+                    <th>Status</th>
+                    <th style="text-align:center;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="priceTableBody">
+                <tr>
+                    <td colspan="8" class="loading-placeholder">
+                        <i class="fas fa-spinner fa-spin"></i> Loading prices...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-container" id="paginationContainer">
+        <button class="pagination-btn" id="prevPageBtn" disabled>
+            <i class="fas fa-chevron-left"></i> Previous
+        </button>
+        <span id="pageInfo">Page 1 of 1</span>
+        <button class="pagination-btn" id="nextPageBtn" disabled>
+            Next <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+</section>
+
+<!-- ============================================================
+     MODAL: Add / Edit Price Item
+     ============================================================ -->
+<div class="modal-overlay" id="priceModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <div>
+                <h2 id="modalTitle">Add Price Item</h2>
+                <p id="modalSubtitle">Create a new price list item</p>
+            </div>
+            <button id="closeModalBtn"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="priceForm">
+            <input type="hidden" id="editId" />
+
+            <div class="form-grid">
+                <!-- ======== BASIC INFO ======== -->
+                <div class="form-group">
+                    <label for="category">Category *</label>
+                    <select id="category" required>
+                        <option value="">Select Category</option>
+                        <option value="service">Service</option>
+                        <option value="material">Material</option>
+                        <option value="labor">Labor</option>
+                        <option value="bike_model">Bike Model</option>
+                        <option value="paint">Paint</option>
+                        <option value="finish">Finish</option>
+                        <option value="accessory">Accessory</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="subCategory">Sub Category</label>
+                    <input type="text" id="subCategory" placeholder="e.g. Base Coat, Clear Coat" />
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label for="name">Name *</label>
+                    <input type="text" id="name" placeholder="e.g. Full Repaint" required />
+                </div>
+
+                <!-- ======== PRICING ======== -->
+                <div class="form-group">
+                    <label for="price">Price *</label>
+                    <input type="number" id="price" step="0.01" placeholder="e.g. 2500000" required />
+                </div>
+                <div class="form-group">
+                    <label for="costPrice">Cost Price (Optional)</label>
+                    <input type="number" id="costPrice" step="0.01" placeholder="e.g. 1500000" />
+                </div>
+                <div class="form-group">
+                    <label for="unit">Unit</label>
+                    <input type="text" id="unit" placeholder="e.g. per job, per liter, per hour" />
+                </div>
+                <div class="form-group">
+                    <label for="sku">SKU</label>
+                    <input type="text" id="sku" placeholder="e.g. SRV-001" />
+                </div>
+
+                <!-- ======== VEHICLE SPECIFIC ======== -->
+                <div class="form-group">
+                    <label for="vehicleBrand">Vehicle Brand (optional)</label>
+                    <select id="vehicleBrand">
+                        <option value="">All Brands</option>
+                        <option value="Honda">Honda</option>
+                        <option value="Yamaha">Yamaha</option>
+                        <option value="Kawasaki">Kawasaki</option>
+                        <option value="Suzuki">Suzuki</option>
+                        <option value="Ducati">Ducati</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="vehicleModel">Vehicle Model (optional)</label>
+                    <input type="text" id="vehicleModel" placeholder="e.g. CBR 150R, Mio Sporty" />
+                </div>
+
+                <!-- ======== VALIDITY ======== -->
+                <div class="form-group">
+                    <label for="effectiveDate">Effective Date</label>
+                    <input type="date" id="effectiveDate" />
+                </div>
+                <div class="form-group">
+                    <label for="expiryDate">Expiry Date</label>
+                    <input type="date" id="expiryDate" />
+                </div>
+
+                <!-- ======== ADDITIONAL FIELDS ======== -->
+                <div class="form-group">
+                    <label for="minQuantity">Min Quantity</label>
+                    <input type="number" id="minQuantity" placeholder="1" min="1" />
+                </div>
+                <div class="form-group">
+                    <label for="maxQuantity">Max Quantity</label>
+                    <input type="number" id="maxQuantity" placeholder="Optional" min="1" />
+                </div>
+                <div class="form-group">
+                    <label for="discountPercentage">Discount %</label>
+                    <input type="number" id="discountPercentage" placeholder="0" min="0" max="100" step="0.01" />
+                </div>
+                <div class="form-group">
+                    <label for="estimatedDuration">Estimated Duration (hours)</label>
+                    <input type="number" id="estimatedDuration" placeholder="e.g. 4.5" min="0" step="0.5" />
+                </div>
+
+                <!-- ======== TOGGLES ======== -->
+                <div class="form-group checkbox-row">
+                    <label>
+                        <input type="checkbox" id="isActive" checked />
+                        <span>Active</span>
+                    </label>
+                    <label>
+                        <input type="checkbox" id="isTaxable" checked />
+                        <span>Taxable</span>
+                    </label>
+                    <label>
+                        <input type="checkbox" id="isDiscountAllowed" checked />
+                        <span>Discount Allowed</span>
+                    </label>
+                </div>
+
+                <!-- ======== DESCRIPTION ======== -->
+                <div class="form-group full-width">
+                    <label for="description">Description</label>
+                    <textarea id="description" rows="3" placeholder="Optional description..."></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelModalBtn">Cancel</button>
+                <button type="submit" class="btn-primary" id="submitBtn">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Price History
+     ============================================================ -->
+<div class="modal-overlay" id="historyModal">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <div>
+                <h2>Price History</h2>
+                <p id="historyItemName">-</p>
+            </div>
+            <button id="closeHistoryModal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="history-summary" id="historySummary">
+                <div class="summary-item">
+                    <span>Total Changes</span>
+                    <strong id="totalChanges">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Current Price</span>
+                    <strong id="currentPrice">-</strong>
+                </div>
+                <div class="summary-item">
+                    <span>First Price</span>
+                    <strong id="firstPrice">-</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Avg Change</span>
+                    <strong id="avgChange">-</strong>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Old Price</th>
+                            <th>New Price</th>
+                            <th>Change</th>
+                            <th>Changed By</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                        <tr><td colspan="6" class="loading-placeholder">Loading history...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="closeHistoryModalBtn">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Bulk Update
+     ============================================================ -->
+<div class="modal-overlay" id="bulkModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <h2>Bulk Update Prices</h2>
+            <button id="closeBulkModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="bulkForm">
+            <div class="form-group">
+                <label for="bulkCategory">Category *</label>
+                <select id="bulkCategory" required>
+                    <option value="">Select Category</option>
+                    <option value="service">Service</option>
+                    <option value="material">Material</option>
+                    <option value="labor">Labor</option>
+                    <option value="paint">Paint</option>
+                    <option value="accessory">Accessory</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="bulkPercentage">Percentage Change (%) *</label>
+                <input type="number" id="bulkPercentage" step="0.1" placeholder="e.g. 10 for +10%, -5 for -5%" required />
+                <small>Positive = increase, Negative = decrease</small>
+            </div>
+            <div class="form-group">
+                <label for="bulkVehicleBrand">Vehicle Brand (optional)</label>
+                <select id="bulkVehicleBrand">
+                    <option value="">All Brands</option>
+                    <option value="Honda">Honda</option>
+                    <option value="Yamaha">Yamaha</option>
+                    <option value="Kawasaki">Kawasaki</option>
+                    <option value="Suzuki">Suzuki</option>
+                    <option value="Ducati">Ducati</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="bulkReason">Reason</label>
+                <textarea id="bulkReason" rows="3" placeholder="Reason for bulk update..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelBulkBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Update Prices</button>
+            </div>
+            <div class="bulk-preview" id="bulkPreview" style="display:none; margin-top:1rem; padding:1rem; background:var(--bg-secondary); border-radius:var(--radius-sm);">
+                <p style="font-size:0.9rem; color:var(--text-secondary);">Preview: <span id="bulkPreviewText">0 items will be updated</span></p>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    import { initPriceList } from "{{ url_for('static', path='includes/js/pages/price_list/index.js') }}";
+    initPriceList();
+</script>
+{% endblock %}

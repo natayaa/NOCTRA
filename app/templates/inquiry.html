@@ -1,0 +1,344 @@
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/inquiry.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="inquiry-wrapper">
+  <div class="inquiry-hero">
+    <span class="inquiry-brand">NOCTRA AUTOWORKS</span>
+    <h1>Start Your Build</h1>
+    <p>Lengkapi data yang tersedia dan dapatkan konsultasi dari tim kami.</p>
+  </div>
+
+  <form class="inquiry-form" id="inquiryForm" novalidate>
+    <!-- PROGRESS -->
+    <div class="wizard-progress">
+      <div class="progress-line"></div>
+      <div class="step active" data-step="1">
+        <span>1</span>
+        <small>Customer</small>
+      </div>
+      <div class="step" data-step="2">
+        <span>2</span>
+        <small>Motorcycle</small>
+      </div>
+      <div class="step" data-step="3">
+        <span>3</span>
+        <small>Vision</small>
+      </div>
+    </div>
+
+    <!-- STEP 1 -->
+    <div class="wizard-page active">
+      <div class="form-header">
+        <span class="form-kicker">STEP 01</span>
+        <h2>Let's Get Started</h2>
+        <p>Tell us how we can reach you.</p>
+      </div>
+
+      <div class="input-group">
+        <label for="fullname">Full Name *</label>
+        <input id="fullname" name="fullname" type="text" placeholder="John Doe" required />
+      </div>
+
+      <div class="grid">
+        <div class="input-group">
+          <label for="phone_number">WhatsApp Number *</label>
+          <input id="phone_number" name="phone_number" type="tel" placeholder="+62 812 xxxx xxxx" required />
+        </div>
+
+        <div class="input-group">
+          <label for="email">Email *</label>
+          <input id="email" name="email" type="email" placeholder="something@gmail.com" required />
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="input-group">
+          <label for="province">Provinsi *</label>
+          <input id="province" name="province" type="text" placeholder="West Java" required />
+        </div>
+
+        <div class="input-group">
+          <label for="city">Kota / Kabupaten *</label>
+          <input id="city" name="city" type="text" placeholder="Bandung" required />
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="wizard-page">
+      <div class="form-header">
+        <span class="form-kicker">STEP 02</span>
+        <h2>Your Motorcycle</h2>
+        <p>Bantu kami agar lebih mengerti permintaan kamu.</p>
+      </div>
+
+      <div class="grid">
+        <div class="input-group">
+          <label for="bike_brand">Brand *</label>
+          <select id="bike_brand" name="bike_brand" required>
+            <option value="">Pilih Brand</option>
+            {% for brand in motorcycle_data.keys() %}
+            <option value="{{ brand }}">{{ brand }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label for="bike_model">Model *</label>
+          <select id="bike_model" name="bike_model" required>
+            <option value="">Pilih Model</option>
+            {% for brand, models in motorcycle_data.items() %}
+              {% for model in models %}
+              <option value="{{ model }}" data-brand="{{ brand }}">{{ model }}</option>
+              {% endfor %}
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="input-group">
+          <label for="bike_year">Tahun Pembuatan</label>
+          <input id="bike_year" name="bike_year" type="number" min="1980" max="2035" placeholder="2020" />
+        </div>
+
+        <div class="input-group">
+          <label for="plate_number">Plat Nomor (Optional)</label>
+          <input id="plate_number" name="plate_number" type="text" placeholder="D 1234 ABC" />
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label for="previous_repaint">Pernahkah motor ini direpaint sebelumnya? *</label>
+        <select id="previous_repaint" name="previous_repaint" required>
+          <option value="">Opsi</option>
+          <option value="belum pernah">Belum Pernah</option>
+          <option value="sekali">Sekali</option>
+          <option value="lebih dari sekali">Lebih dari sekali</option>
+          <option value="gatau">Gatau</option>
+        </select>
+      </div>
+
+      <div class="input-group">
+        <label for="bike_modified">Pernahkah motor ini dimodifikasi secara visual? *</label>
+        <select id="bike_modified" name="bike_modified" required>
+          <option value="">Pilih</option>
+          <option value="tidak">Tidak</option>
+          <option value="benar">Ya</option>
+        </select>
+      </div>
+
+      <div class="input-group">
+        <label>Kondisi kendaraan saat ini *</label>
+        <div class="service-grid">
+          <label class="service-card">
+            <input type="checkbox" name="condition" value="goresan" />
+            <strong>Goresan</strong>
+          </label>
+
+          <label class="service-card">
+            <input type="checkbox" name="condition" value="plastik retak" />
+            <strong>Plastik retak</strong>
+          </label>
+
+          <label class="service-card">
+            <input type="checkbox" name="condition" value="dudukan patah" />
+            <strong>Dudukan Patah</strong>
+          </label>
+
+          <label class="service-card">
+            <input type="checkbox" name="condition" value="warna cat pudar" />
+            <strong>Warna Cat Pudar</strong>
+          </label>
+
+          <label class="service-card">
+            <input type="checkbox" name="condition" value="Karat" />
+            <strong>Karat</strong>
+          </label>
+
+          <label class="service-card">
+            <input type="checkbox" name="condition" value="Butuh full-restorasi" />
+            <strong>Butuh Full-Restorasi</strong>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="wizard-page">
+      <div class="form-header">
+        <span class="form-kicker">STEP 03</span>
+        <h2>Project</h2>
+        <p>Tell us what you would like us to build.</p>
+      </div>
+
+      <div class="input-group">
+        <label for="project_type">Tipe Project *</label>
+        <select id="project_type" name="project_type" required>
+          <option value="">Pilih Project</option>
+          <option value="warna baru">Warna Baru</option>
+          <option value="mengembalikan ke warna original">Mengembalikan ke Warna Original</option>
+          <option value="perbaikan panel yang rusak">Perbaikan Panel yang Rusak</option>
+          <option value="restorasi total">Restorasi Total</option>
+          <option value="butuh konsultasi">Butuh Konsultasi</option>
+        </select>
+      </div>
+
+      <div class="service-grid">
+        <label class="service-card">
+          <input type="checkbox" name="services" value="full cat ulang" />
+          <strong>Full Cat Ulang</strong>
+        </label>
+
+        <label class="service-card">
+          <input type="checkbox" name="services" value="restorasi" />
+          <strong>Restorasi</strong>
+        </label>
+
+        <label class="service-card">
+          <input type="checkbox" name="services" value="repaint velk" />
+          <strong>Repaint Velk</strong>
+        </label>
+
+        <label class="service-card">
+          <input type="checkbox" name="services" value="repaint chassis" />
+          <strong>Repaint Rangka</strong>
+        </label>
+
+        <label class="service-card">
+          <input type="checkbox" name="services" value="detailing mesin" />
+          <strong>Detailing Mesin</strong>
+        </label>
+      </div>
+
+      <div class="grid">
+        <div class="input-group">
+          <label for="desired_finish">Hasil yang diinginkan</label>
+          <select id="desired_finish" name="desired_finish">
+            <option value="">Pilih Hasil</option>
+            <option value="Gloss">Gloss</option>
+            <option value="Matte">Matte</option>
+            <option value="Satin">Satin</option>
+            <option value="Pearl">Pearl</option>
+            <option value="Metallic">Metallic</option>
+            <option value="Candy">Candy</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label for="desired_color">Warna yang diinginkan *</label>
+          <input id="desired_color" name="desired_color" type="text" placeholder="OEM Black, Moon Blue, Nardo Grey, etc." />
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="input-group">
+          <label for="estimated_budget">Estimasi Budget Budget</label>
+          <select id="estimated_budget" name="estimated_budget">
+            <option value="">Select Budget</option>
+            {% for budget in estimasi_budget %}
+            <option value="{{ budget.value }}">{{ budget.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label for="deadline">Preferred Completion Time</label>
+          <select id="deadline" name="deadline">
+            <option value="">Select</option>
+            <option value="As Soon As Possible">Lebih cepat lebih baik</option>
+            <option value="Within 1 Week">Sekitar Semingguan</option>
+            <option value="Within 2 Weeks">Sekitar 2 Mingguan</option>
+            <option value="Within 1 Month">Sekitar 1 Bulanan</option>
+            <option value="No Rush">Engga Rusuh kok</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label for="priority">Prioritas *</label>
+        <select id="priority" name="priority" required>
+          <option value="">-- Pilih --</option>
+          <option value="Best Quality">Kualitas Super</option>
+          <option value="OEM Finish">Yang penting mirip Pabrikan</option>
+          <option value="Fast Turnaround">Pengerjaan yang cepat</option>
+          <option value="Affordable Cost">Ramah dikantong</option>
+          <option value="Custom Appearance">Custom</option>
+        </select>
+      </div>
+
+      <div class="input-group">
+        <label for="project_details">Deskripsi Project *</label>
+        <textarea
+          id="project_details"
+          name="project_details"
+          rows="6"
+          required
+          placeholder="Jelaskan proyek Anda, warna pilihan, bagian yang rusak, tujuan restorasi, atau harapan apa pun."
+        ></textarea>
+      </div>
+
+      <div class="input-group">
+        <label for="reference_link">Reference Link (Optional)</label>
+        <input
+          id="reference_link"
+          name="reference_link"
+          type="url"
+          placeholder="Instagram, Pinterest, YouTube, Google Images, etc."
+        />
+      </div>
+
+      <div class="input-group">
+        <label>Project Photos (Maximum 10)</label>
+        <div class="upload-zone" id="uploadZone">
+          <input
+            id="project_photos"
+            name="project_photos"
+            type="file"
+            multiple
+            accept="image/*"
+          />
+          <i class="ri-image-add-line"></i>
+          <h4>Upload Photos</h4>
+          <p id="uploadParagraph">
+            Front • Rear • Left Side • Right Side • Dashboard • Damaged Area
+          </p>
+        </div>
+      </div>
+
+      <div class="photo-preview-grid" id="photoPreviewGrid"></div>
+
+      <div class="input-group agreement-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="agreementCheck" name="agreement" required />
+          <span>
+            Saya mengonfirmasi bahwa informasi yang diberikan adalah akurat dan bersedia dihubungi terkait pertanyaan proyek ini.
+          </span>
+        </label>
+      </div>
+
+      <div class="project-note">
+        <i class="ri-information-line"></i>
+        <p>
+          Setelah Anda mengirimkannya, kami akan meninjau permintaan Anda, mengevaluasi foto-foto tersebut, dan menghubungi Anda melalui WhatsApp untuk memberikan rekomendasi awal, perkiraan harga, serta estimasi waktu pengerjaan.
+        </p>
+      </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="wizard-actions">
+      <button type="button" id="prevBtn" class="inquiry-btn inquiry-btn-secondary">Back</button>
+      <div class="wizard-actions-right">
+        <button type="button" id="nextBtn" class="inquiry-btn inquiry-btn-primary">Continue</button>
+        <button type="submit" id="submitBtn" class="inquiry-btn inquiry-btn-primary">Start My Project</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='includes/js/inquiry.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Reports | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/reports.css') }}" />
+{% endblock %}
+
+{% block page_title %}Reports Center{% endblock %}
+{% block page_subtitle %}Generate and manage business reports{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     REPORT TYPES GRID
+     ============================================================ -->
+<div class="reports-grid">
+    <div class="report-card">
+        <div class="report-icon">📄</div>
+        <h3>Quotations</h3>
+        <p>Generate customer quotations</p>
+        <button class="btn-primary" data-report="quotation">Generate</button>
+    </div>
+
+    <div class="report-card">
+        <div class="report-icon">💳</div>
+        <h3>Invoices</h3>
+        <p>Generate project invoices</p>
+        <button class="btn-primary" data-report="invoice">Generate</button>
+    </div>
+
+    <div class="report-card">
+        <div class="report-icon">📈</div>
+        <h3>Revenue Report</h3>
+        <p>Monthly revenue analysis</p>
+        <button class="btn-primary" data-report="revenue">Generate</button>
+    </div>
+
+    <div class="report-card">
+        <div class="report-icon">💸</div>
+        <h3>Expense Report</h3>
+        <p>Monthly expense summary</p>
+        <button class="btn-primary" data-report="expense">Generate</button>
+    </div>
+
+    <div class="report-card">
+        <div class="report-icon">💰</div>
+        <h3>Profit Report</h3>
+        <p>Profitability report</p>
+        <button class="btn-primary" data-report="profit">Generate</button>
+    </div>
+
+    <div class="report-card">
+        <div class="report-icon">👤</div>
+        <h3>Customer Report</h3>
+        <p>Customer spending analysis</p>
+        <button class="btn-primary" data-report="customer">Generate</button>
+    </div>
+
+    <div class="report-card">
+        <div class="report-icon">📦</div>
+        <h3>Inventory Report</h3>
+        <p>Stock levels and valuation</p>
+        <button class="btn-primary" data-report="inventory">Generate</button>
+    </div>
+
+    <div class="report-card">
+        <div class="report-icon">👨‍🔧</div>
+        <h3>Labor Report</h3>
+        <p>Labor cost and productivity</p>
+        <button class="btn-primary" data-report="labor">Generate</button>
+    </div>
+
+    <div class="report-card">
+        <div class="report-icon">📊</div>
+        <h3>Executive Summary</h3>
+        <p>Complete business overview</p>
+        <button class="btn-primary" data-report="executive">Generate</button>
+    </div>
+</div>
+
+<!-- ============================================================
+     RECENT REPORTS
+     ============================================================ -->
+<div class="recent-reports">
+    <div class="card-header">
+        <h3><i class="fas fa-clock-rotate-left"></i> Recent Reports</h3>
+        <button class="btn-secondary btn-sm" id="clearReportsBtn">
+            <i class="fas fa-trash"></i> Clear All
+        </button>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Created</th>
+                    <th>Size</th>
+                    <th style="text-align:center;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="recentReportsBody">
+                <tr><td colspan="5" class="loading-placeholder">No reports generated yet</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Generate Report
+     ============================================================ -->
+<div class="modal-overlay" id="reportModal">
+    <div class="modal modal-sm">
+        <div class="modal-header">
+            <div>
+                <h2 id="reportModalTitle">Generate Report</h2>
+                <p id="reportModalSubtitle">Select date range and options</p>
+            </div>
+            <button id="closeReportModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="reportForm">
+            <input type="hidden" id="reportType" />
+
+            <div class="form-group">
+                <label>Report Type</label>
+                <p id="reportTypeDisplay" style="font-weight:600;">-</p>
+            </div>
+
+            <div class="form-group">
+                <label>From Date</label>
+                <input type="date" id="reportFromDate" required />
+            </div>
+
+            <div class="form-group">
+                <label>To Date</label>
+                <input type="date" id="reportToDate" required />
+            </div>
+
+            <div class="form-group">
+                <label>Format</label>
+                <select id="reportFormat">
+                    <option value="pdf">PDF</option>
+                    <option value="excel">Excel (.xlsx)</option>
+                    <option value="csv">CSV</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="reportProjectGroup" style="display:none;">
+                <label>Project (optional)</label>
+                <select id="reportProject">
+                    <option value="">All Projects</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="reportCustomerGroup" style="display:none;">
+                <label>Customer (optional)</label>
+                <select id="reportCustomer">
+                    <option value="">All Customers</option>
+                </select>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelReportBtn">Cancel</button>
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-file-export"></i> Generate
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='js/pages/reports.js') }}"></script>
+{% endblock %}

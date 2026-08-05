@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Documents | NOCTRA{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='includes/css/documents.css') }}" />
+{% endblock %}
+
+{% block page_title %}Documents{% endblock %}
+{% block page_subtitle %}Document Management System{% endblock %}
+
+{% block content %}
+
+<!-- ============================================================
+     TOOLBAR
+     ============================================================ -->
+<div class="documents-toolbar glass">
+    <div class="toolbar-left">
+        <button class="btn-primary" id="uploadDocumentBtn">
+            <i class="fas fa-upload"></i> Upload Document
+        </button>
+    </div>
+    <div class="toolbar-right">
+        <span class="doc-count" id="docCount">Total: 0 documents</span>
+    </div>
+</div>
+
+<!-- ============================================================
+     STATS CARDS
+     ============================================================ -->
+<div class="documents-stats">
+    <div class="stat-card">
+        <span>Total Documents</span>
+        <h2 id="totalDocs">0</h2>
+    </div>
+    <div class="stat-card">
+        <span>Project Files</span>
+        <h2 id="projectDocs">0</h2>
+    </div>
+    <div class="stat-card">
+        <span>Customer Files</span>
+        <h2 id="customerDocs">0</h2>
+    </div>
+    <div class="stat-card">
+        <span>Media Files</span>
+        <h2 id="mediaDocs">0</h2>
+    </div>
+</div>
+
+<!-- ============================================================
+     DOCUMENTS TABLE
+     ============================================================ -->
+<div class="documents-card">
+    <div class="table-toolbar">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="search" id="documentSearch" placeholder="Search document..." />
+        </div>
+        <select id="documentFilter">
+            <option value="">All Types</option>
+            <option value="spk">SPK</option>
+            <option value="bast">BAST</option>
+            <option value="invoice">Invoice</option>
+            <option value="quote">Quotation</option>
+            <option value="design">Design</option>
+            <option value="photo">Photo</option>
+            <option value="other">Other</option>
+        </select>
+        <select id="documentProjectFilter">
+            <option value="">All Projects</option>
+        </select>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Project</th>
+                    <th>Size</th>
+                    <th>Uploaded</th>
+                    <th>By</th>
+                    <th style="text-align:center;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="documentTableBody">
+                <tr><td colspan="7" class="loading-placeholder">Loading documents...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="table-pagination">
+        <button class="page-btn" id="prevPage" disabled>Prev</button>
+        <span id="pageInfo">Page 1 of 1</span>
+        <button class="page-btn" id="nextPage" disabled>Next</button>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Upload Document
+     ============================================================ -->
+<div class="modal-overlay" id="documentModal">
+    <div class="modal modal-md">
+        <div class="modal-header">
+            <div>
+                <h2>Upload Document</h2>
+                <p>Upload project or customer documents</p>
+            </div>
+            <button id="closeDocumentModal"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="documentForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Document Name *</label>
+                <input type="text" id="docName" required placeholder="e.g. SPK_Mio_Sporty" />
+            </div>
+
+            <div class="form-group">
+                <label>Document Type *</label>
+                <select id="docType" required>
+                    <option value="">Select Type</option>
+                    <option value="spk">SPK</option>
+                    <option value="bast">BAST</option>
+                    <option value="invoice">Invoice</option>
+                    <option value="quote">Quotation</option>
+                    <option value="design">Design</option>
+                    <option value="photo">Photo</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Project (optional)</label>
+                <select id="docProject">
+                    <option value="">Select Project</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Customer (optional)</label>
+                <select id="docCustomer">
+                    <option value="">Select Customer</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="docDescription" rows="3" placeholder="Document description..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>File *</label>
+                <input type="file" id="docFile" required />
+                <small>Supported: PDF, JPG, PNG, DOCX, XLSX (Max 10MB)</small>
+            </div>
+
+            <div class="form-group" style="display:flex; align-items:center; gap:0.75rem;">
+                <input type="checkbox" id="docIsPublic" checked />
+                <label for="docIsPublic" style="margin:0;">Public (visible to all)</label>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="cancelDocBtn">Cancel</button>
+                <button type="submit" class="btn-primary">Upload</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ============================================================
+     MODAL: Document Preview
+     ============================================================ -->
+<div class="modal-overlay" id="previewModal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h2 id="previewTitle">Document Preview</h2>
+            <button id="closePreviewModal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="preview-container" id="previewContainer">
+                <div class="preview-placeholder">
+                    <i class="fas fa-file-pdf"></i>
+                    <p>Preview not available</p>
+                    <a href="#" id="downloadPreviewBtn" class="btn-primary">Download</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div id="toastContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', path='js/pages/documents.js') }}"></script>
+{% endblock %}
