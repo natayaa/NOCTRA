@@ -1,0 +1,81 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ customer.name }}</h1>
+    <p class="page-subtitle font-mono text-xs">{{ customer.code }}</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/vehicles/new?customer_id={{ customer.id }}" class="btn btn-secondary btn-sm">Add Vehicle</a>
+    <a href="/admin/customers/{{ customer.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+  </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="panel">
+      <div class="panel-title">Contact</div>
+      <dl class="grid grid-cols-2 gap-4 mt-4 text-sm">
+        <div><dt class="text-neutral-500">Phone</dt><dd>{{ customer.phone or '—' }}</dd></div>
+        <div><dt class="text-neutral-500">Email</dt><dd>{{ customer.email or '—' }}</dd></div>
+        <div class="col-span-2"><dt class="text-neutral-500">Address</dt><dd>{{ customer.address_line1 or '—' }}</dd></div>
+        <div><dt class="text-neutral-500">City</dt><dd>{{ customer.city or '—' }}</dd></div>
+        <div><dt class="text-neutral-500">Country</dt><dd>{{ customer.country }}</dd></div>
+      </dl>
+    </div>
+
+    {% if customer.notes %}
+    <div class="panel">
+      <div class="panel-title">Notes</div>
+      <p class="text-neutral-300 mt-2 whitespace-pre-line">{{ customer.notes }}</p>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <div class="panel-title">Contacts</div>
+      {% if contacts %}
+      <ul class="divide-y divide-noctra-border mt-3">
+        {% for c in contacts %}
+        <li class="py-3 flex items-start justify-between">
+          <div>
+            <div class="font-medium">{{ c.name }}</div>
+            <div class="text-xs text-neutral-500">{{ c.role or '' }}{% if c.phone %} · {{ c.phone }}{% endif %}</div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-neutral-500 text-sm mt-2">No additional contacts.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <aside class="space-y-6">
+    <div class="panel">
+      <div class="panel-title">Status</div>
+      <div class="mt-3">
+        {% if customer.status == 'LEAD' %}<span class="badge badge-info">Lead</span>
+        {% elif customer.status == 'ACTIVE' %}<span class="badge badge-success">Active</span>
+        {% elif customer.status == 'INACTIVE' %}<span class="badge badge-neutral">Inactive</span>
+        {% elif customer.status == 'BLOCKED' %}<span class="badge badge-danger">Blocked</span>
+        {% endif %}
+      </div>
+      <div class="mt-4 text-xs text-neutral-500 space-y-1">
+        <div>Created {{ customer.created_at | dt_id }}</div>
+        <div>Updated {{ customer.updated_at | dt_id }}</div>
+        {% if customer.source %}<div>Source: {{ customer.source }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Vehicles</div>
+      <p class="text-neutral-500 text-sm mt-2">
+        <a href="/admin/vehicles?customer_id={{ customer.id }}" class="text-noctra-accent hover:underline">
+          View all vehicles →
+        </a>
+      </p>
+    </div>
+  </aside>
+</div>
+{% endblock %}

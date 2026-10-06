@@ -1,0 +1,41 @@
+{% extends "admin/base.html" %}
+{% from "components/pagination.html" import pagination %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Employees</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
+  <div class="page-actions"><a href="/admin/employees/new" class="btn btn-primary btn-sm">New Employee</a></div>
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}" data-search-input />
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if employees %}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Code</th><th>Name</th><th>Position</th><th class="text-right">Hourly rate</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for e in employees %}
+      <tr>
+        <td class="mono text-xs">{{ e.code }}</td>
+        <td class="font-medium">{{ e.name }}</td>
+        <td class="text-sm text-neutral-400">{{ e.position or '—' }}</td>
+        <td class="text-right font-mono text-sm">{{ e.hourly_rate | rupiah }}</td>
+        <td>{% if e.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-neutral">Inactive</span>{% endif %}</td>
+        <td class="text-right"><a href="/admin/employees/{{ e.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "components/pagination.html" %}
+{% else %}
+{{ empty_state('No employees yet', 'Add your first employee to start tracking labor costs.', '/admin/employees/new', 'New Employee', 'plus') }}
+{% endif %}
+{% endblock %}

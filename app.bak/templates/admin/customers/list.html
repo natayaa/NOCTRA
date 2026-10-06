@@ -1,0 +1,84 @@
+{% extends "admin/base.html" %}
+{% from "components/pagination.html" import pagination %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Customers</h1>
+    <p class="page-subtitle">{{ page_meta.total }} total</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/customers/new" class="btn btn-primary btn-sm">New Customer</a>
+  </div>
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}"
+           placeholder="Name, email, phone, code…" data-search-input />
+  </div>
+  <div class="form-row !mb-0">
+    <label class="form-label" for="status">Status</label>
+    <select class="select" id="status" name="status">
+      <option value="">Any</option>
+      {% for s in statuses %}
+        <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if customers %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Name</th>
+        <th>Contact</th>
+        <th>City</th>
+        <th>Status</th>
+        <th class="text-right"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in customers %}
+      <tr>
+        <td class="mono text-xs">{{ c.code }}</td>
+        <td class="font-medium">{{ c.name }}</td>
+        <td class="text-neutral-400 text-sm">
+          {% if c.phone %}<div>{{ c.phone }}</div>{% endif %}
+          {% if c.email %}<div class="text-xs">{{ c.email }}</div>{% endif %}
+        </td>
+        <td class="text-neutral-400 text-sm">{{ c.city or '—' }}</td>
+        <td>
+          {% if c.status == 'LEAD' %}<span class="badge badge-info">Lead</span>
+          {% elif c.status == 'ACTIVE' %}<span class="badge badge-success">Active</span>
+          {% elif c.status == 'INACTIVE' %}<span class="badge badge-neutral">Inactive</span>
+          {% elif c.status == 'BLOCKED' %}<span class="badge badge-danger">Blocked</span>
+          {% else %}<span class="badge badge-neutral">{{ c.status }}</span>{% endif %}
+        </td>
+        <td class="text-right">
+          <a href="/admin/customers/{{ c.id }}" class="btn btn-ghost btn-sm">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{{ pagination() }}
+
+{% else %}
+{{ empty_state(
+  title='No customers yet',
+  message='Add your first customer to get started.',
+  action_url='/admin/customers/new',
+  action_label='New Customer',
+  icon='plus'
+) }}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'New User' if mode == 'create' else 'Edit User' }}</h1>
+    <p class="page-subtitle">{{ 'Create a new account' if mode == 'create' else user.username }}</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/users" class="btn btn-secondary btn-sm">Back</a>
+  </div>
+</div>
+
+<form method="post"
+      action="{{ '/admin/users' if mode == 'create' else '/admin/users/' ~ user.id }}"
+      class="max-w-2xl panel space-y-5"
+      data-guard>
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row">
+      <label class="form-label" for="username">Username <span class="req">*</span></label>
+      <input class="input" id="username" name="username" required maxlength="50"
+             {% if mode == 'edit' %}disabled{% endif %}
+             value="{{ user.username if user else '' }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="email">Email <span class="req">*</span></label>
+      <input class="input" type="email" id="email" name="email" required maxlength="255"
+             value="{{ user.email if user else '' }}" />
+    </div>
+  </div>
+
+  <div class="form-row">
+    <label class="form-label" for="full_name">Full name <span class="req">*</span></label>
+    <input class="input" id="full_name" name="full_name" required maxlength="255"
+           value="{{ user.full_name if user else '' }}" />
+  </div>
+
+  {% if mode == 'create' %}
+  <div class="form-row">
+    <label class="form-label" for="password">Password <span class="req">*</span></label>
+    <input class="input" type="password" id="password" name="password" required minlength="8" maxlength="128" />
+    <div class="form-hint">Minimum 8 characters.</div>
+  </div>
+  {% endif %}
+
+  <div class="form-row">
+    <label class="form-label" for="role_names">Roles</label>
+    <select class="select" id="role_names" name="role_names" multiple size="5">
+      {% for r in all_roles %}
+        <option value="{{ r.name }}"
+          {% if user and r.name in (user.roles | map(attribute='name') | list) %}selected{% endif %}>
+          {{ r.name }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="flex items-center gap-3">
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="is_active" value="true"
+             {% if not user or user.is_active %}checked{% endif %} />
+      Active
+    </label>
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="is_superuser" value="true"
+             {% if user and user.is_superuser %}checked{% endif %} />
+      Superuser
+    </label>
+  </div>
+
+  <input type="hidden" name="_csrf" value="{{ csrf_token or '' }}" />
+
+  <div class="flex gap-2 pt-2">
+    <button type="submit" class="btn btn-primary">
+      {{ 'Create' if mode == 'create' else 'Save changes' }}
+    </button>
+    <a href="/admin/users" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

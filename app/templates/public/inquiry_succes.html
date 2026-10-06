@@ -1,0 +1,35 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<div class="container-narrow py-24 text-center">
+
+  <div class="mx-auto w-16 h-16 rounded-full bg-noctra-accent/15 grid place-items-center mb-8">
+    <svg viewBox="0 0 24 24" fill="none" class="w-8 h-8 text-noctra-accent">
+      <path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+
+  <h1 class="text-3xl md:text-4xl font-semibold tracking-tight">Thank you</h1>
+  <p class="text-neutral-400 mt-4 max-w-lg mx-auto">
+    We've received your inquiry and sent a confirmation to your email.
+    A member of our team will reach out within one business day.
+  </p>
+
+  {% if reference %}
+  <div class="panel max-w-md mx-auto mt-10 text-left">
+    <div class="text-xs uppercase tracking-widest text-neutral-500">Your reference number</div>
+    <div class="mono text-lg mt-1">{{ reference }}</div>
+    <p class="text-xs text-neutral-500 mt-3">
+      Keep this handy — quote it if you call or message us.
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="flex flex-wrap gap-3 justify-center mt-10">
+    <a href="/" class="btn btn-secondary">Back to home</a>
+    <a href="/services" class="btn btn-primary">See our services</a>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+<header class="admin-header">
+  <button type="button"
+          class="btn btn-ghost btn-sm md:hidden"
+          data-sidebar-toggle
+          aria-label="Toggle navigation">
+    <svg viewBox="0 0 24 24" fill="none" class="w-5 h-5" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor"
+            stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </button>
+
+  <div class="admin-header-title">
+    {{ title or "Dashboard" }}
+  </div>
+
+  <div class="admin-header-spacer"></div>
+
+  {% if current_user %}
+  <div class="admin-user">
+    <div class="avatar" aria-hidden="true">
+      {{ (current_user.full_name or current_user.username or "?")[:1] | upper }}
+    </div>
+    <div class="hidden sm:block min-w-0">
+      <div class="font-medium leading-tight truncate max-w-[16ch]">
+        {{ current_user.full_name or current_user.username }}
+      </div>
+      <div class="text-xs text-neutral-500 leading-tight truncate max-w-[20ch]">
+        {{ current_user.email or "—" }}
+      </div>
+    </div>
+
+    <form method="post" action="/admin/logout" class="inline-flex">
+      <input type="hidden" name="_csrf" value="{{ csrf_token or '' }}" />
+      <button type="submit"
+              class="btn btn-ghost btn-sm"
+              title="Sign out"
+              aria-label="Sign out">
+        <svg viewBox="0 0 24 24" fill="none" class="w-4 h-4" aria-hidden="true">
+          <path d="M15 12H3m0 0 4-4m-4 4 4 4M10 4h9v16h-9"
+                stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+  {% endif %}
+</header>

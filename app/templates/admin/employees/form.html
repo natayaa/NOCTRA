@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %}
+{% block content %}
+{% set fv = form_values or {} %}
+
+<div class="page-header">
+  <div><h1 class="page-title">{{ 'New Employee' if mode == 'create' else 'Edit Employee' }}</h1></div>
+  <div class="page-actions"><a href="/admin/employees" class="btn btn-secondary btn-sm">Back</a></div>
+</div>
+
+{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
+
+<form method="post" action="{{ '/admin/employees' if mode == 'create' else '/admin/employees/' ~ employee.id }}"
+      class="max-w-2xl panel space-y-5" data-guard>
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row"><label class="form-label" for="code">Code</label>
+      <input class="input mono" id="code" name="code" maxlength="32"
+             {% if mode == 'edit' %}disabled{% endif %}
+             placeholder="auto-generated if empty"
+             value="{{ fv.get('code') or (employee.code if employee else '') }}" /></div>
+    <div class="form-row"><label class="form-label" for="name">Name <span class="req">*</span></label>
+      <input class="input" id="name" name="name" required maxlength="255"
+             value="{{ fv.get('name') or (employee.name if employee else '') }}" /></div>
+  </div>
+
+  <div class="form-row"><label class="form-label" for="position">Position</label>
+    <input class="input" id="position" name="position" maxlength="100" placeholder="Painter, Prep Technician…"
+           value="{{ fv.get('position') or (employee.position if employee else '') }}" /></div>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row"><label class="form-label" for="hourly_rate">Hourly rate (IDR)</label>
+      <input class="input" type="number" step="1000" id="hourly_rate" name="hourly_rate" required
+             value="{{ fv.get('hourly_rate') or (employee.hourly_rate if employee else '') }}" />
+      <div class="form-hint">Used for labor costing on projects.</div></div>
+    <div class="form-row"><label class="form-label" for="monthly_salary">Monthly salary (IDR)</label>
+      <input class="input" type="number" step="100000" id="monthly_salary" name="monthly_salary"
+             value="{{ fv.get('monthly_salary') or (employee.monthly_salary if employee else '') }}" /></div>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row"><label class="form-label" for="phone">Phone</label>
+      <input class="input" id="phone" name="phone" maxlength="32"
+             value="{{ fv.get('phone') or (employee.phone if employee else '') }}" /></div>
+    <div class="form-row"><label class="form-label" for="joined_at">Joined</label>
+      <input class="input" type="date" id="joined_at" name="joined_at"
+             value="{{ fv.get('joined_at') or (employee.joined_at.strftime('%Y-%m-%d') if employee and employee.joined_at else '') }}" /></div>
+  </div>
+
+  <div class="form-row"><label class="form-label" for="notes">Notes</label>
+    <textarea class="textarea" id="notes" name="notes" rows="2">{{ fv.get('notes') or (employee.notes if employee else '') }}</textarea></div>
+
+  {% if mode == 'edit' %}
+  <label class="flex items-center gap-2 text-sm">
+    <input type="checkbox" name="is_active" value="true" {% if employee.is_active %}checked{% endif %} /> Active
+  </label>
+  {% endif %}
+
+  <div class="flex gap-2 pt-2">
+    <button class="btn btn-primary">{{ 'Create' if mode == 'create' else 'Save changes' }}</button>
+    <a href="/admin/employees" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

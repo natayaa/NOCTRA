@@ -1,0 +1,44 @@
+{% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Purchase Orders</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
+  <div class="page-actions"><a href="/admin/purchase-orders/new" class="btn btn-primary btn-sm">New PO</a></div>
+</div>
+
+<div class="mb-4 flex flex-wrap gap-2">
+  <a href="/admin/purchase-orders" class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
+  {% for s in statuses %}
+    <a href="/admin/purchase-orders?status={{ s }}" class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">{{ status_labels.get(s, s) }}</a>
+  {% endfor %}
+</div>
+
+{% if purchase_orders %}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Code</th><th>Supplier</th><th>Order date</th><th>Expected</th><th class="text-right">Total</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for po in purchase_orders %}
+      {% set sup = suppliers_by_id.get(po.supplier_id) %}
+      <tr>
+        <td class="mono text-xs">{{ po.code }}</td>
+        <td>{{ sup.name if sup else '—' }}</td>
+        <td class="text-sm">{{ po.order_date.strftime('%d %b %Y') }}</td>
+        <td class="text-sm text-neutral-500">{{ po.expected_date.strftime('%d %b') if po.expected_date else '—' }}</td>
+        <td class="text-right font-mono text-sm">{{ po.total_amount | rupiah }}</td>
+        <td>
+          {% set sbadge = {'DRAFT':'badge-neutral','SENT':'badge-info','RECEIVED':'badge-success','CLOSED':'badge-neutral','CANCELLED':'badge-danger'}.get(po.status, 'badge-neutral') %}
+          <span class="badge {{ sbadge }}">{{ status_labels.get(po.status, po.status) }}</span>
+        </td>
+        <td class="text-right"><a href="/admin/purchase-orders/{{ po.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "components/pagination.html" %}
+{% else %}
+{{ empty_state('No purchase orders yet', 'Create one to start ordering stock.', '/admin/purchase-orders/new', 'New PO', 'plus') }}
+{% endif %}
+{% endblock %}

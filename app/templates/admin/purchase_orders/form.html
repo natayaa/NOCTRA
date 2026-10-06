@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">New Purchase Order</h1></div>
+  <div class="page-actions"><a href="/admin/purchase-orders" class="btn btn-secondary btn-sm">Back</a></div>
+</div>
+
+<form method="post" action="/admin/purchase-orders" class="max-w-2xl panel space-y-5" data-guard>
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+  <div class="form-row"><label class="form-label" for="supplier_id">Supplier <span class="req">*</span></label>
+    <select class="select" id="supplier_id" name="supplier_id" required>
+      <option value="">Choose supplier…</option>
+      {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }} ({{ s.code }})</option>{% endfor %}
+    </select></div>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row"><label class="form-label" for="order_date">Order date <span class="req">*</span></label>
+      <input class="input" type="date" id="order_date" name="order_date" required /></div>
+    <div class="form-row"><label class="form-label" for="expected_date">Expected date</label>
+      <input class="input" type="date" id="expected_date" name="expected_date" /></div>
+  </div>
+
+  <div class="form-row"><label class="form-label" for="notes">Notes</label>
+    <textarea class="textarea" id="notes" name="notes" rows="2"></textarea></div>
+
+  <div class="flex gap-2 pt-2">
+    <button class="btn btn-primary">Create draft PO</button>
+    <a href="/admin/purchase-orders" class="btn btn-secondary">Cancel</a>
+  </div>
+  <p class="text-xs text-neutral-500">Add line items on the PO detail page after creating.</p>
+</form>
+{% endblock %}

@@ -1,0 +1,198 @@
+"""Admin web routes for purchase orders."""
+
+from __future__ import annotations
+
+from datetime import date
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+from app.core.deps import DbSession
+from app.core.exceptions import AppError, NotFoundError
+from app.core.pagination import PageParams, paginate, page_params
+from app.modules.auth.dependencies import get_current_user
+from app.modules.inventory.constants import (
+    PURCHASE_ORDER_STATUSES,
+    PURCHASE_ORDER_STATUS_LABELS,
+)
+from app.modules.inventory.repository import (
+    MaterialRepository,
+    PurchaseOrderRepository,
+    SupplierRepository,
+)
+from app.modules.inventory.schemas import (
+    PurchaseOrderCreate,
+    PurchaseOrderItemCreate,
+    PurchaseOrderReceive,
+    PurchaseOrderReceiveItem,
+    PurchaseOrderUpdate,
+)
+from app.modules.inventory.service import PurchaseOrderService
+from app.web.templates_env import templates
+
+router = APIRouter(prefix="/admin/purchase-orders", tags=["admin-purchase-orders"])
+
+
+@router.get("", response_class=HTMLResponse)
+async def list_view(
+    request: Request,
+    db: DbSession,
+    params: PageParams = Depends(page_params),
+    status_: str | None = Query(None, alias="status"),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
+    stmt = PurchaseOrderRepository(db).query(status=status_)
+    rows, meta = await paginate(db, stmt, params)
+
+    suppliers = list(
+        (await db.execute(SupplierRepository(db).query())).scalars().all()
+    )
+    supplier_map = {s.id: s for s in suppliers}
+
+    return templates.render(
+        request,
+        "admin/purchase_orders/list.html",
+        {
+            "title": "Purchase Orders",
+            "purchase_orders": rows,
+            "page_meta": meta,
+            "suppliers_by_id": supplier_map,
+            "status_filter": status_ or "",
+            "statuses": PURCHASE_ORDER_STATUSES,
+            "status_labels": PURCHASE_ORDER_STATUS_LABELS,
+        },
+    )
+
+
+@router.get("/new", response_class=HTMLResponse)
+async def new_view(request: Request, db: DbSession, current=Depends(get_current_user)) -> HTMLResponse:
+    suppliers = list(
+        (await db.execute(SupplierRepository(db).query(is_active=True))).scalars().all()
+    )
+    return templates.render(
+        request,
+        "admin/purchase_orders/form.html",
+        {
+            "title": "New Purchase Order",
+            "mode": "create",
+            "po": None,
+            "suppliers": suppliers,
+        },
+    )
+
+
+@router.post("")
+async def create_submit(request: Request, db: DbSession, current=Depends(get_current_user)):
+    form = await request.form()
+    payload = PurchaseOrderCreate(
+        supplier_id=UUID(form["supplier_id"]),
+        order_date=date.fromisoformat(form["order_date"]),
+        expected_date=(date.fromisoformat(form["expected_date"]) if form.get("expected_date") else None),
+        notes=(form.get("notes") or "").strip() or None,
+    )
+    po = await PurchaseOrderService(db).create(payload, actor=current)
+    await db.commit()
+    return RedirectResponse(url=f"/admin/purchase-orders/{po.id}", status_code=303)
+
+
+@router.get("/{po_id}", response_class=HTMLResponse)
+async def detail_view(
+    po_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+) -> HTMLResponse:
+    po = await PurchaseOrderRepository(db).get(po_id)
+    if not po:
+        raise NotFoundError("Purchase order not found")
+
+    supplier = await SupplierRepository(db).get(po.supplier_id)
+
+    # Load all materials so the "add item" dropdown works
+    materials = list(
+        (await db.execute(MaterialRepository(db).query(is_active=True))).scalars().all()
+    )
+    material_map = {m.id: m for m in materials}
+
+    return templates.render(
+        request,
+        "admin/purchase_orders/detail.html",
+        {
+            "title": po.code,
+            "po": po,
+            "supplier": supplier,
+            "items": po.items,
+            "materials": materials,
+            "materials_by_id": material_map,
+            "status_labels": PURCHASE_ORDER_STATUS_LABELS,
+        },
+    )
+
+
+@router.post("/{po_id}/items")
+async def add_item_submit(
+    po_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+):
+    form = await request.form()
+    payload = PurchaseOrderItemCreate(
+        material_id=UUID(form["material_id"]),
+        quantity=float(form.get("quantity") or 0),
+        unit_price=float(form.get("unit_price") or 0),
+        notes=(form.get("notes") or "").strip() or None,
+    )
+    await PurchaseOrderService(db).add_item(po_id, payload, actor=current)
+    await db.commit()
+    return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)
+
+
+@router.post("/{po_id}/items/{item_id}/delete")
+async def delete_item_submit(
+    po_id: UUID, item_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+):
+    await PurchaseOrderService(db).delete_item(po_id, item_id, actor=current)
+    await db.commit()
+    return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)
+
+
+@router.post("/{po_id}/send")
+async def send_submit(
+    po_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+):
+    try:
+        await PurchaseOrderService(db).send(po_id, actor=current)
+        await db.commit()
+    except AppError as exc:
+        await db.rollback()
+        return RedirectResponse(
+            url=f"/admin/purchase-orders/{po_id}?error={exc.message}", status_code=303
+        )
+    return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)
+
+
+@router.post("/{po_id}/receive")
+async def receive_submit(
+    po_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+):
+    form = await request.form()
+    try:
+        await PurchaseOrderService(db).receive(po_id, PurchaseOrderReceive(), actor=current)
+        await db.commit()
+    except AppError as exc:
+        await db.rollback()
+        return RedirectResponse(
+            url=f"/admin/purchase-orders/{po_id}?error={exc.message}", status_code=303
+        )
+    return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)
+
+
+@router.post("/{po_id}/cancel")
+async def cancel_submit(
+    po_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+):
+    try:
+        await PurchaseOrderService(db).cancel(po_id, actor=current)
+        await db.commit()
+    except AppError as exc:
+        await db.rollback()
+        return RedirectResponse(
+            url=f"/admin/purchase-orders/{po_id}?error={exc.message}", status_code=303
+        )
+    return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)

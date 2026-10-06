@@ -1,0 +1,69 @@
+{% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Inventory Ledger</h1>
+    <p class="page-subtitle">Every stock movement, in order</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/inventory" class="btn btn-secondary btn-sm">Overview</a>
+  </div>
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  <div class="form-row !mb-0 min-w-[220px]">
+    <label class="form-label" for="material_id">Material</label>
+    <select class="select" id="material_id" name="material_id">
+      <option value="">All materials</option>
+      {% for m in all_materials %}
+        <option value="{{ m.id }}" {% if material_filter == m.id %}selected{% endif %}>{{ m.code }} — {{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row !mb-0">
+    <label class="form-label" for="transaction_type">Type</label>
+    <select class="select" id="transaction_type" name="transaction_type">
+      <option value="">Any</option>
+      {% for t in transaction_types %}
+        <option value="{{ t }}" {% if type_filter == t %}selected{% endif %}>{{ transaction_type_labels.get(t, t) }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if transactions %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr><th>When</th><th>Material</th><th>Type</th><th class="text-right">Quantity</th><th class="text-right">Cost/unit</th><th>Reference</th></tr>
+    </thead>
+    <tbody>
+      {% for tx in transactions %}
+      {% set m = materials_by_id.get(tx.material_id) %}
+      <tr>
+        <td class="text-xs text-neutral-500">{{ tx.created_at | dt_id('%d %b %H:%M') }}</td>
+        <td>
+          {% if m %}<a href="/admin/materials/{{ m.id }}" class="hover:text-noctra-accent font-medium text-sm">{{ m.name }}</a>
+          {% else %}<span class="text-neutral-500">—</span>{% endif %}
+        </td>
+        <td>
+          <span class="badge {% if tx.transaction_type in ('PURCHASE','ADJUSTMENT_IN','OPENING') %}badge-success{% elif tx.transaction_type in ('WASTE','ADJUSTMENT_OUT') %}badge-warning{% else %}badge-neutral{% endif %}">
+            {{ tx.transaction_type }}
+          </span>
+        </td>
+        <td class="text-right font-mono text-sm">{{ '%.4f'|format(tx.quantity) }} <span class="text-xs text-neutral-500">{{ m.stock_unit if m else '' }}</span></td>
+        <td class="text-right font-mono text-xs">{{ tx.unit_cost | rupiah if tx.unit_cost else '—' }}</td>
+        <td class="text-xs text-neutral-500">{{ tx.reference_note or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "components/pagination.html" %}
+{% else %}
+{{ empty_state('No transactions yet', 'Stock movements will appear here.') }}
+{% endif %}
+{% endblock %}

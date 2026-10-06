@@ -1,0 +1,46 @@
+{% if page_meta and page_meta.pages > 1 %}
+{% set base = request.url.path %}
+{% set qs = dict(request.query_params) %}
+{% set _ = qs.pop('page', None) %}
+
+{% macro build_url(p) -%}
+  {{ base }}
+  {%- set ns = namespace(sep='?') -%}
+  {%- for k, v in qs.items() -%}
+    {{ ns.sep }}{{ k | urlencode }}={{ v | urlencode }}
+    {%- set ns.sep = '&' -%}
+  {%- endfor -%}
+  {%- if qs %}&{% else %}?{% endif -%}
+  page={{ p }}
+{%- endmacro %}
+
+<nav class="flex items-center justify-between py-4 text-sm" aria-label="Pagination">
+  <div class="text-neutral-400">
+    Page <span class="text-neutral-100 font-medium">{{ page_meta.page }}</span>
+    of <span class="text-neutral-100 font-medium">{{ page_meta.pages }}</span>
+    · <span class="text-neutral-500">{{ page_meta.total }} total</span>
+  </div>
+
+  <div class="flex items-center gap-2">
+    {% if page_meta.has_prev %}
+      <a href="{{ build_url(page_meta.page - 1) }}" class="btn btn-secondary btn-sm" rel="prev">
+        ← Prev
+      </a>
+    {% else %}
+      <span class="btn btn-secondary btn-sm opacity-40" aria-disabled="true">
+        ← Prev
+      </span>
+    {% endif %}
+
+    {% if page_meta.has_next %}
+      <a href="{{ build_url(page_meta.page + 1) }}" class="btn btn-secondary btn-sm" rel="next">
+        Next →
+      </a>
+    {% else %}
+      <span class="btn btn-secondary btn-sm opacity-40" aria-disabled="true">
+        Next →
+      </span>
+    {% endif %}
+  </div>
+</nav>
+{% endif %}

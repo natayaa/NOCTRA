@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="{% block html_lang %}en{% endblock %}" class="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="format-detection" content="telephone=no, address=no, email=no" />
+
+  <meta name="csrf-token" content="{{ csrf_token or '' }}" />
+  <meta name="csrf-cookie-name" content="{{ csrf_cookie_name or 'noctra_csrf' }}" />
+  <meta name="csrf-header-name" content="{{ csrf_header_name or 'X-CSRF-Token' }}" />
+
+  <title>{% block title %}{{ title or "NOCTRA Autoworks" }}{% endblock %}</title>
+
+  <meta name="description"
+    content="{% block meta_description %}NOCTRA Autoworks — precision motorcycle refinishing, restoration, and custom paint.{% endblock %}" />
+  <meta name="robots" content="{% block meta_robots %}index, follow{% endblock %}" />
+
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}" />
+  <meta property="og:site_name" content="{{ app_name }}" />
+  <meta property="og:title" content="{% block og_title %}{{ title or app_name }}{% endblock %}" />
+  <meta property="og:description" content="{% block og_description %}{{ self.meta_description() }}{% endblock %}" />
+  <meta property="og:image" content="{% block og_image %}/static/img/og-default.png{% endblock %}" />
+  <meta property="og:url" content="{% block og_url %}{{ request.url if request else '' }}{% endblock %}" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{{ self.og_title() }}" />
+  <meta name="twitter:description" content="{{ self.og_description() }}" />
+  <meta name="twitter:image" content="{{ self.og_image() }}" />
+
+  <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
+  <link rel="apple-touch-icon" href="/static/img/logo-mark.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin />
+  <script src="https://cdn.tailwindcss.com/3.4.5?plugins=forms,typography" defer></script>
+  <script>
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            noctra: {
+              bg: '#0a0a0a',
+              surface: '#141414',
+              surface2: '#1c1c1c',
+              border: '#262626',
+              muted: '#a3a3a3',
+              accent: '#f97316',
+              accent2: '#ea580c',
+            },
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <link rel="stylesheet" href="/static/css/main.css" />
+  {% block extra_css %}{% endblock %}
+
+  <script defer src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <script defer src="/static/js/csrf.js"></script>
+  <script defer src="/static/js/flash.js"></script>
+  <script defer src="/static/js/main.js"></script>
+  <script defer src="/static/js/confirm.js"></script>
+  <script defer src="/static/js/htmx-config.js"></script>
+
+  {% block extra_head %}{% endblock %}
+</head>
+
+<body class="bg-noctra-bg text-neutral-100 antialiased min-h-screen">
+  <noscript>
+    <div style="padding:16px;background:#1c1c1c;color:#f5f5f5;border-bottom:1px solid #262626;">
+      NOCTRA requires JavaScript to be enabled. Please turn it on and reload.
+    </div>
+  </noscript>
+
+  {% block body %}{% endblock %}
+  {% block extra_js %}{% endblock %}
+</body>
+
+</html>

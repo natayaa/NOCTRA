@@ -1,0 +1,329 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ project.code }}</h1>
+    <p class="page-subtitle">
+      <span class="badge
+        {% if project.status in ('DELIVERED','COMPLETED') %}badge-success
+        {% elif project.status == 'CANCELLED' %}badge-danger
+        {% elif project.status in ('IN_PROGRESS','PAINTING','ASSEMBLY','APPROVED') %}badge-accent
+        {% elif project.status == 'WAITING_APPROVAL' %}badge-warning
+        {% else %}badge-info{% endif %}">
+        {{ status_labels.get(project.status, project.status) }}
+      </span>
+      {% if project.title %}<span class="ml-2">· {{ project.title }}</span>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if customer %}<a href="/admin/customers/{{ customer.id }}" class="btn btn-secondary btn-sm">Customer</a>{% endif %}
+    {% if vehicle %}<a href="/admin/vehicles/{{ vehicle.id }}" class="btn btn-secondary btn-sm">Vehicle</a>{% endif %}
+    <a href="/admin/projects/{{ project.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+  </div>
+</div>
+
+{% set err = request.query_params.get('error') %}
+{% if err %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ err }}</div></div>{% endif %}
+
+{# ── Costing dashboard stats ────────────────────────── #}
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-label">Selling price</div>
+    <div class="stat-value">{{ (project.approved_price or project.quoted_price or 0) | rupiah }}</div>
+    {% if not project.approved_price and project.quoted_price %}
+      <div class="stat-delta">quoted, not yet approved</div>
+    {% endif %}
+  </div>
+  <div class="stat">
+    <div class="stat-label">Estimated HPP</div>
+    <div class="stat-value text-neutral-300">{{ project.estimated_hpp | rupiah }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Actual HPP</div>
+    <div class="stat-value">{{ project.actual_hpp | rupiah }}</div>
+    {% set variance = project.estimated_hpp - project.actual_hpp %}
+    {% if project.estimated_hpp > 0 %}
+      <div class="stat-delta {% if variance >= 0 %}up{% else %}down{% endif %}">
+        {% if variance >= 0 %}Under by{% else %}Over by{% endif %} {{ variance | abs | rupiah }}
+      </div>
+    {% endif %}
+  </div>
+  <div class="stat">
+    <div class="stat-label">Gross margin</div>
+    <div class="stat-value
+      {% if project.actual_gross_margin_pct >= 50 %}text-noctra-success
+      {% elif project.actual_gross_margin_pct >= 30 %}text-noctra-warning
+      {% else %}text-noctra-danger{% endif %}">
+      {{ '%.1f'|format(project.actual_gross_margin_pct) }}%
+    </div>
+    <div class="stat-delta">
+      {{ project.actual_gross_profit | rupiah }} profit
+    </div>
+  </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-6">
+
+  <div class="lg:col-span-2 space-y-6">
+
+    {# ── Cost breakdown table ──────────────────────── #}
+    <div class="panel">
+      <div class="panel-title">Cost breakdown by category</div>
+      <p class="text-xs text-neutral-500 mt-1">Estimated plan vs actual expenditure</p>
+
+      <div class="table-wrap mt-4">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="text-right">Estimated</th>
+              <th class="text-right">Actual</th>
+              <th class="text-right">Variance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set cats = [
+              ('materials', 'Materials', project.estimated_materials, project.actual_materials),
+              ('parts', 'Parts', project.estimated_parts, project.actual_parts),
+              ('labor', 'Labor', project.estimated_labor, project.actual_labor),
+              ('outsource', 'Outsourcing', project.estimated_outsource, project.actual_outsource),
+              ('overhead', 'Overhead', project.estimated_overhead, project.actual_overhead),
+              ('misc', 'Miscellaneous', project.estimated_misc, project.actual_misc),
+            ] %}
+            {% for key, label, est, act in cats %}
+            <tr>
+              <td class="font-medium">{{ label }}</td>
+              <td class="text-right font-mono text-sm text-neutral-500">{{ est | rupiah }}</td>
+              <td class="text-right font-mono text-sm">{{ act | rupiah }}</td>
+              {% set v = est - act %}
+              <td class="text-right font-mono text-xs {% if v > 0 %}text-noctra-success{% elif v < 0 %}text-noctra-danger{% else %}text-neutral-500{% endif %}">
+                {% if v != 0 %}{{ '+' if v > 0 else '' }}{{ v | rupiah }}{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr style="border-top: 2px solid var(--noctra-border);">
+              <td class="font-semibold">Total HPP</td>
+              <td class="text-right font-mono font-semibold">{{ project.estimated_hpp | rupiah }}</td>
+              <td class="text-right font-mono font-semibold">{{ project.actual_hpp | rupiah }}</td>
+              {% set v = project.estimated_hpp - project.actual_hpp %}
+              <td class="text-right font-mono text-xs {% if v > 0 %}text-noctra-success{% elif v < 0 %}text-noctra-danger{% endif %}">
+                {% if v != 0 %}{{ '+' if v > 0 else '' }}{{ v | rupiah }}{% else %}—{% endif %}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    {# ── Item list grouped by category ─────────────── #}
+    <div class="panel">
+      <div class="panel-title">Cost items</div>
+
+      {% if items %}
+        {% for cat in cost_categories %}
+          {% set cat_items = items_by_category.get(cat, []) %}
+          {% if cat_items %}
+          <div class="mt-4">
+            <div class="text-xs uppercase tracking-wider text-neutral-500 font-semibold mb-2">
+              {{ cost_category_labels.get(cat, cat) }}
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th class="text-right">Est. qty</th>
+                    <th class="text-right">Est. cost</th>
+                    <th class="text-right">Act. qty</th>
+                    <th class="text-right">Act. cost</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in cat_items %}
+                  <tr>
+                    <td class="text-sm">{{ item.description }}</td>
+                    <td class="text-right font-mono text-xs text-neutral-500">
+                      {% if item.estimated_quantity %}{{ '%.3f'|format(item.estimated_quantity) }} {{ item.unit or '' }}{% else %}—{% endif %}
+                    </td>
+                    <td class="text-right font-mono text-xs text-neutral-500">{{ item.estimated_cost | rupiah }}</td>
+                    <td class="text-right font-mono text-xs">
+                      {% if item.actual_quantity %}{{ '%.3f'|format(item.actual_quantity) }} {{ item.unit or '' }}{% else %}—{% endif %}
+                    </td>
+                    <td class="text-right font-mono text-xs">{{ item.actual_cost | rupiah }}</td>
+                    <td class="text-right">
+                      <details>
+                        <summary class="text-xs text-neutral-500 cursor-pointer hover:text-noctra-accent">edit</summary>
+                        <form method="post" action="/admin/projects/{{ project.id }}/items/{{ item.id }}"
+                              class="mt-2 grid grid-cols-2 gap-2 min-w-[400px]" data-guard>
+                          <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+                          <div class="col-span-2">
+                            <input class="input" name="description" value="{{ item.description }}" />
+                          </div>
+                          <input class="input" type="number" step="0.001" name="estimated_quantity" placeholder="Est. qty" value="{{ item.estimated_quantity or '' }}" />
+                          <input class="input" type="number" step="0.01" name="estimated_unit_cost" placeholder="Est. unit cost" value="{{ item.estimated_unit_cost or '' }}" />
+                          <input class="input" type="number" step="0.001" name="actual_quantity" placeholder="Act. qty" value="{{ item.actual_quantity or '' }}" />
+                          <input class="input" type="number" step="0.01" name="actual_unit_cost" placeholder="Act. unit cost" value="{{ item.actual_unit_cost or '' }}" />
+                          <button class="btn btn-primary btn-sm col-span-2">Save</button>
+                        </form>
+                        <form method="post" action="/admin/projects/{{ project.id }}/items/{{ item.id }}/delete"
+                              class="mt-1" data-confirm="Delete this cost item?">
+                          <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+                          <button class="btn btn-ghost btn-sm text-noctra-danger">Delete</button>
+                        </form>
+                      </details>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+      <p class="text-neutral-500 text-sm mt-2">No cost items yet. Add the first one below.</p>
+      {% endif %}
+    </div>
+
+    {# ── Add item form ─────────────────────────────── #}
+    <div class="panel">
+      <div class="panel-title">Add cost item</div>
+
+      <form method="post" action="/admin/projects/{{ project.id }}/items"
+            class="mt-3 space-y-4" data-guard id="add-item-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+        <div class="grid md:grid-cols-3 gap-4">
+          <div class="form-row">
+            <label class="form-label" for="add_category">Category</label>
+            <select class="select" id="add_category" name="category" required
+                    onchange="document.getElementById('material-row').style.display = this.value==='MATERIAL'||this.value==='PART'?'block':'none';
+                              document.getElementById('employee-row').style.display = this.value==='LABOR'?'block':'none';
+                              document.getElementById('cost-rows').style.display = this.value==='OVERHEAD'?'none':'block';">
+              {% for c in cost_categories %}
+                <option value="{{ c }}">{{ cost_category_labels.get(c, c) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-row md:col-span-2">
+            <label class="form-label" for="add_description">Description</label>
+            <input class="input" id="add_description" name="description" required maxlength="500"
+                   placeholder="e.g. Belkote 2100 clear coat" />
+          </div>
+        </div>
+
+        <div id="material-row" class="form-row">
+          <label class="form-label" for="add_material_id">Material (from inventory)</label>
+          <select class="select" id="add_material_id" name="material_id">
+            <option value="">—</option>
+            {% for m in materials %}
+              <option value="{{ m.id }}">{{ m.code }} — {{ m.name }} ({{ m.stock_unit }} @ {{ m.cost_per_stock_unit | rupiah }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div id="employee-row" class="form-row" style="display:none;">
+          <label class="form-label" for="add_employee_id">Employee</label>
+          <select class="select" id="add_employee_id" name="employee_id">
+            <option value="">—</option>
+            {% for e in employees %}
+              <option value="{{ e.id }}">{{ e.name }} — {{ e.position or '' }} @ {{ e.hourly_rate | rupiah }}/hour</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div id="cost-rows" class="grid md:grid-cols-4 gap-4">
+          <div class="form-row">
+            <label class="form-label" for="add_unit">Unit</label>
+            <input class="input" id="add_unit" name="unit" maxlength="16" placeholder="ml, hours, piece" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="add_est_qty">Est. quantity</label>
+            <input class="input" type="number" step="0.001" id="add_est_qty" name="estimated_quantity" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="add_est_cost">Est. unit cost</label>
+            <input class="input" type="number" step="0.01" id="add_est_cost" name="estimated_unit_cost"
+                   placeholder="auto from material/employee" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="add_act_qty">Actual quantity</label>
+            <input class="input" type="number" step="0.001" id="add_act_qty" name="actual_quantity" />
+          </div>
+        </div>
+
+        <div class="text-xs text-neutral-500">
+          Overhead rate: {{ overhead_rate_per_hour | rupiah }}/hour. Enter labor hours as the quantity
+          to allocate overhead proportionally.
+        </div>
+
+        <button class="btn btn-primary btn-sm">Add cost item</button>
+      </form>
+    </div>
+
+  </div>
+
+  {# ── Sidebar ────────────────────────────────────── #}
+  <aside class="space-y-6">
+
+    <div class="panel">
+      <div class="panel-title">Customer & Vehicle</div>
+      {% if customer %}
+        <div class="mt-3">
+          <a href="/admin/customers/{{ customer.id }}" class="font-medium hover:text-noctra-accent">{{ customer.name }}</a>
+          <div class="mono text-xs text-neutral-500 mt-1">{{ customer.code }}</div>
+          {% if customer.phone %}<div class="text-xs text-neutral-500 mt-2">{{ customer.phone }}</div>{% endif %}
+        </div>
+      {% else %}
+        <p class="text-neutral-500 text-sm mt-2">No customer.</p>
+      {% endif %}
+      {% if vehicle %}
+        <hr class="hr" />
+        <a href="/admin/vehicles/{{ vehicle.id }}" class="font-medium hover:text-noctra-accent">{{ vehicle.brand }} {{ vehicle.model }}</a>
+        {% if vehicle.plate_number %}<div class="mono text-xs text-neutral-500 mt-1">{{ vehicle.plate_number }}</div>{% endif %}
+      {% endif %}
+    </div>
+
+    {# ── Status workflow ───────────────────────────── #}
+    {% if next_statuses %}
+    <div class="panel">
+      <div class="panel-title">Advance workflow</div>
+      <p class="text-xs text-neutral-500 mt-1">From <strong>{{ project.status }}</strong>:</p>
+      <form method="post" action="/admin/projects/{{ project.id }}/status"
+            class="mt-3 space-y-3" data-guard>
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+        <select class="select" name="status" required>
+          {% for s in next_statuses %}
+            <option value="{{ s }}">{{ status_labels.get(s, s) }}</option>
+          {% endfor %}
+        </select>
+        <textarea class="textarea" name="note" rows="2" placeholder="Note (optional)"></textarea>
+        <button class="btn btn-primary btn-sm btn-block">Apply</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <div class="panel-title">Timeline</div>
+      <dl class="mt-3 text-xs text-neutral-500 space-y-1">
+        <div>Created {{ project.created_at | dt_id }}</div>
+        {% if project.start_date %}<div>Start {{ project.start_date.strftime('%d %b %Y') }}</div>{% endif %}
+        {% if project.target_end_date %}<div>Target {{ project.target_end_date.strftime('%d %b %Y') }}</div>{% endif %}
+        {% if project.actual_end_date %}<div class="text-noctra-success">Delivered {{ project.actual_end_date.strftime('%d %b %Y') }}</div>{% endif %}
+      </dl>
+    </div>
+
+    {% if project.internal_notes %}
+    <div class="panel">
+      <div class="panel-title">Notes</div>
+      <p class="text-neutral-300 mt-2 whitespace-pre-line text-sm">{{ project.internal_notes }}</p>
+    </div>
+    {% endif %}
+
+  </aside>
+</div>
+{% endblock %}

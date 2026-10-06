@@ -1,0 +1,19 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">{{ employee.name }}</h1>
+    <p class="page-subtitle mono text-xs">{{ employee.code }}{% if employee.position %} · {{ employee.position }}{% endif %}</p></div>
+  <div class="page-actions"><a href="/admin/employees/{{ employee.id }}/edit" class="btn btn-primary btn-sm">Edit</a></div>
+</div>
+
+<div class="panel max-w-2xl">
+  <dl class="grid grid-cols-2 gap-4 text-sm">
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Hourly rate</dt><dd class="font-mono">{{ employee.hourly_rate | rupiah }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Monthly salary</dt><dd class="font-mono">{{ employee.monthly_salary | rupiah if employee.monthly_salary else '—' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Phone</dt><dd>{{ employee.phone or '—' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Joined</dt><dd>{{ employee.joined_at.strftime('%d %b %Y') if employee.joined_at else '—' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Status</dt><dd>{% if employee.is_active %}Active{% else %}Inactive{% endif %}</dd></div>
+  </dl>
+  {% if employee.notes %}<p class="text-neutral-300 mt-4 whitespace-pre-line text-sm">{{ employee.notes }}</p>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Materials</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
+  <div class="page-actions"><a href="/admin/materials/new" class="btn btn-primary btn-sm">New Material</a></div>
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}" data-search-input />
+  </div>
+  <div class="form-row !mb-0"><label class="form-label" for="category">Category</label>
+    <select class="select" id="category" name="category">
+      <option value="">Any</option>
+      {% for c in categories %}<option value="{{ c }}" {% if category_filter == c %}selected{% endif %}>{{ category_labels.get(c, c) }}</option>{% endfor %}
+    </select>
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if materials %}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Unit</th><th class="text-right">Cost / unit</th><th></th></tr></thead>
+    <tbody>
+      {% for m in materials %}
+      <tr>
+        <td class="mono text-xs">{{ m.code }}</td>
+        <td><div class="font-medium">{{ m.name }}</div>{% if m.brand %}<div class="text-xs text-neutral-500">{{ m.brand }}</div>{% endif %}</td>
+        <td><span class="badge badge-neutral">{{ category_labels.get(m.category, m.category) }}</span></td>
+        <td class="text-sm">{{ m.stock_unit }}</td>
+        <td class="text-right font-mono text-sm">{{ (m.current_purchase_price / m.stock_units_per_purchase) | rupiah }}/{{ m.stock_unit }}</td>
+        <td class="text-right"><a href="/admin/materials/{{ m.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "components/pagination.html" %}
+{% else %}
+{{ empty_state('No materials yet', 'Add your first material.', '/admin/materials/new', 'New Material', 'plus') }}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+{% from "components/pagination.html" import pagination %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Email Log</h1>
+    <p class="page-subtitle">{{ page_meta.total }} total</p>
+  </div>
+</div>
+
+<div class="mb-4 flex flex-wrap gap-2">
+  <a href="/admin/email-logs" class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
+  {% for s in statuses %}
+    <a href="/admin/email-logs?status={{ s }}" class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">{{ s }}</a>
+  {% endfor %}
+</div>
+
+{% if emails %}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Template</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for e in emails %}
+      <tr>
+        <td class="text-xs text-neutral-500">{{ e.created_at | dt_id('%d %b %H:%M') }}</td>
+        <td class="text-sm">
+          {% if e.to_name %}<div class="font-medium">{{ e.to_name }}</div>{% endif %}
+          <div class="mono text-xs text-neutral-500">{{ e.to_email }}</div>
+        </td>
+        <td class="text-sm">{{ e.subject }}</td>
+        <td class="mono text-xs text-neutral-500">{{ e.template }}</td>
+        <td>
+          {% if e.status == 'SENT' %}<span class="badge badge-success">Sent</span>
+          {% elif e.status == 'FAILED' %}<span class="badge badge-danger" title="{{ e.error_message }}">Failed</span>
+          {% else %}<span class="badge badge-neutral">{{ e.status }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{{ pagination() }}
+{% else %}
+<div class="panel text-center py-16">
+  <p class="text-neutral-400">No emails sent yet.</p>
+</div>
+{% endif %}
+{% endblock %}

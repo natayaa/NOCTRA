@@ -1,0 +1,67 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">New Vehicle</h1>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/vehicles" class="btn btn-secondary btn-sm">Back</a>
+  </div>
+</div>
+
+<form method="post" action="/admin/vehicles" class="max-w-3xl panel space-y-5" data-guard>
+  {% if not customer_id %}
+  <div class="form-row">
+    <label class="form-label" for="customer_id">Customer <span class="req">*</span></label>
+    <select class="select" id="customer_id" name="customer_id" required>
+      <option value="">Choose customer…</option>
+      {% for c in customers %}
+        <option value="{{ c.id }}">{{ c.name }} ({{ c.code }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% else %}
+    <input type="hidden" name="customer_id" value="{{ customer_id }}" />
+  {% endif %}
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row">
+      <label class="form-label" for="brand">Brand <span class="req">*</span></label>
+      <input class="input" id="brand" name="brand" required maxlength="100" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="model">Model <span class="req">*</span></label>
+      <input class="input" id="model" name="model" required maxlength="120" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="year">Year</label>
+      <input class="input" type="number" id="year" name="year" min="1900" max="2100" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="color">Color</label>
+      <input class="input" id="color" name="color" maxlength="64" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="plate_number">Plate number</label>
+      <input class="input" id="plate_number" name="plate_number" maxlength="20" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="category">Category</label>
+      <select class="select" id="category" name="category">
+        <option value="">—</option>
+        {% for c in ['SCOOTER','UNDERBONE','SPORT','NAKED','BIG_BIKE','CLASSIC','CUSTOM'] %}
+          <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <input type="hidden" name="_csrf" value="{{ csrf_token or '' }}" />
+
+  <div class="flex gap-2 pt-2">
+    <button type="submit" class="btn btn-primary">Create</button>
+    <a href="/admin/vehicles" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

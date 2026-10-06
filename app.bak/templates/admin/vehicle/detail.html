@@ -1,0 +1,68 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ vehicle.brand }} {{ vehicle.model }}</h1>
+    {% if vehicle.plate_number %}
+      <p class="page-subtitle mono text-xs">{{ vehicle.plate_number }}</p>
+    {% endif %}
+  </div>
+  <div class="page-actions">
+    {% if owner %}
+      <a href="/admin/customers/{{ owner.id }}" class="btn btn-secondary btn-sm">Owner</a>
+    {% endif %}
+    <a href="/admin/vehicles/{{ vehicle.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+  </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="panel">
+      <div class="panel-title">Specification</div>
+      <dl class="grid grid-cols-2 gap-4 mt-4 text-sm">
+        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Brand</dt><dd>{{ vehicle.brand }}</dd></div>
+        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Model</dt><dd>{{ vehicle.model }}</dd></div>
+        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Year</dt><dd>{{ vehicle.year or '—' }}</dd></div>
+        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Color</dt><dd>{{ vehicle.color or '—' }}</dd></div>
+        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Plate</dt><dd class="mono">{{ vehicle.plate_number or '—' }}</dd></div>
+        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Category</dt><dd>{{ vehicle.category or '—' }}</dd></div>
+        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">VIN</dt><dd class="mono text-xs">{{ vehicle.vin or '—' }}</dd></div>
+        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Engine</dt><dd class="mono text-xs">{{ vehicle.engine_number or '—' }}</dd></div>
+      </dl>
+    </div>
+
+    {% if vehicle.notes %}
+    <div class="panel">
+      <div class="panel-title">Notes</div>
+      <p class="text-neutral-300 mt-2 whitespace-pre-line text-sm">{{ vehicle.notes }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <aside class="space-y-6">
+    <div class="panel">
+      <div class="panel-title">Owner</div>
+      {% if owner %}
+      <div class="mt-3">
+        <a href="/admin/customers/{{ owner.id }}" class="font-medium hover:text-noctra-accent">
+          {{ owner.name }}
+        </a>
+        <div class="mono text-xs text-neutral-500 mt-1">{{ owner.code }}</div>
+        {% if owner.phone %}<div class="text-xs text-neutral-500 mt-2">{{ owner.phone }}</div>{% endif %}
+      </div>
+      {% else %}
+      <p class="text-neutral-500 text-sm mt-2">Owner record not found.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Record</div>
+      <div class="mt-3 text-xs text-neutral-500 space-y-1">
+        <div>Created {{ vehicle.created_at | dt_id }}</div>
+        <div>Updated {{ vehicle.updated_at | dt_id }}</div>
+      </div>
+    </div>
+  </aside>
+</div>
+{% endblock %}

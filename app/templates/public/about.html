@@ -1,0 +1,32 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<div class="container-narrow py-20">
+  <p class="eyebrow mb-3">About</p>
+  <h1 class="text-4xl md:text-5xl font-semibold tracking-tight">Craft, documented.</h1>
+
+  <div class="prose prose-invert max-w-none mt-10 text-neutral-300 space-y-5">
+    <p>
+      NOCTRA Autoworks was founded on a simple frustration: motorcycle painting is treated as an art,
+      but priced like a guess. We run our workshop like a business — every job is costed, every
+      material tracked, every hour accounted for.
+    </p>
+    <p>
+      The result is honest pricing for you, and a business we can grow with confidence.
+    </p>
+    <p>
+      Our ERP system — built in-house — is the same one you'd find at a manufacturing floor.
+      It's how we know that a Yamaha Mio full-body repaint truly costs what we quote.
+    </p>
+  </div>
+
+  <div class="mt-14 grid md:grid-cols-3 gap-6">
+    {% for label, value in [('Founded', '2024'), ('Located', 'Jakarta'), ('Specialty', 'Refinishing')] %}
+    <div class="panel">
+      <div class="text-xs uppercase tracking-widest text-neutral-500">{{ label }}</div>
+      <div class="text-lg font-semibold mt-1">{{ value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

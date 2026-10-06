@@ -1,0 +1,69 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Inventory</h1>
+    <p class="page-subtitle">Stock on hand across all materials</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/inventory/transactions" class="btn btn-secondary btn-sm">View ledger</a>
+    <a href="/admin/materials" class="btn btn-primary btn-sm">Manage materials</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-label">Total stock value</div>
+    <div class="stat-value">{{ total_value | rupiah }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Materials tracked</div>
+    <div class="stat-value">{{ items | length }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Low stock alerts</div>
+    <div class="stat-value {% if low_stock_count > 0 %}text-noctra-danger{% endif %}">{{ low_stock_count }}</div>
+  </div>
+</div>
+
+{% if items %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Name</th>
+        <th>Category</th>
+        <th class="text-right">Stock</th>
+        <th class="text-right">Cost / unit</th>
+        <th class="text-right">Value</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in items %}
+      <tr>
+        <td class="mono text-xs">{{ r.material.code }}</td>
+        <td>
+          <div class="font-medium">{{ r.material.name }}</div>
+          {% if r.material.brand %}<div class="text-xs text-neutral-500">{{ r.material.brand }}</div>{% endif %}
+        </td>
+        <td><span class="badge badge-neutral">{{ category_labels.get(r.material.category, r.material.category) }}</span></td>
+        <td class="text-right font-mono text-sm {% if r.below_min %}text-noctra-danger{% elif r.below_reorder %}text-noctra-warning{% endif %}">
+          {{ '%.2f'|format(r.current_stock) }} <span class="text-xs text-neutral-500">{{ r.material.stock_unit }}</span>
+        </td>
+        <td class="text-right font-mono text-xs">{{ r.cost_per_stock_unit | rupiah }}</td>
+        <td class="text-right font-mono text-sm">{{ r.stock_value | rupiah }}</td>
+        <td class="text-right"><a href="/admin/materials/{{ r.material.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="panel text-center py-16">
+  <p class="text-neutral-400">No materials yet. <a href="/admin/materials/new" class="text-noctra-accent hover:underline">Add your first material</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

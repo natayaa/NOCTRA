@@ -1,0 +1,46 @@
+{% extends "emails/base_email.html" %}
+
+{% block title %}We received your inquiry{% endblock %}
+
+{% block content %}
+<h1 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#18181b;">Thanks, {{ inquiry.customer_name | default('there') }}</h1>
+<p style="margin:0 0 20px;color:#52525b;">We've received your inquiry and our team will get back to you within one business day.</p>
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:8px;margin:20px 0;">
+  <tr>
+    <td style="padding:16px 20px;">
+      <div style="font-size:11px;letter-spacing:0.12em;color:#71717a;text-transform:uppercase;margin-bottom:6px;">Your reference number</div>
+      <div style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:16px;font-weight:600;color:#18181b;letter-spacing:0.02em;">{{ inquiry_code }}</div>
+    </td>
+  </tr>
+</table>
+
+<h2 style="margin:24px 0 12px;font-size:15px;font-weight:600;color:#18181b;">What we received</h2>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size:14px;color:#52525b;">
+  {% if service_label %}
+  <tr><td style="padding:6px 0;width:130px;color:#71717a;">Service</td><td style="padding:6px 0;">{{ service_label }}</td></tr>
+  {% endif %}
+  {% if vehicle_label %}
+  <tr><td style="padding:6px 0;color:#71717a;">Vehicle</td><td style="padding:6px 0;">{{ vehicle_label }}</td></tr>
+  {% endif %}
+  {% if color_label %}
+  <tr><td style="padding:6px 0;color:#71717a;">Color</td><td style="padding:6px 0;">{{ color_label }}</td></tr>
+  {% endif %}
+  {% if finish_label %}
+  <tr><td style="padding:6px 0;color:#71717a;">Finish</td><td style="padding:6px 0;">{{ finish_label }}</td></tr>
+  {% endif %}
+</table>
+
+{% if description_excerpt %}
+<h2 style="margin:24px 0 8px;font-size:15px;font-weight:600;color:#18181b;">Your description</h2>
+<p style="margin:0;padding:14px 16px;background:#fafafa;border-left:3px solid #f97316;border-radius:0 6px 6px 0;color:#3f3f46;font-size:14px;white-space:pre-line;">{{ description_excerpt }}</p>
+{% endif %}
+
+<p style="margin:24px 0 0;color:#52525b;font-size:14px;">
+  If you need to reach us sooner, reply to this email or call {{ public_phone }}.
+</p>
+
+<p style="margin:20px 0 0;color:#71717a;font-size:13px;">
+  — The NOCTRA team
+</p>
+{% endblock %}

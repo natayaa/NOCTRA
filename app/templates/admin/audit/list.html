@@ -1,0 +1,76 @@
+{% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Audit Log</h1>
+    <p class="page-subtitle">Every sensitive action, in order</p>
+  </div>
+</div>
+
+<form method="get" class="panel mb-4 grid md:grid-cols-4 gap-4">
+  <div class="form-row !mb-0">
+    <label class="form-label" for="action">Action</label>
+    <select class="select" id="action" name="action">
+      <option value="">Any</option>
+      {% for a in ['CREATE','UPDATE','DELETE','LOGIN','LOGIN_FAILED','LOGOUT','EXPORT','VIEW'] %}
+      <option value="{{ a }}" {% if request.query_params.get('action') == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row !mb-0">
+    <label class="form-label" for="table_name">Table</label>
+    <input class="input" id="table_name" name="table_name" value="{{ request.query_params.get('table_name','') }}" />
+  </div>
+  <div class="form-row !mb-0">
+    <label class="form-label" for="since">Since</label>
+    <input class="input" type="date" id="since" name="since" value="{{ request.query_params.get('since','') }}" />
+  </div>
+  <div class="form-row !mb-0 flex items-end">
+    <button class="btn btn-primary btn-block">Filter</button>
+  </div>
+</form>
+
+{% if entries %}
+<div class="panel !p-0 overflow-hidden">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>User</th>
+        <th>Action</th>
+        <th>Table</th>
+        <th>Record</th>
+        <th>IP</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td class="text-xs text-neutral-400 font-mono">{{ e.created_at | dt_id('%Y-%m-%d %H:%M:%S') }}</td>
+        <td class="text-xs font-mono">{{ e.user_id or '—' }}</td>
+        <td>
+          {% set badge = {
+            'CREATE': 'badge-success',
+            'UPDATE': 'badge-info',
+            'DELETE': 'badge-danger',
+            'LOGIN': 'badge-neutral',
+            'LOGIN_FAILED': 'badge-warning',
+          }.get(e.action, 'badge-neutral') %}
+          <span class="badge {{ badge }}">{{ e.action }}</span>
+        </td>
+        <td class="font-mono text-xs">{{ e.table_name }}</td>
+        <td class="font-mono text-xs text-neutral-400">{{ e.record_id[:8] }}</td>
+        <td class="text-xs text-neutral-400 font-mono">{{ e.ip_address or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if page_meta %}{% include "components/pagination.html" %}{% endif %}
+{% else %}
+{{ empty_state('No audit entries', 'Actions will appear here as they happen.') }}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<div class="container-narrow py-20">
+  <p class="eyebrow mb-3">Contact</p>
+  <h1 class="text-4xl md:text-5xl font-semibold tracking-tight">Tell us about your motorcycle.</h1>
+  <p class="text-neutral-400 mt-4">We reply within one business day.</p>
+
+  <form method="post" action="/inquiry" class="mt-12 space-y-5">
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="full_name">Full name <span class="req">*</span></label>
+        <input class="input" type="text" id="full_name" name="full_name" required maxlength="255" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="phone">Phone / WhatsApp <span class="req">*</span></label>
+        <input class="input" type="tel" id="phone" name="phone" required maxlength="20" placeholder="08xx xxxx xxxx" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="email">Email</label>
+      <input class="input" type="email" id="email" name="email" maxlength="255" />
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="vehicle_brand">Vehicle brand</label>
+        <input class="input" type="text" id="vehicle_brand" name="vehicle_brand" maxlength="100" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="vehicle_model">Model</label>
+        <input class="input" type="text" id="vehicle_model" name="vehicle_model" maxlength="100" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="vehicle_year">Year</label>
+        <input class="input" type="number" id="vehicle_year" name="vehicle_year" min="1950" max="2100" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="service_interest">Service <span class="req">*</span></label>
+      <select class="select" id="service_interest" name="service_interest" required>
+        <option value="">Choose a service…</option>
+        <option value="REPAINT">Full Body Repaint</option>
+        <option value="PANEL">Panel Repaint</option>
+        <option value="RESTORATION">Restoration</option>
+        <option value="CUSTOM">Custom Paint</option>
+        <option value="DETAILING">Detailing & Polish</option>
+        <option value="OTHER">Other / Not sure</option>
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="description">Describe what you need <span class="req">*</span></label>
+      <textarea class="textarea" id="description" name="description" required minlength="20" maxlength="2000" placeholder="What motorcycle is it, what condition is it in, what look are you after, any references?"></textarea>
+      <div class="form-hint">Minimum 20 characters. The more detail, the more accurate the quote.</div>
+    </div>
+
+    <input type="hidden" name="_csrf" value="{{ csrf_token or '' }}" />
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="btn btn-primary btn-lg">Send Inquiry</button>
+      <span class="text-xs text-neutral-500">We never share your information.</span>
+    </div>
+  </form>
+</div>
+{% endblock %}

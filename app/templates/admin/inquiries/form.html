@@ -1,0 +1,220 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+{% set fv = form_values or {} %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'New Inquiry' if mode == 'create' else 'Edit Inquiry' }}</h1>
+    {% if inquiry %}<p class="page-subtitle mono text-xs">{{ inquiry.code }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="/admin/inquiries{% if inquiry %}/{{ inquiry.id }}{% endif %}"
+       class="btn btn-secondary btn-sm">Back</a>
+  </div>
+</div>
+
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
+  <div class="form-error">{{ error }}</div>
+</div>
+{% endif %}
+
+<form method="post"
+      action="{{ '/admin/inquiries' if mode == 'create' else '/admin/inquiries/' ~ inquiry.id }}"
+      class="max-w-4xl panel space-y-6"
+      data-guard>
+
+  {# ── Who ─────────────────────────────────────── #}
+  <section>
+    <h2 class="panel-title">Who</h2>
+    <div class="grid md:grid-cols-2 gap-5 mt-3">
+      <div class="form-row">
+        <label class="form-label" for="customer_id">Customer</label>
+        {% if preselected_customer %}
+          <input class="input" disabled value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
+          <input type="hidden" name="customer_id" value="{{ preselected_customer.id }}" />
+        {% else %}
+          <select class="select" id="customer_id" name="customer_id">
+            <option value="">—</option>
+            {# Customer dropdown populated by an HTMX search in 2c; free-text lookup for now #}
+          </select>
+          <div class="form-hint">Leave blank for anonymous walk-in.</div>
+        {% endif %}
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="vehicle_id">Vehicle</label>
+        {% if preselected_vehicle %}
+          <input class="input" disabled value="{{ preselected_vehicle.brand }} {{ preselected_vehicle.model }}{% if preselected_vehicle.plate_number %} — {{ preselected_vehicle.plate_number }}{% endif %}" />
+          <input type="hidden" name="vehicle_id" value="{{ preselected_vehicle.id }}" />
+        {% else %}
+          <input class="input" disabled value="—" />
+          <div class="form-hint">Select a customer first, or add a vehicle later.</div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  {# ── What ────────────────────────────────────── #}
+  <section>
+    <h2 class="panel-title">What they want</h2>
+
+    <div class="form-row mt-3">
+      <label class="form-label" for="service_interest">Service interest</label>
+      <select class="select" id="service_interest" name="service_interest">
+        <option value="">—</option>
+        {% for s in services %}
+          {% set cur = fv.get('service_interest') or (inquiry.service_interest if inquiry else '') %}
+          <option value="{{ s }}" {% if cur == s %}selected{% endif %}>
+            {{ service_labels.get(s, s) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="description">Description <span class="req">*</span></label>
+      <textarea class="textarea" id="description" name="description" required
+                minlength="20" maxlength="5000"
+                placeholder="What does the customer want? Include any detail they gave you.">{{ fv.get('description') or (inquiry.description if inquiry else '') }}</textarea>
+      <div class="form-hint">Minimum 20 characters.</div>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="color_preference">Color (their words)</label>
+        <input class="input" id="color_preference" name="color_preference" maxlength="64"
+               placeholder="e.g. matte black, brandywine candy"
+               value="{{ fv.get('color_preference') or (inquiry.color_preference if inquiry else '') }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="color_family">Color family</label>
+        <select class="select" id="color_family" name="color_family">
+          <option value="">—</option>
+          {% for c in color_families %}
+            {% set cur = fv.get('color_family') or (inquiry.color_family if inquiry else '') %}
+            <option value="{{ c }}" {% if cur == c %}selected{% endif %}>
+              {{ color_labels.get(c, c) }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="finish_preference">Finish</label>
+        <select class="select" id="finish_preference" name="finish_preference">
+          <option value="">—</option>
+          {% for f in finishes %}
+            {% set cur = fv.get('finish_preference') or (inquiry.finish_preference if inquiry else '') %}
+            <option value="{{ f }}" {% if cur == f %}selected{% endif %}>
+              {{ finish_labels.get(f, f) }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <label class="flex items-center gap-2 text-sm mt-2">
+      <input type="checkbox" name="has_custom_graphics" value="true"
+             {% if (fv.get('has_custom_graphics') == 'true') or (inquiry and inquiry.has_custom_graphics) %}checked{% endif %} />
+      Customer requested custom graphics (pinstripe, airbrush, decals)
+    </label>
+  </section>
+
+  {# ── Preferences (JSONB) ─────────────────────── #}
+  <section>
+    <h2 class="panel-title">Additional preferences</h2>
+    <p class="text-xs text-neutral-500 mt-1">All optional. Fill in whatever the customer mentioned.</p>
+
+    <div class="grid md:grid-cols-2 gap-5 mt-3">
+      {% for pk in preference_keys %}
+        {% set existing = (inquiry.preferences or {}).get(pk.key) if inquiry else None %}
+        {% set fv_val = fv.get('pref_' ~ pk.key) %}
+        {% set current = fv_val or existing %}
+
+        {% if pk.type == 'bool' %}
+          <label class="flex items-center gap-2 text-sm pt-6">
+            <input type="checkbox" name="pref_{{ pk.key }}" value="true"
+                   {% if current is sameas true or current == 'true' %}checked{% endif %} />
+            {{ pk.label }}
+          </label>
+        {% elif pk.type == 'list' %}
+          <div class="form-row">
+            <label class="form-label" for="pref_{{ pk.key }}">{{ pk.label }}</label>
+            <input class="input" id="pref_{{ pk.key }}" name="pref_{{ pk.key }}"
+                   placeholder="comma-separated"
+                   value="{{ current | join(', ') if current is iterable and current is not string else (current or '') }}" />
+          </div>
+        {% elif pk.type == 'text' %}
+          <div class="form-row md:col-span-2">
+            <label class="form-label" for="pref_{{ pk.key }}">{{ pk.label }}</label>
+            <textarea class="textarea" id="pref_{{ pk.key }}" name="pref_{{ pk.key }}" rows="2">{{ current or '' }}</textarea>
+          </div>
+        {% else %}
+          <div class="form-row">
+            <label class="form-label" for="pref_{{ pk.key }}">{{ pk.label }}</label>
+            <input class="input" id="pref_{{ pk.key }}" name="pref_{{ pk.key }}"
+                   value="{{ current or '' }}" />
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ── Logistics ──────────────────────────────── #}
+  <section>
+    <h2 class="panel-title">Logistics</h2>
+
+    <div class="grid md:grid-cols-3 gap-5 mt-3">
+      <div class="form-row">
+        <label class="form-label" for="budget_range">Budget range</label>
+        <select class="select" id="budget_range" name="budget_range">
+          <option value="">—</option>
+          {% for b in budget_ranges %}
+            {% set cur = fv.get('budget_range') or (inquiry.budget_range if inquiry else '') %}
+            <option value="{{ b }}" {% if cur == b %}selected{% endif %}>
+              {{ budget_labels.get(b, b) }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="desired_date">Desired date</label>
+        <input class="input" type="date" id="desired_date" name="desired_date"
+               value="{{ fv.get('desired_date') or (inquiry.desired_date.strftime('%Y-%m-%d') if inquiry and inquiry.desired_date else '') }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="follow_up_date">Follow-up date</label>
+        <input class="input" type="date" id="follow_up_date" name="follow_up_date"
+               value="{{ fv.get('follow_up_date') or (inquiry.follow_up_date.strftime('%Y-%m-%d') if inquiry and inquiry.follow_up_date else '') }}" />
+      </div>
+    </div>
+
+    {% if mode == 'create' %}
+    <div class="form-row">
+      <label class="form-label" for="source">Source</label>
+      <select class="select" id="source" name="source" required>
+        {% for s in sources %}
+          <option value="{{ s }}" {% if s == 'ADMIN' %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="form-row">
+      <label class="form-label" for="notes">Staff notes (internal)</label>
+      <textarea class="textarea" id="notes" name="notes" rows="3">{{ fv.get('notes') or (inquiry.notes if inquiry else '') }}</textarea>
+    </div>
+  </section>
+
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+  <div class="flex gap-2 pt-2">
+    <button type="submit" class="btn btn-primary">
+      {{ 'Create Inquiry' if mode == 'create' else 'Save changes' }}
+    </button>
+    <a href="{{ '/admin/inquiries' if mode == 'create' else '/admin/inquiries/' ~ inquiry.id }}"
+       class="btn btn-secondary">Cancel</a>
+  </div>
+  
+</form>
+{% endblock %}

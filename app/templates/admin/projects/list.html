@@ -1,0 +1,75 @@
+{% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Projects</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
+  <div class="page-actions"><a href="/admin/projects/new" class="btn btn-primary btn-sm">New Project</a></div>
+</div>
+
+<div class="mb-4 flex flex-wrap gap-2">
+  <a href="/admin/projects{% if only_open %}?only_open=true{% endif %}"
+     class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
+  {% for s in statuses %}
+    <a href="/admin/projects?status={{ s }}"
+       class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">{{ status_labels.get(s, s) }}</a>
+  {% endfor %}
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}" placeholder="Code, title…" data-search-input />
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if projects %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Customer</th>
+        <th>Status</th>
+        <th class="text-right">Selling price</th>
+        <th class="text-right">Est. HPP</th>
+        <th class="text-right">Actual HPP</th>
+        <th class="text-right">Margin</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in projects %}
+      {% set c = customers_by_id.get(p.customer_id) %}
+      <tr>
+        <td class="mono text-xs">{{ p.code }}</td>
+        <td>
+          {% if c %}<div class="font-medium">{{ c.name }}</div>{% else %}<span class="text-neutral-500">—</span>{% endif %}
+          {% if p.title %}<div class="text-xs text-neutral-500">{{ p.title[:60] }}</div>{% endif %}
+        </td>
+        <td>
+          {% set sbadge = {'DRAFT':'badge-neutral','ESTIMATING':'badge-info','WAITING_APPROVAL':'badge-warning','APPROVED':'badge-accent','IN_PROGRESS':'badge-accent','PAINTING':'badge-accent','ASSEMBLY':'badge-accent','QC':'badge-warning','COMPLETED':'badge-success','DELIVERED':'badge-success','CANCELLED':'badge-danger'}.get(p.status, 'badge-neutral') %}
+          <span class="badge {{ sbadge }}">{{ status_labels.get(p.status, p.status) }}</span>
+        </td>
+        <td class="text-right font-mono text-sm">{{ (p.approved_price or p.quoted_price or 0) | rupiah }}</td>
+        <td class="text-right font-mono text-xs text-neutral-500">{{ p.estimated_hpp | rupiah }}</td>
+        <td class="text-right font-mono text-xs">{{ p.actual_hpp | rupiah }}</td>
+        <td class="text-right font-mono text-sm
+          {% if p.actual_gross_margin_pct >= 50 %}text-noctra-success
+          {% elif p.actual_gross_margin_pct >= 30 %}text-noctra-warning
+          {% else %}text-noctra-danger{% endif %}">
+          {{ '%.1f'|format(p.actual_gross_margin_pct) }}%
+        </td>
+        <td class="text-right"><a href="/admin/projects/{{ p.id }}" class="btn btn-ghost btn-sm">Open</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "components/pagination.html" %}
+{% else %}
+{{ empty_state('No projects yet', 'Create a project to start tracking costs.', '/admin/projects/new', 'New Project', 'plus') }}
+{% endif %}
+{% endblock %}

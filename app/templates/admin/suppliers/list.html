@@ -1,0 +1,43 @@
+{% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Suppliers</h1>
+    <p class="page-subtitle">{{ page_meta.total }} total</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/suppliers/new" class="btn btn-primary btn-sm">New Supplier</a>
+  </div>
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}" data-search-input />
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if suppliers %}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Code</th><th>Name</th><th>Contact</th><th>Phone</th><th></th></tr></thead>
+    <tbody>
+      {% for s in suppliers %}
+      <tr>
+        <td class="mono text-xs">{{ s.code }}</td>
+        <td class="font-medium">{{ s.name }}</td>
+        <td class="text-neutral-400 text-sm">{{ s.contact_person or '—' }}</td>
+        <td class="text-neutral-400 text-sm">{{ s.phone or '—' }}</td>
+        <td class="text-right"><a href="/admin/suppliers/{{ s.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "components/pagination.html" %}
+{% else %}
+{{ empty_state('No suppliers yet', 'Add your first supplier to get started.', '/admin/suppliers/new', 'New Supplier', 'plus') }}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,53 @@
+{% set path = request.url.path if request else '' %}
+
+{% macro navlink(href, label, icon_path) %}
+  {% set is_active = (path == href) or (href != '/admin/dashboard' and path.startswith(href ~ '/')) %}
+  <a href="{{ href }}"
+     class="sidebar-link{% if is_active %} active{% endif %}"
+     {% if is_active %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="{{ icon_path }}" stroke="currentColor" stroke-width="1.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>{{ label }}</span>
+  </a>
+{% endmacro %}
+
+<aside class="admin-sidebar" aria-label="Admin navigation">
+  <div class="sidebar-brand">
+    <img src="/static/img/logo.svg" alt="{{ app_name }}" class="sidebar-brand-logo" />
+  </div>
+
+  <nav class="sidebar-nav">
+    {{ navlink('/admin/dashboard', 'Dashboard',
+       'M3 12l9-9 9 9M5 10v10h14V10') }}
+
+    <div class="sidebar-section-label">CRM</div>
+    {{ navlink('/admin/customers', 'Customers',
+       'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0') }}
+    {{ navlink('/admin/vehicles', 'Vehicles',
+       'M5 17h14M6 13l2-5h8l2 5M7 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm14 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z') }}
+    {{ navlink('/admin/inquiries', 'Inquiries',
+       'M4 5h16v12H7l-3 3V5Z') }}
+
+    <div class="sidebar-section-label">Workshop</div>
+    {{ navlink('/admin/projects', 'Projects',
+       'M4 7h16v10H4zM9 7V5h6v2') }}
+    {{ navlink('/admin/inventory', 'Inventory',
+       'M4 7l8-4 8 4v10l-8 4-8-4V7Zm0 0 8 4 8-4M12 11v10') }}
+
+    <div class="sidebar-section-label">System</div>
+    {{ navlink('/admin/users', 'Users',
+       'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0') }}
+    {{ navlink('/admin/roles', 'Roles',
+       'M12 3l8 4v5c0 5-3.5 8.5-8 9.5C7.5 20.5 4 17 4 12V7l8-4Z') }}
+    {{ navlink('/admin/audit', 'Audit Log',
+       'M5 5h14v14H5zM8 9h8M8 13h5') }}
+    {{ navlink('/admin/settings', 'Settings',
+       'M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 0v9M12 3v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M19.8 7.5l-2.6 1.5M6.8 15l-2.6 1.5') }}
+  </nav>
+
+  <div class="sidebar-footer">
+    v0.1.0 · Phase 1
+  </div>
+</aside>

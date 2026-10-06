@@ -1,0 +1,130 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+{% set fv = form_values or {} %}
+{% set v = namespace() %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'New Customer' if mode == 'create' else 'Edit Customer' }}</h1>
+    {% if customer %}<p class="page-subtitle mono text-xs">{{ customer.code }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="/admin/customers" class="btn btn-secondary btn-sm">Back</a>
+  </div>
+</div>
+
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
+  <div class="form-error">{{ error }}</div>
+</div>
+{% endif %}
+
+<form method="post"
+      action="{{ '/admin/customers' if mode == 'create' else '/admin/customers/' ~ customer.id }}"
+      class="max-w-3xl panel space-y-5"
+      data-guard>
+
+      <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+  <div class="form-row">
+    <label class="form-label" for="name">Full name <span class="req">*</span></label>
+    <input class="input" id="name" name="name" required maxlength="255"
+           value="{{ fv.get('name') or (customer.name if customer else '') }}" />
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row">
+      <label class="form-label" for="phone">Phone / WhatsApp</label>
+      <input class="input" id="phone" name="phone" maxlength="32"
+             value="{{ fv.get('phone') or (customer.phone if customer else '') }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="alt_phone">Alternate phone</label>
+      <input class="input" id="alt_phone" name="alt_phone" maxlength="32"
+             value="{{ fv.get('alt_phone') or (customer.alt_phone if customer else '') }}" />
+    </div>
+  </div>
+
+  <div class="form-row">
+    <label class="form-label" for="email">Email</label>
+    <input class="input" type="email" id="email" name="email" maxlength="255"
+           value="{{ fv.get('email') or (customer.email if customer else '') }}" />
+  </div>
+
+  <div class="form-row">
+    <label class="form-label" for="address_line1">Address line 1</label>
+    <input class="input" id="address_line1" name="address_line1" maxlength="255"
+           value="{{ fv.get('address_line1') or (customer.address_line1 if customer else '') }}" />
+  </div>
+
+  <div class="form-row">
+    <label class="form-label" for="address_line2">Address line 2</label>
+    <input class="input" id="address_line2" name="address_line2" maxlength="255"
+           value="{{ fv.get('address_line2') or (customer.address_line2 if customer else '') }}" />
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-5">
+    <div class="form-row">
+      <label class="form-label" for="city">City</label>
+      <input class="input" id="city" name="city" maxlength="100"
+             value="{{ fv.get('city') or (customer.city if customer else '') }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="province">Province</label>
+      <input class="input" id="province" name="province" maxlength="100"
+             value="{{ fv.get('province') or (customer.province if customer else '') }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="postal_code">Postal code</label>
+      <input class="input" id="postal_code" name="postal_code" maxlength="20"
+             value="{{ fv.get('postal_code') or (customer.postal_code if customer else '') }}" />
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row">
+      <label class="form-label" for="country">Country</label>
+      <input class="input" id="country" name="country" maxlength="64"
+             value="{{ fv.get('country') or (customer.country if customer else 'Indonesia') }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="tax_id">Tax ID (NPWP)</label>
+      <input class="input" id="tax_id" name="tax_id" maxlength="64"
+             value="{{ fv.get('tax_id') or (customer.tax_id if customer else '') }}" />
+    </div>
+  </div>
+
+  {% if mode == 'edit' %}
+  <div class="form-row">
+    <label class="form-label" for="status">Status</label>
+    <select class="select" id="status" name="status">
+      {% for s in statuses %}
+        <option value="{{ s }}" {% if customer.status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="is_active" value="true"
+             {% if customer.is_active %}checked{% endif %} />
+      Active
+    </label>
+  </div>
+  {% endif %}
+
+  <div class="form-row">
+    <label class="form-label" for="notes">Notes</label>
+    <textarea class="textarea" id="notes" name="notes">{{ fv.get('notes') or (customer.notes if customer else '') }}</textarea>
+  </div>
+
+  <div class="flex gap-2 pt-2">
+    <button type="submit" class="btn btn-primary">
+      {{ 'Create' if mode == 'create' else 'Save changes' }}
+    </button>
+    <a href="{{ '/admin/customers' if mode == 'create' else '/admin/customers/' ~ customer.id }}"
+       class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

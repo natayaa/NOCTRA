@@ -1,0 +1,66 @@
+{% extends "admin/base.html" %}
+{% from "components/pagination.html" import pagination %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">
+      Vehicles{% if owner %} — {{ owner.name }}{% endif %}
+    </h1>
+    <p class="page-subtitle">{{ page_meta.total }} total</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/vehicles/new{% if customer_id %}?customer_id={{ customer_id }}{% endif %}"
+       class="btn btn-primary btn-sm">New Vehicle</a>
+  </div>
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  {% if customer_id %}<input type="hidden" name="customer_id" value="{{ customer_id }}" />{% endif %}
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}"
+           placeholder="Brand, model, plate, VIN…" data-search-input />
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if vehicles %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Plate</th>
+        <th>Vehicle</th>
+        <th>Year</th>
+        <th>Category</th>
+        <th class="text-right"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in vehicles %}
+      <tr>
+        <td class="mono text-xs">{{ v.plate_number or '—' }}</td>
+        <td class="font-medium">{{ v.brand }} {{ v.model }}</td>
+        <td class="text-neutral-400 text-sm">{{ v.year or '—' }}</td>
+        <td>{% if v.category %}<span class="badge badge-neutral">{{ v.category }}</span>{% else %}—{% endif %}</td>
+        <td class="text-right"><a href="/admin/vehicles/{{ v.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{{ pagination() }}
+
+{% else %}
+{{ empty_state(
+  title='No vehicles yet',
+  message='Add a vehicle to get started.',
+  action_url='/admin/vehicles/new',
+  action_label='New Vehicle',
+  icon='plus'
+) }}
+{% endif %}
+{% endblock %}

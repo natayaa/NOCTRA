@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">{{ supplier.name }}</h1>
+    <p class="page-subtitle mono text-xs">{{ supplier.code }}</p></div>
+  <div class="page-actions"><a href="/admin/suppliers/{{ supplier.id }}/edit" class="btn btn-primary btn-sm">Edit</a></div>
+</div>
+
+<div class="panel max-w-2xl">
+  <dl class="grid grid-cols-2 gap-4 text-sm">
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Contact</dt><dd>{{ supplier.contact_person or '—' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Phone</dt><dd>{{ supplier.phone or '—' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Email</dt><dd>{{ supplier.email or '—' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Tax ID</dt><dd class="mono text-xs">{{ supplier.tax_id or '—' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Terms</dt><dd>{{ supplier.payment_terms or '—' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Status</dt><dd>{% if supplier.is_active %}Active{% else %}Inactive{% endif %}</dd></div>
+    <div class="col-span-2"><dt class="text-neutral-500 text-xs uppercase tracking-wider">Address</dt><dd>{{ supplier.address or '—' }}</dd></div>
+  </dl>
+  {% if supplier.notes %}<p class="text-neutral-300 mt-4 whitespace-pre-line text-sm">{{ supplier.notes }}</p>{% endif %}
+</div>
+{% endblock %}

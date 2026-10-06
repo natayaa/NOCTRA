@@ -173,9 +173,6 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
-/uploads/
-/sqls/
-db_noctra.sql
-/.vscode/
+media/
 
 # End of https://www.toptal.com/developers/gitignore/api/python

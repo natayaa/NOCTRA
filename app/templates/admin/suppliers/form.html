@@ -1,0 +1,60 @@
+{% extends "admin/base.html" %}
+{% block content %}
+{% set fv = form_values or {} %}
+<div class="page-header">
+  <div><h1 class="page-title">{{ 'New Supplier' if mode == 'create' else 'Edit Supplier' }}</h1>
+    {% if supplier %}<p class="page-subtitle mono text-xs">{{ supplier.code }}</p>{% endif %}
+  </div>
+  <div class="page-actions"><a href="/admin/suppliers" class="btn btn-secondary btn-sm">Back</a></div>
+</div>
+
+{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
+
+<form method="post" action="{{ '/admin/suppliers' if mode == 'create' else '/admin/suppliers/' ~ supplier.id }}"
+      class="max-w-2xl panel space-y-5" data-guard>
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+  <div class="form-row"><label class="form-label" for="name">Name <span class="req">*</span></label>
+    <input class="input" id="name" name="name" required maxlength="255"
+           value="{{ fv.get('name') or (supplier.name if supplier else '') }}" /></div>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row"><label class="form-label" for="contact_person">Contact person</label>
+      <input class="input" id="contact_person" name="contact_person" maxlength="255"
+             value="{{ fv.get('contact_person') or (supplier.contact_person if supplier else '') }}" /></div>
+    <div class="form-row"><label class="form-label" for="phone">Phone</label>
+      <input class="input" id="phone" name="phone" maxlength="32"
+             value="{{ fv.get('phone') or (supplier.phone if supplier else '') }}" /></div>
+  </div>
+
+  <div class="form-row"><label class="form-label" for="email">Email</label>
+    <input class="input" type="email" id="email" name="email" maxlength="255"
+           value="{{ fv.get('email') or (supplier.email if supplier else '') }}" /></div>
+
+  <div class="form-row"><label class="form-label" for="address">Address</label>
+    <textarea class="textarea" id="address" name="address" rows="2">{{ fv.get('address') or (supplier.address if supplier else '') }}</textarea></div>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row"><label class="form-label" for="tax_id">Tax ID</label>
+      <input class="input" id="tax_id" name="tax_id" maxlength="64"
+             value="{{ fv.get('tax_id') or (supplier.tax_id if supplier else '') }}" /></div>
+    <div class="form-row"><label class="form-label" for="payment_terms">Payment terms</label>
+      <input class="input" id="payment_terms" name="payment_terms" maxlength="64" placeholder="NET 14, COD"
+             value="{{ fv.get('payment_terms') or (supplier.payment_terms if supplier else '') }}" /></div>
+  </div>
+
+  <div class="form-row"><label class="form-label" for="notes">Notes</label>
+    <textarea class="textarea" id="notes" name="notes">{{ fv.get('notes') or (supplier.notes if supplier else '') }}</textarea></div>
+
+  {% if mode == 'edit' %}
+  <label class="flex items-center gap-2 text-sm">
+    <input type="checkbox" name="is_active" value="true" {% if supplier.is_active %}checked{% endif %} /> Active
+  </label>
+  {% endif %}
+
+  <div class="flex gap-2 pt-2">
+    <button class="btn btn-primary">{{ 'Create' if mode == 'create' else 'Save changes' }}</button>
+    <a href="/admin/suppliers" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

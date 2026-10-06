@@ -1,0 +1,159 @@
+{% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Inquiries</h1>
+    <p class="page-subtitle">{{ page_meta.total }} total</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/inquiries/new" class="btn btn-primary btn-sm">New Inquiry</a>
+  </div>
+</div>
+
+{# Status quick-filter chips #}
+<div class="mb-4 flex flex-wrap gap-2">
+  <a href="/admin/inquiries{% if only_open %}?only_open=true{% endif %}"
+     class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+    All
+  </a>
+  {% for s in statuses %}
+    <a href="/admin/inquiries?status={{ s }}"
+       class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
+      {{ s }}
+    </a>
+  {% endfor %}
+  <a href="/admin/inquiries?only_open=true"
+     class="badge {% if only_open and not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+    Open only
+  </a>
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+  {% if only_open %}<input type="hidden" name="only_open" value="true" />{% endif %}
+
+  <div class="form-row !mb-0 flex-1 min-w-[220px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}"
+           placeholder="Code, description, notes…" data-search-input />
+  </div>
+
+  <div class="form-row !mb-0 min-w-[140px]">
+    <label class="form-label" for="assigned_to_id">Assignee</label>
+    <select class="select" id="assigned_to_id" name="assigned_to_id">
+      <option value="">Anyone</option>
+      {% for u in assignees %}
+        <option value="{{ u.id }}" {% if assigned_filter == u.id %}selected{% endif %}>
+          {{ u.full_name }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row !mb-0 min-w-[120px]">
+    <label class="form-label" for="source">Source</label>
+    <select class="select" id="source" name="source">
+      <option value="">Any</option>
+      {% for s in sources %}
+        <option value="{{ s }}" {% if source_filter == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row !mb-0 min-w-[120px]">
+    <label class="form-label" for="finish_preference">Finish</label>
+    <select class="select" id="finish_preference" name="finish_preference">
+      <option value="">Any</option>
+      {% for f in finishes %}
+        <option value="{{ f }}" {% if finish_filter == f %}selected{% endif %}>
+          {{ finish_labels.get(f, f) }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if inquiries %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Customer / Vehicle</th>
+        <th>Request</th>
+        <th>Status</th>
+        <th>Assignee</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in inquiries %}
+      <tr>
+        <td class="mono text-xs">{{ i.code }}</td>
+        <td>
+          {% set c = customers_by_id.get(i.customer_id) if i.customer_id else None %}
+          {% set v = vehicles_by_id.get(i.vehicle_id) if i.vehicle_id else None %}
+          {% if c %}
+            <div class="font-medium">{{ c.name }}</div>
+          {% else %}
+            <div class="text-neutral-500 italic">Unassigned</div>
+          {% endif %}
+          {% if v %}
+            <div class="text-xs text-neutral-500">{{ v.brand }} {{ v.model }}{% if v.plate_number %} · {{ v.plate_number }}{% endif %}</div>
+          {% endif %}
+        </td>
+        <td class="text-sm">
+          {% if i.service_interest %}
+            <div>{{ service_labels.get(i.service_interest, i.service_interest) }}</div>
+          {% endif %}
+          <div class="text-xs text-neutral-500">
+            {% if i.color_preference %}{{ i.color_preference }}{% endif %}
+            {% if i.finish_preference %} · {{ finish_labels.get(i.finish_preference, i.finish_preference) }}{% endif %}
+          </div>
+          {% if i.has_custom_graphics %}
+            <span class="badge badge-accent mt-1">Custom graphics</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set status_badge = {
+            'NEW': 'badge-info',
+            'CONTACTED': 'badge-neutral',
+            'QUOTED': 'badge-accent',
+            'NEGOTIATING': 'badge-warning',
+            'APPROVED': 'badge-success',
+            'CONVERTED': 'badge-success',
+            'LOST': 'badge-danger'
+          }.get(i.status, 'badge-neutral') %}
+          <span class="badge {{ status_badge }}">{{ i.status }}</span>
+        </td>
+        <td class="text-sm">
+          {% set u = users_by_id.get(i.assigned_to_id) if i.assigned_to_id else None %}
+          {% if u %}{{ u.full_name }}{% else %}<span class="text-neutral-500">—</span>{% endif %}
+        </td>
+        <td class="text-xs text-neutral-500">{{ i.created_at | dt_id('%d %b') }}</td>
+        <td class="text-right">
+          <a href="/admin/inquiries/{{ i.id }}" class="btn btn-ghost btn-sm">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% include "components/pagination.html" %}
+
+{% else %}
+{{ empty_state(
+  title='No inquiries yet',
+  message='Create the first inquiry to start building the pipeline.',
+  action_url='/admin/inquiries/new',
+  action_label='New Inquiry',
+  icon='plus'
+) }}
+{% endif %}
+{% endblock %}

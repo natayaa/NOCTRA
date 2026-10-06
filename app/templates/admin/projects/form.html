@@ -1,0 +1,134 @@
+{% extends "admin/base.html" %}
+{% block content %}
+{% set fv = form_values or {} %}
+
+<div class="page-header">
+  <div><h1 class="page-title">{{ 'New Project' if mode == 'create' else 'Edit Project' }}</h1>
+    {% if project %}<p class="page-subtitle mono text-xs">{{ project.code }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
+       class="btn btn-secondary btn-sm">Back</a>
+  </div>
+</div>
+
+{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
+
+<form method="post"
+      action="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
+      class="max-w-3xl panel space-y-6" data-guard>
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+  {% if preselected_inquiry_id %}
+    <input type="hidden" name="inquiry_id" value="{{ preselected_inquiry_id }}" />
+  {% endif %}
+
+  {% if mode == 'create' %}
+  <section>
+    <h2 class="panel-title">Customer & Vehicle</h2>
+    <div class="grid md:grid-cols-2 gap-5 mt-3">
+      {% if preselected_customer %}
+        <div class="form-row">
+          <label class="form-label">Customer</label>
+          <input class="input" disabled value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
+          <input type="hidden" name="customer_id" value="{{ preselected_customer.id }}" />
+        </div>
+      {% else %}
+        <div class="form-row">
+          <label class="form-label" for="customer_id">Customer ID <span class="req">*</span></label>
+          <input class="input mono" id="customer_id" name="customer_id" required placeholder="paste UUID" />
+          <div class="form-hint">Create from a customer or inquiry page for a nicer picker.</div>
+        </div>
+      {% endif %}
+
+      {% if preselected_vehicle %}
+        <div class="form-row">
+          <label class="form-label">Vehicle</label>
+          <input class="input" disabled value="{{ preselected_vehicle.brand }} {{ preselected_vehicle.model }}{% if preselected_vehicle.plate_number %} — {{ preselected_vehicle.plate_number }}{% endif %}" />
+          <input type="hidden" name="vehicle_id" value="{{ preselected_vehicle.id }}" />
+        </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section>
+    <h2 class="panel-title">Details</h2>
+
+    <div class="form-row mt-3">
+      <label class="form-label" for="title">Title</label>
+      <input class="input" id="title" name="title" maxlength="255"
+             placeholder="e.g. Full body repaint — Mio Sporty"
+             value="{{ fv.get('title') or (project.title if project else '') }}" />
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="description">Description</label>
+      <textarea class="textarea" id="description" name="description" rows="3">{{ fv.get('description') or (project.description if project else '') }}</textarea>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="panel-title">Pricing</h2>
+    <div class="grid md:grid-cols-2 gap-5 mt-3">
+      <div class="form-row">
+        <label class="form-label" for="quoted_price">Quoted price (IDR)</label>
+        <input class="input" type="number" step="1000" id="quoted_price" name="quoted_price"
+               value="{{ fv.get('quoted_price') or (project.quoted_price if project else '') or '' }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="approved_price">Approved price (IDR)</label>
+        <input class="input" type="number" step="1000" id="approved_price" name="approved_price"
+               value="{{ fv.get('approved_price') or (project.approved_price if project else '') or '' }}" />
+        <div class="form-hint">Set automatically when status moves to APPROVED.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="panel-title">Timeline & Lead</h2>
+    <div class="grid md:grid-cols-3 gap-5 mt-3">
+      <div class="form-row">
+        <label class="form-label" for="start_date">Start date</label>
+        <input class="input" type="date" id="start_date" name="start_date"
+               value="{{ fv.get('start_date') or (project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '') }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="target_end_date">Target end date</label>
+        <input class="input" type="date" id="target_end_date" name="target_end_date"
+               value="{{ fv.get('target_end_date') or (project.target_end_date.strftime('%Y-%m-%d') if project and project.target_end_date else '') }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="priority">Priority</label>
+        <input class="input" type="number" id="priority" name="priority" min="0" max="10"
+               value="{{ fv.get('priority') or (project.priority if project else 0) }}" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="assigned_lead_id">Workshop lead</label>
+      <select class="select" id="assigned_lead_id" name="assigned_lead_id">
+        <option value="">—</option>
+        {% for u in assignees %}
+          <option value="{{ u.id }}" {% if (project and project.assigned_lead_id == u.id) or fv.get('assigned_lead_id') == u.id|string %}selected{% endif %}>
+            {{ u.full_name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="panel-title">Notes</h2>
+    <div class="form-row mt-3">
+      <label class="form-label" for="internal_notes">Internal notes</label>
+      <textarea class="textarea" id="internal_notes" name="internal_notes" rows="2">{{ fv.get('internal_notes') or (project.internal_notes if project else '') }}</textarea>
+    </div>
+  </section>
+
+  <div class="flex gap-2 pt-2">
+    <button class="btn btn-primary">{{ 'Create Project' if mode == 'create' else 'Save changes' }}</button>
+    <a href="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
+       class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

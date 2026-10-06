@@ -1,0 +1,144 @@
+"""Inventory vocabulary: material categories, transaction types, units."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+# ════════════════════════════════════════════════════════════════
+# MATERIALS
+# ════════════════════════════════════════════════════════════════
+
+class MaterialCategory(StrEnum):
+    PRIMER = "PRIMER"
+    BASECOAT = "BASECOAT"
+    CLEARCOAT = "CLEARCOAT"
+    THINNER = "THINNER"
+    CHEMICAL = "CHEMICAL"          # hardeners, wax, polish
+    CONSUMABLE = "CONSUMABLE"      # sandpaper, tape, cloth
+    PART = "PART"                  # bolts, clips, cables
+    OTHER = "OTHER"
+
+
+MATERIAL_CATEGORIES: list[str] = [c.value for c in MaterialCategory]
+
+MATERIAL_CATEGORY_LABELS: dict[str, str] = {
+    MaterialCategory.PRIMER.value:     "Primer",
+    MaterialCategory.BASECOAT.value:   "Basecoat",
+    MaterialCategory.CLEARCOAT.value:  "Clearcoat",
+    MaterialCategory.THINNER.value:    "Thinner",
+    MaterialCategory.CHEMICAL.value:   "Chemical",
+    MaterialCategory.CONSUMABLE.value: "Consumable",
+    MaterialCategory.PART.value:       "Part",
+    MaterialCategory.OTHER.value:      "Other",
+}
+
+
+# ════════════════════════════════════════════════════════════════
+# UNITS
+# ════════════════════════════════════════════════════════════════
+
+class Unit(StrEnum):
+    ML = "ml"
+    LITER = "liter"
+    GR = "gr"
+    KG = "kg"
+    PIECE = "piece"
+    BOX = "box"
+    SET = "set"
+    ROLL = "roll"
+    METER = "meter"
+    CAN = "can"
+    BOTTLE = "bottle"
+
+
+UNITS: list[str] = [u.value for u in Unit]
+
+
+# ════════════════════════════════════════════════════════════════
+# TRANSACTION TYPES — every stock movement is one of these
+# ════════════════════════════════════════════════════════════════
+
+class TransactionType(StrEnum):
+    OPENING = "OPENING"              # initial stock when system went live
+    PURCHASE = "PURCHASE"            # + received from supplier
+    CONSUMPTION = "CONSUMPTION"      # - used on a project
+    WASTE = "WASTE"                  # - spilled, dried, contaminated
+    ADJUSTMENT_IN = "ADJUSTMENT_IN"  # + correction (found stock)
+    ADJUSTMENT_OUT = "ADJUSTMENT_OUT"  # - correction (miscount)
+    RETURN = "RETURN"                # - returned to supplier
+    TRANSFER_IN = "TRANSFER_IN"      # + from another location
+    TRANSFER_OUT = "TRANSFER_OUT"    # - to another location
+
+
+TRANSACTION_TYPES: list[str] = [t.value for t in TransactionType]
+
+TRANSACTION_TYPE_LABELS: dict[str, str] = {
+    TransactionType.OPENING.value:        "Opening stock",
+    TransactionType.PURCHASE.value:       "Purchase",
+    TransactionType.CONSUMPTION.value:    "Consumption",
+    TransactionType.WASTE.value:          "Waste",
+    TransactionType.ADJUSTMENT_IN.value:  "Adjustment (in)",
+    TransactionType.ADJUSTMENT_OUT.value: "Adjustment (out)",
+    TransactionType.RETURN.value:         "Return",
+    TransactionType.TRANSFER_IN.value:    "Transfer in",
+    TransactionType.TRANSFER_OUT.value:   "Transfer out",
+}
+
+# Which transaction types ADD to stock vs. REMOVE from stock
+INBOUND_TYPES: frozenset[str] = frozenset({
+    TransactionType.OPENING.value,
+    TransactionType.PURCHASE.value,
+    TransactionType.ADJUSTMENT_IN.value,
+    TransactionType.TRANSFER_IN.value,
+})
+
+OUTBOUND_TYPES: frozenset[str] = frozenset({
+    TransactionType.CONSUMPTION.value,
+    TransactionType.WASTE.value,
+    TransactionType.ADJUSTMENT_OUT.value,
+    TransactionType.RETURN.value,
+    TransactionType.TRANSFER_OUT.value,
+})
+
+
+# ════════════════════════════════════════════════════════════════
+# PURCHASE ORDERS
+# ════════════════════════════════════════════════════════════════
+
+class PurchaseOrderStatus(StrEnum):
+    DRAFT = "DRAFT"
+    SENT = "SENT"
+    RECEIVED = "RECEIVED"
+    CLOSED = "CLOSED"
+    CANCELLED = "CANCELLED"
+
+
+PURCHASE_ORDER_STATUSES: list[str] = [s.value for s in PurchaseOrderStatus]
+
+PURCHASE_ORDER_STATUS_LABELS: dict[str, str] = {
+    PurchaseOrderStatus.DRAFT.value:     "Draft",
+    PurchaseOrderStatus.SENT.value:      "Sent to supplier",
+    PurchaseOrderStatus.RECEIVED.value:  "Received",
+    PurchaseOrderStatus.CLOSED.value:    "Closed",
+    PurchaseOrderStatus.CANCELLED.value: "Cancelled",
+}
+
+TERMINAL_PO_STATUSES: frozenset[str] = frozenset({
+    PurchaseOrderStatus.CLOSED.value,
+    PurchaseOrderStatus.CANCELLED.value,
+})
+
+
+# ════════════════════════════════════════════════════════════════
+# REFERENCE TYPES for inventory transactions
+#
+# The `reference_id` column on a transaction points at *something*.
+# Right now we can reference a Purchase Order. Later, Projects will
+# add their own reference type without a migration.
+# ════════════════════════════════════════════════════════════════
+
+class ReferenceType(StrEnum):
+    PURCHASE_ORDER = "PURCHASE_ORDER"
+    PROJECT = "PROJECT"              # Phase 4
+    MANUAL = "MANUAL"                # ad-hoc adjustments

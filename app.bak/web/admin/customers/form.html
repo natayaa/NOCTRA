@@ -1,0 +1,70 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'New Customer' if mode == 'create' else 'Edit Customer' }}</h1>
+    {% if customer %}<p class="page-subtitle font-mono text-xs">{{ customer.code }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="/admin/customers" class="btn btn-secondary btn-sm">Back</a>
+  </div>
+</div>
+
+<form method="post" action="{{ '/admin/customers' if mode == 'create' else '/admin/customers/' ~ customer.id }}"
+      class="max-w-3xl panel space-y-5" data-guard>
+  <div class="form-row">
+    <label class="form-label" for="name">Full name <span class="req">*</span></label>
+    <input class="input" id="name" name="name" required maxlength="255"
+           value="{{ customer.name if customer else '' }}" />
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row">
+      <label class="form-label" for="phone">Phone / WhatsApp</label>
+      <input class="input" id="phone" name="phone" maxlength="32"
+             value="{{ customer.phone if customer else '' }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="email">Email</label>
+      <input class="input" type="email" id="email" name="email" maxlength="255"
+             value="{{ customer.email if customer else '' }}" />
+    </div>
+  </div>
+
+  <div class="form-row">
+    <label class="form-label" for="address_line1">Address</label>
+    <input class="input" id="address_line1" name="address_line1" maxlength="255"
+           value="{{ customer.address_line1 if customer else '' }}" />
+  </div>
+
+  <div class="form-row">
+    <label class="form-label" for="city">City</label>
+    <input class="input" id="city" name="city" maxlength="100"
+           value="{{ customer.city if customer else '' }}" />
+  </div>
+
+  {% if mode == 'edit' %}
+  <div class="form-row">
+    <label class="form-label" for="status">Status</label>
+    <select class="select" id="status" name="status">
+      {% for s in ['LEAD','ACTIVE','INACTIVE','BLOCKED'] %}
+        <option value="{{ s }}" {% if customer.status == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="form-row">
+    <label class="form-label" for="notes">Notes</label>
+    <textarea class="textarea" id="notes" name="notes">{{ customer.notes if customer else '' }}</textarea>
+  </div>
+
+  <input type="hidden" name="_csrf" value="{{ csrf_token or '' }}" />
+
+  <div class="flex gap-2 pt-2">
+    <button type="submit" class="btn btn-primary">{{ 'Create' if mode == 'create' else 'Save changes' }}</button>
+    <a href="/admin/customers" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

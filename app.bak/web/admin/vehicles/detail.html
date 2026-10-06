@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ vehicle.brand }} {{ vehicle.model }}</h1>
+    {% if vehicle.plate_number %}<p class="page-subtitle font-mono text-xs">{{ vehicle.plate_number }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="/admin/customers/{{ customer.id }}" class="btn btn-secondary btn-sm">Owner</a>
+  </div>
+</div>
+
+<div class="panel max-w-3xl">
+  <div class="panel-title">Details</div>
+  <dl class="grid grid-cols-2 gap-4 mt-4 text-sm">
+    <div><dt class="text-neutral-500">Brand</dt><dd>{{ vehicle.brand }}</dd></div>
+    <div><dt class="text-neutral-500">Model</dt><dd>{{ vehicle.model }}</dd></div>
+    <div><dt class="text-neutral-500">Year</dt><dd>{{ vehicle.year or '—' }}</dd></div>
+    <div><dt class="text-neutral-500">Color</dt><dd>{{ vehicle.color or '—' }}</dd></div>
+    <div><dt class="text-neutral-500">Plate</dt><dd class="font-mono">{{ vehicle.plate_number or '—' }}</dd></div>
+    <div><dt class="text-neutral-500">Category</dt><dd>{{ vehicle.category or '—' }}</dd></div>
+    <div><dt class="text-neutral-500">VIN</dt><dd class="font-mono text-xs">{{ vehicle.vin or '—' }}</dd></div>
+    <div><dt class="text-neutral-500">Engine No.</dt><dd class="font-mono text-xs">{{ vehicle.engine_number or '—' }}</dd></div>
+    <div class="col-span-2"><dt class="text-neutral-500">Owner</dt><dd>{{ customer.name }}</dd></div>
+  </dl>
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#18181b;line-height:1.6;">
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f4f5;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+
+          {# Header #}
+          <tr>
+            <td style="background:#0a0a0a;padding:24px 32px;">
+              <span style="color:#f97316;font-size:20px;font-weight:700;letter-spacing:0.02em;">NOCTRA</span>
+              <span style="color:#a3a3a3;font-size:12px;letter-spacing:0.14em;margin-left:8px;text-transform:uppercase;">Autoworks</span>
+            </td>
+          </tr>
+
+          {# Body #}
+          <tr>
+            <td style="padding:32px;">
+              {% block content %}{% endblock %}
+            </td>
+          </tr>
+
+          {# Footer #}
+          <tr>
+            <td style="background:#fafafa;padding:24px 32px;border-top:1px solid #e4e4e7;font-size:12px;color:#71717a;line-height:1.7;">
+              <p style="margin:0 0 6px;"><strong style="color:#3f3f46;">NOCTRA Autoworks</strong></p>
+              <p style="margin:0 0 6px;">{{ public_address }}</p>
+              <p style="margin:0 0 6px;">
+                Phone: <a href="tel:{{ public_phone }}" style="color:#f97316;text-decoration:none;">{{ public_phone }}</a>
+                {% if public_whatsapp %} · WhatsApp: {{ public_whatsapp }}{% endif %}
+              </p>
+              <p style="margin:0;">
+                Email: <a href="mailto:{{ public_email }}" style="color:#f97316;text-decoration:none;">{{ public_email }}</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
