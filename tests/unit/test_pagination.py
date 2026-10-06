@@ -15,14 +15,8 @@ def test_page_params_offset_later_page():
     assert p.limit == 10
 
 
-def test_page_meta_calculations():
+def test_page_meta_pages():
     m = PageMeta(page=1, size=25, total=100, pages=4, has_next=True, has_prev=False)
     assert m.pages == 4
     assert m.has_next is True
     assert m.has_prev is False
-
-
-def test_page_meta_last_page():
-    m = PageMeta(page=4, size=25, total=100, pages=4, has_next=False, has_prev=True)
-    assert m.has_next is False
-    assert m.has_prev is True

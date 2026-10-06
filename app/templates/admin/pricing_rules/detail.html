@@ -1,0 +1,70 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ rule.name }}</h1>
+    <p class="page-subtitle">
+      {% if specificity == 3 %}Service + vehicle specific
+      {% elif specificity == 2 %}Service-wide
+      {% elif specificity == 1 %}Vehicle-category-wide
+      {% else %}Global default{% endif %}
+      {% if not rule.is_active %} · <span class="badge badge-neutral">Inactive</span>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/pricing-rules/{{ rule.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+  </div>
+</div>
+
+{% set err = request.query_params.get('error') %}
+{% if err %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ err }}</div></div>{% endif %}
+
+<div class="panel max-w-2xl">
+  <dl class="grid grid-cols-2 gap-4 text-sm">
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Service</dt>
+      <dd>{{ service_labels.get(rule.service_interest, rule.service_interest) if rule.service_interest else 'Any' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Vehicle category</dt>
+      <dd>{{ rule.vehicle_category or 'Any' }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Target margin</dt>
+      <dd class="font-mono text-noctra-accent">{{ rule.target_margin_pct }}%</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Minimum margin</dt>
+      <dd class="font-mono">{{ rule.min_margin_pct }}%</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Complexity factor</dt>
+      <dd class="font-mono">{{ rule.complexity_factor }}×</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Min price floor</dt>
+      <dd class="font-mono">{{ rule.min_price_floor | rupiah if rule.min_price_floor else '—' }}</dd></div>
+  </dl>
+  {% if rule.notes %}<p class="text-neutral-300 mt-4 whitespace-pre-line text-sm">{{ rule.notes }}</p>{% endif %}
+</div>
+
+<div class="panel max-w-2xl mt-4">
+  <div class="panel-title">Example</div>
+  <p class="text-sm text-neutral-400 mt-2">For an HPP of <strong>Rp 500.000</strong>, this rule computes:</p>
+  <div class="mt-4 grid grid-cols-3 gap-4 text-sm">
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Adjusted HPP</div>
+      <div class="font-mono">{{ (500000 * rule.complexity_factor) | rupiah }}</div>
+    </div>
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Minimum price</div>
+      <div class="font-mono">{{ (500000 * rule.complexity_factor / (1 - rule.min_margin_pct / 100)) | rupiah }}</div>
+    </div>
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Recommended price</div>
+      <div class="font-mono text-noctra-accent">{{ (500000 * rule.complexity_factor / (1 - rule.target_margin_pct / 100)) | rupiah }}</div>
+    </div>
+  </div>
+</div>
+
+{% if rule.is_active %}
+<div class="panel max-w-2xl mt-4">
+  <div class="panel-title">Danger zone</div>
+  <p class="text-xs text-neutral-500 mt-1 mb-3">Deactivating a rule removes it from consideration. Historical pricing snapshots are unaffected.</p>
+  <form method="post" action="/admin/pricing-rules/{{ rule.id }}/deactivate"
+        data-confirm="Deactivate this rule?">
+    <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+    <button class="btn btn-danger btn-sm">Deactivate</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

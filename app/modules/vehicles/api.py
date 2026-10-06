@@ -88,6 +88,40 @@ async def get_vehicle(
         raise NotFoundError("Vehicle not found")
     return VehicleDetail.model_validate(vehicle)
 
+@vehicles_router.get("/search", response_model=list[dict])
+async def search_vehicles(
+    db: DbSession,
+    q: str = Query("", min_length=1, max_length=100),
+    customer_id: UUID | None = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+    _=Depends(require_permission(PermissionCode.VEHICLE_READ)),
+) -> list[dict]:
+    from sqlalchemy import and_, or_, select
+    from app.modules.vehicles.models import Vehicle
+
+    like = f"%{q.strip()}%"
+    conds = [
+        or_(
+            Vehicle.brand.ilike(like),
+            Vehicle.model.ilike(like),
+            Vehicle.plate_number.ilike(like),
+        )
+    ]
+    if customer_id:
+        conds.append(Vehicle.customer_id == customer_id)
+
+    stmt = select(Vehicle).where(and_(*conds)).order_by(Vehicle.brand, Vehicle.model).limit(limit)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "id": str(v.id),
+            "label": f"{v.brand} {v.model}" + (f" — {v.plate_number}" if v.plate_number else ""),
+            "sublabel": f"{v.year or ''} {v.category or ''}".strip(),
+            "customer_id": str(v.customer_id),
+        }
+        for v in rows
+    ]
+
 
 @vehicles_router.patch("/{vehicle_id}", response_model=VehicleDetail)
 async def update_vehicle(
@@ -119,3 +153,5 @@ async def list_models(
         VehicleModelOut.model_validate(m)
         for m in await VehicleRepository(db).list_models(brand_id)
     ]
+
+

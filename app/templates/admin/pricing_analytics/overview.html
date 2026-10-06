@@ -1,0 +1,134 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Pricing Analytics</h1>
+    <p class="page-subtitle">Historical pricing decisions and outcomes</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/pricing-rules" class="btn btn-secondary btn-sm">Pricing Rules</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-label">Snapshots recorded</div>
+    <div class="stat-value">{{ total }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Avg target margin</div>
+    <div class="stat-value">{{ '%.1f'|format(avg_target_margin) }}%</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Avg actual margin</div>
+    <div class="stat-value
+      {% if avg_actual_margin >= avg_target_margin %}text-noctra-success
+      {% elif avg_actual_margin >= 30 %}text-noctra-warning
+      {% else %}text-noctra-danger{% endif %}">
+      {{ '%.1f'|format(avg_actual_margin) }}%
+    </div>
+    {% if avg_target_margin > 0 %}
+      {% set delta = avg_actual_margin - avg_target_margin %}
+      <div class="stat-delta {% if delta >= 0 %}up{% else %}down{% endif %}">
+        {{ '%+.1f'|format(delta) }} pts vs target
+      </div>
+    {% endif %}
+  </div>
+  <div class="stat">
+    <div class="stat-label">Avg recommended</div>
+    <div class="stat-value">{{ avg_recommended | rupiah }}</div>
+    {% if avg_quoted > 0 %}
+      {% set quote_delta = avg_quoted - avg_recommended %}
+      <div class="stat-delta {% if quote_delta >= 0 %}up{% else %}down{% endif %}">
+        Quoted avg {{ quote_delta | abs | rupiah }} {{ 'above' if quote_delta >= 0 else 'below' }}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if by_service %}
+<div class="panel mb-6">
+  <div class="panel-title">Margin by service</div>
+  <p class="text-xs text-neutral-500 mt-1">Average actual margin vs target, per service interest</p>
+  <div class="table-wrap mt-4">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th class="text-right">Snapshots</th>
+          <th class="text-right">Target margin</th>
+          <th class="text-right">Actual margin</th>
+          <th class="text-right">Delta</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in by_service %}
+        {% set delta = s.avg_margin - s.avg_target %}
+        <tr>
+          <td class="font-medium">{{ s.service_interest }}</td>
+          <td class="text-right font-mono text-sm">{{ s.count }}</td>
+          <td class="text-right font-mono text-xs text-neutral-500">{{ '%.1f'|format(s.avg_target) }}%</td>
+          <td class="text-right font-mono text-sm">{{ '%.1f'|format(s.avg_margin) }}%</td>
+          <td class="text-right font-mono text-xs
+            {% if delta >= 0 %}text-noctra-success
+            {% elif delta > -5 %}text-noctra-warning
+            {% else %}text-noctra-danger{% endif %}">
+            {{ '%+.1f'|format(delta) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-title">Recent pricing decisions</div>
+  {% if snapshots %}
+  <div class="table-wrap mt-3">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Service / Category</th>
+          <th class="text-right">HPP</th>
+          <th class="text-right">Target</th>
+          <th class="text-right">Recommended</th>
+          <th class="text-right">Quoted</th>
+          <th class="text-right">Actual margin</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in snapshots %}
+        <tr>
+          <td class="text-xs text-neutral-500">{{ s.created_at | dt_id('%d %b %Y') }}</td>
+          <td>
+            <div class="text-sm">{{ s.service_interest or '—' }}</div>
+            {% if s.vehicle_category %}<div class="text-xs text-neutral-500">{{ s.vehicle_category }}</div>{% endif %}
+          </td>
+          <td class="text-right font-mono text-xs">{{ s.hpp_estimate | rupiah }}</td>
+          <td class="text-right font-mono text-xs">{{ s.target_margin_pct }}%</td>
+          <td class="text-right font-mono text-xs text-noctra-accent">{{ s.recommended_price | rupiah }}</td>
+          <td class="text-right font-mono text-xs">{{ s.actual_quoted_price | rupiah if s.actual_quoted_price else '—' }}</td>
+          <td class="text-right font-mono text-sm
+            {% if not s.actual_margin_pct %}text-neutral-500
+            {% elif s.actual_margin_pct >= s.target_margin_pct %}text-noctra-success
+            {% elif s.actual_margin_pct >= 30 %}text-noctra-warning
+            {% else %}text-noctra-danger{% endif %}">
+            {% if s.actual_margin_pct %}{{ '%.1f'|format(s.actual_margin_pct) }}%{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "components/pagination.html" %}
+  {% else %}
+  <p class="text-neutral-500 text-sm mt-3">
+    No snapshots yet. Snapshots are recorded automatically when a project is approved.
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

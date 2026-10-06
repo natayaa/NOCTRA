@@ -1,0 +1,20 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">{{ payment.code }}</h1></div>
+  <div class="page-actions"><a href="/admin/payments" class="btn btn-secondary btn-sm">Back</a></div>
+</div>
+
+<div class="panel max-w-2xl">
+  <dl class="grid grid-cols-2 gap-4 text-sm">
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Direction</dt>
+      <dd><span class="badge {% if payment.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %}">{{ payment.direction }}</span></dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Amount</dt>
+      <dd class="font-mono">{{ payment.amount | rupiah }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Date</dt><dd>{{ payment.payment_date.strftime('%d %b %Y') }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Method</dt><dd>{{ payment.method }}</dd></div>
+    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Reference number</dt><dd>{{ payment.reference_number or '—' }}</dd></div>
+  </dl>
+  {% if payment.notes %}<p class="text-neutral-300 mt-4 text-sm">{{ payment.notes }}</p>{% endif %}
+</div>
+{% endblock %}

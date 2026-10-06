@@ -29,8 +29,6 @@ async def test_audit_log_writes_row(db):
     assert row.new_data == {"foo": "bar"}
 
 
-@pytest.mark.asyncio
-async def test_audit_is_append_only(db):
-    """Sanity: no update path exists on AuditService."""
+def test_audit_service_is_append_only():
     assert not hasattr(AuditService, "update")
     assert not hasattr(AuditService, "delete")

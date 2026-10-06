@@ -1,0 +1,97 @@
+{% extends "admin/base.html" %}
+{% block content %}
+{% set fv = form_values or {} %}
+<div class="page-header">
+  <div><h1 class="page-title">{{ 'New Invoice' if mode == 'create' else 'Edit Invoice' }}</h1></div>
+  <div class="page-actions"><a href="/admin/invoices" class="btn btn-secondary btn-sm">Back</a></div>
+</div>
+
+{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
+
+<form method="post"
+      action="{{ '/admin/invoices' if mode == 'create' else '/admin/invoices/' ~ invoice.id }}"
+      class="max-w-3xl panel space-y-6" data-guard>
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+  {% if preselected_customer %}
+    <input type="hidden" name="customer_id" value="{{ preselected_customer.id }}" />
+    <input type="hidden" name="project_id" value="{{ preselected_project.id if preselected_project else '' }}" />
+    <div class="form-row">
+      <label class="form-label">Customer</label>
+      <input class="input" disabled value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
+    </div>
+  {% elif mode == 'create' %}
+    <div class="form-row">
+      <label class="form-label" for="customer_id">Customer ID <span class="req">*</span></label>
+      <input class="input mono" id="customer_id" name="customer_id" required placeholder="paste UUID" />
+    </div>
+  {% endif %}
+
+  <div class="grid md:grid-cols-3 gap-5">
+    <div class="form-row">
+      <label class="form-label" for="issue_date">Issue date <span class="req">*</span></label>
+      <input class="input" type="date" id="issue_date" name="issue_date" required
+             value="{{ fv.get('issue_date') or (invoice.issue_date.strftime('%Y-%m-%d') if invoice and invoice.issue_date else today) }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="due_date">Due date</label>
+      <input class="input" type="date" id="due_date" name="due_date"
+             value="{{ fv.get('due_date') or (invoice.due_date.strftime('%Y-%m-%d') if invoice and invoice.due_date else '') }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="tax_rate_pct">Tax rate (%)</label>
+      <input class="input" type="number" step="0.1" min="0" max="99"
+             id="tax_rate_pct" name="tax_rate_pct"
+             value="{{ fv.get('tax_rate_pct') or (invoice.tax_rate_pct if invoice else 0) }}" />
+    </div>
+  </div>
+
+  {% if mode == 'create' %}
+  <section>
+    <h2 class="panel-title">Line items</h2>
+    <div id="items-container" class="space-y-3 mt-3">
+      <div class="grid grid-cols-12 gap-3 items-end" data-item-row>
+        <div class="col-span-6"><label class="form-label">Description</label><input class="input" name="item_description" /></div>
+        <div class="col-span-2"><label class="form-label">Qty</label><input class="input" type="number" step="0.01" name="item_quantity" value="1" /></div>
+        <div class="col-span-3"><label class="form-label">Unit price</label><input class="input" type="number" step="1000" name="item_unit_price" value="0" /></div>
+        <div class="col-span-1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('[data-item-row]').remove()">×</button></div>
+      </div>
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm mt-3" onclick="addItemRow()">+ Add item</button>
+  </section>
+
+  <script>
+    function addItemRow() {
+      const container = document.getElementById('items-container');
+      const row = container.querySelector('[data-item-row]').cloneNode(true);
+      row.querySelectorAll('input').forEach(i => { if (i.name !== 'item_quantity') i.value = i.name === 'item_quantity' ? '1' : ''; });
+      container.appendChild(row);
+    }
+  </script>
+  {% endif %}
+
+  <div class="grid md:grid-cols-2 gap-5">
+    <div class="form-row">
+      <label class="form-label" for="discount_amount">Discount amount (IDR)</label>
+      <input class="input" type="number" step="1000" min="0" id="discount_amount" name="discount_amount"
+             value="{{ fv.get('discount_amount') or (invoice.discount_amount if invoice else 0) }}" />
+    </div>
+  </div>
+
+  <div class="form-row">
+    <label class="form-label" for="terms">Terms</label>
+    <input class="input" id="terms" name="terms" maxlength="500"
+           value="{{ fv.get('terms') or (invoice.terms if invoice else '') }}" />
+  </div>
+
+  <div class="form-row">
+    <label class="form-label" for="notes">Notes</label>
+    <textarea class="textarea" id="notes" name="notes" rows="2">{{ fv.get('notes') or (invoice.notes if invoice else '') }}</textarea>
+  </div>
+
+  <div class="flex gap-2 pt-2">
+    <button class="btn btn-primary">{{ 'Create invoice' if mode == 'create' else 'Save changes' }}</button>
+    <a href="/admin/invoices" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

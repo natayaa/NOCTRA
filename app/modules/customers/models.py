@@ -47,6 +47,7 @@ class Customer(Base, UUIDMixin, TimestampMixin):
         back_populates="customer",
         cascade="all, delete-orphan",
         order_by="CustomerContact.created_at.desc()",
+        lazy="selectin",
     )
 
 

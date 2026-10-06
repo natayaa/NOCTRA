@@ -39,6 +39,8 @@ from app.modules.projects.api import (
     employees_router,
     projects_router,
 )
+from app.modules.pricing.api import router as pricing_router
+from app.modules.finance.api import router as finance_router
 
 from app.web.admin import routes as admin_routes
 from app.web.public import routes as public_routes
@@ -53,6 +55,12 @@ from app.web.admin import suppliers as admin_suppliers
 from app.web.admin import email_logs as admin_email_logs
 from app.web.admin import employees as admin_employees
 from app.web.admin import projects as admin_projects
+from app.web.admin import pricing_rules as admin_pricing_rules
+from app.web.admin import pricing_analytics as admin_pricing_analytics
+from app.web.admin import expenses as admin_expenses
+from app.web.admin import finance_reports as admin_finance_reports
+from app.web.admin import invoices as admin_invoices
+from app.web.admin import payments as admin_payments
 
 
 
@@ -132,6 +140,8 @@ def create_app() -> FastAPI:
     app.include_router(purchase_orders_router, prefix=API)
     app.include_router(projects_router, prefix=API)
     app.include_router(employees_router, prefix=API)
+    app.include_router(pricing_router, prefix=API)
+    app.include_router(finance_router, prefix=API)
 
     # ── Web ────────────────────────────────────────────
     app.include_router(public_routes.router)
@@ -147,6 +157,12 @@ def create_app() -> FastAPI:
     app.include_router(admin_email_logs.router)
     app.include_router(admin_projects.router)
     app.include_router(admin_employees.router)
+    app.include_router(admin_pricing_rules.router)
+    app.include_router(admin_pricing_analytics.router)
+    app.include_router(admin_invoices.router)
+    app.include_router(admin_payments.router)
+    app.include_router(admin_expenses.router)
+    app.include_router(admin_finance_reports.router)
 
     return app
 

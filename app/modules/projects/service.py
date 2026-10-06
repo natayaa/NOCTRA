@@ -131,6 +131,7 @@ class CostingService:
         self.materials = MaterialRepository(db)
         self.employees = EmployeeRepository(db)
         self.settings = SettingsService(db)
+        self.audit = AuditService(db) 
 
     async def overhead_rate_per_hour(self) -> float:
         overhead = await self.settings.get_value(SETTING_MONTHLY_OVERHEAD, "0")
@@ -247,6 +248,9 @@ class CostingService:
 
         item = await self._get_item_or_404(project_id, item_id)
 
+        # ── Capture the OLD quantity BEFORE we mutate the item ──
+        old_actual_qty = float(item.actual_quantity or 0)
+
         for field, value in payload.model_dump(exclude_unset=True).items():
             if value is not None:
                 setattr(item, field, value)
@@ -264,8 +268,8 @@ class CostingService:
         # Recompute estimated cost
         item.estimated_cost = float(item.estimated_quantity or 0) * float(item.estimated_unit_cost or 0)
 
-        # Recompute actual cost and sync inventory consumption
-        await self._sync_actual_cost(item, previous_actual_qty=payload.actual_quantity)
+        # Recompute actual cost and sync inventory consumption with the correct delta
+        await self._sync_actual_cost(item, previous_actual_qty=old_actual_qty)
         await self.recalc_project_totals(project_id)
         await self.audit.log(
             action=AuditAction.COST_ENTRY,
@@ -538,6 +542,7 @@ class ProjectService:
             project.closing_note = f"{existing}\n[{current} → {new_status}] {note}".strip()
 
         await self.db.flush()
+
         await self.audit.log(
             action=AuditAction.STATUS_CHANGE,
             table_name="projects",
@@ -546,7 +551,95 @@ class ProjectService:
             old_data={"status": current},
             new_data={"status": new_status, "note": note},
         )
+
+        # ── Pricing snapshots ────────────────────────
+        # When a project is APPROVED, freeze the pricing decision.
+        # When DELIVERED, update with actual margin.
+        if new_status == ProjectStatus.APPROVED.value:
+            await self._record_approval_snapshot(project, actor=actor)
+
+        if new_status == ProjectStatus.DELIVERED.value:
+            await self._update_delivery_snapshot(project, actor=actor)
+
         return project
+
+    # ── Snapshot helpers ────────────────────────────
+
+    async def _record_approval_snapshot(self, project, *, actor: User) -> None:
+        """Record a pricing snapshot when the project is approved."""
+        from app.modules.inquiries.repository import InquiryRepository
+        from app.modules.pricing.schemas import PricingSnapshotCreate
+        from app.modules.pricing.service import PricingService
+
+        hpp = float(project.actual_hpp or project.estimated_hpp or 0)
+        if hpp <= 0:
+            return  # nothing meaningful to snapshot
+
+        # Get service + category for rule matching
+        service_interest = None
+        vehicle_category = None
+        if project.inquiry_id:
+            inq = await InquiryRepository(self.db).get(project.inquiry_id)
+            if inq:
+                service_interest = inq.service_interest
+        if project.vehicle_id:
+            from app.modules.vehicles.repository import VehicleRepository
+            v = await VehicleRepository(self.db).get(project.vehicle_id)
+            if v:
+                vehicle_category = v.category
+
+        await PricingService(self.db).record_snapshot(
+            PricingSnapshotCreate(
+                project_id=project.id,
+                inquiry_id=project.inquiry_id,
+                service_interest=service_interest,
+                vehicle_category=vehicle_category,
+                hpp_estimate=hpp,
+                actual_quoted_price=(
+                    float(project.approved_price)
+                    if project.approved_price
+                    else (float(project.quoted_price) if project.quoted_price else None)
+                ),
+                notes=f"Snapshot at approval. Status transitioned to {ProjectStatus.APPROVED.value}.",
+            ),
+            actor=actor,
+        )
+
+    async def _update_delivery_snapshot(self, project, *, actor: User) -> None:
+        """
+        On delivery, update the most recent snapshot with the final HPP.
+        Actual HPP may have changed since approval.
+        """
+        from sqlalchemy import select
+        from app.modules.pricing.models import PricingSnapshot
+
+        # Find the most recent snapshot for this project
+        stmt = (
+            select(PricingSnapshot)
+            .where(PricingSnapshot.project_id == project.id)
+            .order_by(PricingSnapshot.created_at.desc())
+            .limit(1)
+        )
+        snap = (await self.db.execute(stmt)).scalar_one_or_none()
+        if not snap:
+            return
+
+        # Refresh with final numbers
+        final_hpp = float(project.actual_hpp or snap.hpp_estimate)
+        final_price = (
+            float(project.approved_price)
+            if project.approved_price
+            else (float(project.quoted_price) if project.quoted_price else None)
+        )
+
+        snap.hpp_estimate = final_hpp
+        snap.actual_quoted_price = final_price
+        if final_price and final_hpp > 0:
+            from app.modules.pricing.service import margin_of
+            snap.actual_margin_pct = margin_of(final_price, final_hpp)
+        snap.notes = (snap.notes or "") + f"\n[DELIVERED] Final HPP: {final_hpp}, final price: {final_price}."
+
+        await self.db.flush()
 
     async def _get_or_404(self, pid: UUID) -> Project:
         p = await self.repo.get(pid)

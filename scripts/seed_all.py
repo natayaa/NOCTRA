@@ -17,6 +17,7 @@ from scripts import (
     seed_employees as seed_employees,
     seed_materials,
     seed_services,
+    seed_pricing_rules,
     seed_settings as seed_app_settings
 )
 
@@ -29,6 +30,7 @@ STEPS = [
     ("service catalog", seed_services.main),
     ("material catalog", seed_materials.main),
     ("employees", seed_employees.main),
+    ("pricing rules", seed_pricing_rules.main),
 ]
 
 

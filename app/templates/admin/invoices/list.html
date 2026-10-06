@@ -1,0 +1,79 @@
+{% extends "admin/base.html" %}
+{% include "components/pagination.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Invoices</h1>
+    <p class="page-subtitle">{{ page_meta.total }} total</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/invoices/new" class="btn btn-primary btn-sm">New Invoice</a>
+  </div>
+</div>
+
+<div class="mb-4 flex flex-wrap gap-2">
+  <a href="/admin/invoices" class="badge {% if not status_filter and not only_unpaid %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
+  <a href="/admin/invoices?only_unpaid=true" class="badge {% if only_unpaid %}badge-accent{% else %}badge-neutral{% endif %}">Unpaid</a>
+  {% for s in statuses %}
+    <a href="/admin/invoices?status={{ s }}" class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">{{ status_labels.get(s, s) }}</a>
+  {% endfor %}
+</div>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+  {% if only_unpaid %}<input type="hidden" name="only_unpaid" value="true" />{% endif %}
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}" placeholder="Code, notes…" data-search-input />
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if rows %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Customer</th>
+        <th>Issued</th>
+        <th>Due</th>
+        <th class="text-right">Total</th>
+        <th class="text-right">Paid</th>
+        <th class="text-right">Balance</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      {% set inv = r.invoice %}
+      <tr>
+        <td class="mono text-xs">{{ inv.code }}</td>
+        <td class="text-sm">{{ r.customer.name if r.customer else '—' }}</td>
+        <td class="text-xs text-neutral-500">{{ inv.issue_date.strftime('%d %b %Y') }}</td>
+        <td class="text-xs {% if r.is_overdue %}text-noctra-danger{% else %}text-neutral-500{% endif %}">
+          {{ inv.due_date.strftime('%d %b %Y') if inv.due_date else '—' }}
+        </td>
+        <td class="text-right font-mono text-sm">{{ inv.total | rupiah }}</td>
+        <td class="text-right font-mono text-xs text-noctra-success">{{ r.paid | rupiah }}</td>
+        <td class="text-right font-mono text-sm {% if r.balance > 0 %}text-noctra-warning{% else %}text-neutral-500{% endif %}">
+          {{ r.balance | rupiah }}
+        </td>
+        <td>
+          {% set sbadge = {'DRAFT':'badge-neutral','SENT':'badge-info','PARTIALLY_PAID':'badge-warning','PAID':'badge-success','OVERDUE':'badge-danger','CANCELLED':'badge-neutral'}.get(inv.status, 'badge-neutral') %}
+          <span class="badge {{ sbadge }}">{{ status_labels.get(inv.status, inv.status) }}</span>
+        </td>
+        <td class="text-right"><a href="/admin/invoices/{{ inv.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="panel text-center py-16">
+  <p class="text-neutral-400">No invoices yet. Create one from an approved project, or <a href="/admin/invoices/new" class="text-noctra-accent hover:underline">start here</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

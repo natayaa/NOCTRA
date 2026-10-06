@@ -1,0 +1,138 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Profit &amp; Loss</h1>
+    <p class="page-subtitle">{{ report.period_start.strftime('%d %b %Y') }} → {{ report.period_end.strftime('%d %b %Y') }}</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/reports/receivables" class="btn btn-secondary btn-sm">Receivables</a>
+    <a href="/admin/reports/payables" class="btn btn-secondary btn-sm">Payables</a>
+  </div>
+</div>
+
+<form method="get" class="panel mb-6 flex flex-wrap gap-3 items-end">
+  <div class="form-row !mb-0">
+    <label class="form-label" for="from_date">From</label>
+    <input class="input" type="date" id="from_date" name="from_date" value="{{ from_date }}" />
+  </div>
+  <div class="form-row !mb-0">
+    <label class="form-label" for="to_date">To</label>
+    <input class="input" type="date" id="to_date" name="to_date" value="{{ to_date }}" />
+  </div>
+  <button class="btn btn-secondary">Apply</button>
+</form>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-label">Total revenue</div>
+    <div class="stat-value text-noctra-success">{{ report.total_revenue | rupiah }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Cost of goods sold</div>
+    <div class="stat-value text-neutral-300">{{ report.total_cogs | rupiah }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Gross profit</div>
+    <div class="stat-value">{{ report.gross_profit | rupiah }}</div>
+    <div class="stat-delta">{{ report.gross_margin_pct }}% margin</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Net profit</div>
+    <div class="stat-value {% if report.net_profit >= 0 %}text-noctra-success{% else %}text-noctra-danger{% endif %}">
+      {{ report.net_profit | rupiah }}
+    </div>
+    <div class="stat-delta">{{ report.net_margin_pct }}% net margin</div>
+  </div>
+</div>
+
+<div class="panel max-w-3xl">
+  <div class="panel-title">P&amp;L Statement</div>
+
+  {# Revenue #}
+  <div class="mt-4">
+    <div class="text-xs uppercase tracking-wider text-noctra-accent font-semibold mb-2">Revenue</div>
+    <table class="table">
+      {% for line in report.revenue_lines %}
+      <tr><td>{{ line.label }}</td><td class="text-right font-mono text-sm">{{ line.amount | rupiah }}</td><td class="text-right text-xs text-neutral-500">{{ line.pct_of_revenue }}%</td></tr>
+      {% endfor %}
+      <tr style="border-top: 1px solid var(--noctra-border);">
+        <td class="font-semibold">Total revenue</td>
+        <td class="text-right font-mono font-semibold">{{ report.total_revenue | rupiah }}</td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+
+  {# COGS #}
+  <div class="mt-6">
+    <div class="text-xs uppercase tracking-wider text-neutral-400 font-semibold mb-2">Cost of goods sold</div>
+    <table class="table">
+      {% for line in report.cogs_lines %}
+      <tr><td>{{ line.label }}</td><td class="text-right font-mono text-sm">{{ line.amount | rupiah }}</td><td class="text-right text-xs text-neutral-500">{{ line.pct_of_revenue }}%</td></tr>
+      {% endfor %}
+      <tr style="border-top: 1px solid var(--noctra-border);">
+        <td class="font-semibold">Total COGS</td>
+        <td class="text-right font-mono font-semibold">{{ report.total_cogs | rupiah }}</td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+
+  {# Gross profit #}
+  <div class="mt-6 pt-4 border-t-2 border-noctra-border">
+    <table class="table">
+      <tr><td class="font-semibold text-base">Gross profit</td><td class="text-right font-mono font-semibold text-base">{{ report.gross_profit | rupiah }}</td><td class="text-right text-xs text-neutral-500">{{ report.gross_margin_pct }}%</td></tr>
+    </table>
+  </div>
+
+  {# OpEx #}
+  <div class="mt-6">
+    <div class="text-xs uppercase tracking-wider text-neutral-400 font-semibold mb-2">Operating expenses</div>
+    {% if report.opex_lines %}
+    <table class="table">
+      {% for line in report.opex_lines %}
+      <tr><td>{{ line.label }}</td><td class="text-right font-mono text-sm">{{ line.amount | rupiah }}</td><td class="text-right text-xs text-neutral-500">{{ line.pct_of_revenue }}%</td></tr>
+      {% endfor %}
+      <tr style="border-top: 1px solid var(--noctra-border);">
+        <td class="font-semibold">Total operating expenses</td>
+        <td class="text-right font-mono font-semibold">{{ report.total_opex | rupiah }}</td>
+        <td></td>
+      </tr>
+    </table>
+    {% else %}
+    <p class="text-neutral-500 text-sm">No operating expenses recorded in this period.</p>
+    {% endif %}
+  </div>
+
+  {# Net profit #}
+  <div class="mt-6 pt-4 border-t-2 border-noctra-border">
+    <table class="table">
+      <tr>
+        <td class="font-semibold text-base">Net profit</td>
+        <td class="text-right font-mono font-semibold text-base {% if report.net_profit >= 0 %}text-noctra-success{% else %}text-noctra-danger{% endif %}">{{ report.net_profit | rupiah }}</td>
+        <td class="text-right text-xs text-neutral-500">{{ report.net_margin_pct }}%</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="panel max-w-3xl mt-6">
+  <div class="panel-title">Cash flow (same period)</div>
+  <div class="grid grid-cols-3 gap-4 mt-3">
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Inflow</div>
+      <div class="font-mono text-noctra-success">{{ cash_flow.total_inflow | rupiah }}</div>
+    </div>
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Outflow</div>
+      <div class="font-mono text-noctra-danger">{{ cash_flow.total_outflow | rupiah }}</div>
+    </div>
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Net</div>
+      <div class="font-mono {% if cash_flow.net_cash_flow >= 0 %}text-noctra-success{% else %}text-noctra-danger{% endif %}">{{ cash_flow.net_cash_flow | rupiah }}</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "admin/base.html" %}
+{% include "components/pagination.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Payments</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
+  <div class="page-actions">
+    <a href="/admin/payments/new?direction=IN" class="btn btn-primary btn-sm">Record payment in</a>
+    <a href="/admin/payments/new?direction=OUT" class="btn btn-secondary btn-sm">Record payment out</a>
+  </div>
+</div>
+
+<div class="mb-4 flex flex-wrap gap-2">
+  <a href="/admin/payments" class="badge {% if not direction_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
+  <a href="/admin/payments?direction=IN" class="badge {% if direction_filter == 'IN' %}badge-accent{% else %}badge-neutral{% endif %}">Money in</a>
+  <a href="/admin/payments?direction=OUT" class="badge {% if direction_filter == 'OUT' %}badge-accent{% else %}badge-neutral{% endif %}">Money out</a>
+</div>
+
+{% if rows %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr><th>Code</th><th>Date</th><th>Direction</th><th>Party</th><th>Method</th><th>Reference</th><th class="text-right">Amount</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      {% set p = r.payment %}
+      <tr>
+        <td class="mono text-xs">{{ p.code }}</td>
+        <td class="text-xs">{{ p.payment_date.strftime('%d %b %Y') }}</td>
+        <td>
+          {% if p.direction == 'IN' %}<span class="badge badge-success">IN</span>
+          {% else %}<span class="badge badge-danger">OUT</span>{% endif %}
+        </td>
+        <td class="text-sm">
+          {% if r.customer %}{{ r.customer.name }}
+          {% elif r.supplier %}{{ r.supplier.name }}
+          {% else %}<span class="text-neutral-500">—</span>{% endif %}
+        </td>
+        <td class="text-xs">{{ p.method }}</td>
+        <td class="text-xs text-neutral-500">{{ p.reference_number or '—' }}</td>
+        <td class="text-right font-mono text-sm {% if p.direction == 'IN' %}text-noctra-success{% else %}text-noctra-danger{% endif %}">
+          {{ p.amount | rupiah }}
+        </td>
+        <td class="text-right"><a href="/admin/payments/{{ p.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="panel text-center py-16"><p class="text-neutral-400">No payments yet.</p></div>
+{% endif %}
+{% endblock %}

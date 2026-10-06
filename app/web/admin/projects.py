@@ -186,35 +186,60 @@ async def detail_view(
     db: DbSession,
     current=Depends(get_current_user),
 ) -> HTMLResponse:
+    from app.modules.inquiries.repository import InquiryRepository
+    from app.modules.pricing.service import PricingService
+
     repo = ProjectRepository(db)
     project = await repo.get(project_id)
     if not project:
         raise NotFoundError("Project not found")
 
     items = await repo.list_items(project_id)
-
-    # Snapshots for header
     customer = await CustomerRepository(db).get(project.customer_id) if project.customer_id else None
     vehicle = await VehicleRepository(db).get(project.vehicle_id) if project.vehicle_id else None
 
-    # Load materials and employees for the "add item" forms
     materials = list(
         (await db.execute(MaterialRepository(db).query(is_active=True))).scalars().all()
     )
     employees = list(
         (await db.execute(EmployeeRepository(db).query(is_active=True))).scalars().all()
     )
-
-    # Next allowed statuses
     next_statuses = ALLOWED_PROJECT_TRANSITIONS.get(project.status, frozenset())
-
-    # Overhead rate for display
     overhead_rate = await CostingService(db).overhead_rate_per_hour()
 
-    # Group items by category for the cockpit table
     by_category: dict[str, list] = {}
     for item in items:
         by_category.setdefault(item.category, []).append(item)
+
+    # ── Pricing computation ─────────────────────────
+    # Pick the HPP to use: actual if we have it, else estimated
+    hpp_for_pricing = float(project.actual_hpp or project.estimated_hpp or 0)
+
+    # Extract service + category context for rule matching
+    service_interest = None
+    vehicle_category = vehicle.category if vehicle else None
+    if project.inquiry_id:
+        inq = await InquiryRepository(db).get(project.inquiry_id)
+        if inq:
+            service_interest = inq.service_interest
+
+    pricing_recommendation = None
+    pricing_evaluation = None
+    if hpp_for_pricing > 0:
+        pricing_svc = PricingService(db)
+        pricing_recommendation = await pricing_svc.recommend(
+            hpp=hpp_for_pricing,
+            service_interest=service_interest,
+            vehicle_category=vehicle_category,
+        )
+        proposed = project.approved_price or project.quoted_price
+        if proposed:
+            pricing_evaluation = await pricing_svc.evaluate(
+                hpp=hpp_for_pricing,
+                selling_price=float(proposed),
+                service_interest=service_interest,
+                vehicle_category=vehicle_category,
+            )
 
     return templates.render(
         request,
@@ -231,6 +256,8 @@ async def detail_view(
             "next_statuses": sorted(next_statuses),
             "overhead_rate_per_hour": overhead_rate,
             "assignees": await _load_assignees(db),
+            "pricing_recommendation": pricing_recommendation,
+            "pricing_evaluation": pricing_evaluation,
             **_catalog(),
         },
     )
@@ -385,3 +412,81 @@ async def delete_item_submit(
             url=f"/admin/projects/{project_id}?error={exc.message}", status_code=303
         )
     return RedirectResponse(url=f"/admin/projects/{project_id}", status_code=303)
+
+
+## SEARCH 
+@router.get("/api/search-customers", response_class=HTMLResponse)
+async def search_customers_fragment(
+    request: Request,
+    db: DbSession,
+    q: str = Query("", min_length=0, max_length=100),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
+    """Returns HTML options for the customer picker dropdown."""
+    from sqlalchemy import and_, or_, select
+    from app.modules.customers.models import Customer
+
+    customers = []
+    if q.strip():
+        like = f"%{q.strip()}%"
+        stmt = (
+            select(Customer)
+            .where(
+                and_(
+                    Customer.is_active.is_(True),
+                    or_(
+                        Customer.name.ilike(like),
+                        Customer.code.ilike(like),
+                        Customer.phone.ilike(like),
+                        Customer.email.ilike(like),
+                    ),
+                )
+            )
+            .order_by(Customer.name)
+            .limit(10)
+        )
+        customers = (await db.execute(stmt)).scalars().all()
+
+    return templates.render(
+        request,
+        "admin/projects/_customer_options.html",
+        {"customers": customers},
+    )
+
+
+@router.get("/api/search-vehicles", response_class=HTMLResponse)
+async def search_vehicles_fragment(
+    request: Request,
+    db: DbSession,
+    q: str = Query("", min_length=0, max_length=100),
+    customer_id: UUID | None = Query(None),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
+    from sqlalchemy import and_, or_, select
+    from app.modules.vehicles.models import Vehicle
+
+    vehicles = []
+    if customer_id:
+        like = f"%{q.strip()}%" if q.strip() else "%"
+        stmt = (
+            select(Vehicle)
+            .where(
+                and_(
+                    Vehicle.customer_id == customer_id,
+                    or_(
+                        Vehicle.brand.ilike(like),
+                        Vehicle.model.ilike(like),
+                        Vehicle.plate_number.ilike(like),
+                    ),
+                )
+            )
+            .order_by(Vehicle.brand, Vehicle.model)
+            .limit(10)
+        )
+        vehicles = (await db.execute(stmt)).scalars().all()
+
+    return templates.render(
+        request,
+        "admin/projects/_vehicle_options.html",
+        {"vehicles": vehicles},
+    )

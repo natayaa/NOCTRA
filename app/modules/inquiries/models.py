@@ -104,6 +104,7 @@ class Inquiry(Base, UUIDMixin, TimestampMixin):
         back_populates="inquiry",
         cascade="all, delete-orphan",
         order_by="InquiryPhoto.created_at.desc()",
+        lazy="selectin",   
     )
 
     def __repr__(self) -> str:

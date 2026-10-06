@@ -73,6 +73,17 @@ class PermissionCode(StrEnum):
     EMPLOYEE_READ = "employee:read"
     EMPLOYEE_WRITE = "employee:write"
 
+    # Phase 5
+    PRICING_READ = "pricing:read"
+    PRICING_WRITE = "pricing:write"
+
+    # Finance (Phase 6)
+    FINANCE_READ = "finance:read"
+    INVOICE_WRITE = "invoice:write"
+    PAYMENT_WRITE = "payment:write"
+    EXPENSE_WRITE = "expense:write"
+    FINANCE_REPORTS = "finance:reports"
+
 
 class RoleName(StrEnum):
     SUPERUSER = "superuser"
@@ -100,7 +111,6 @@ class AuditAction(StrEnum):
     STOCK_OUT = "STOCK_OUT"
     PRICE_CHANGE = "PRICE_CHANGE"
 
-
     # Inventory
     INVENTORY_READ = "inventory:read"
     INVENTORY_WRITE = "inventory:write"          # create/edit materials, suppliers
@@ -116,3 +126,9 @@ class AuditAction(StrEnum):
     COST_ENTRY = "COST_ENTRY"
     PROJECT_APPROVED = "PROJECT_APPROVED"
     PROJECT_COMPLETED = "PROJECT_COMPLETED"
+
+    # Phase 6
+    PAYMENT_RECEIVED = "PAYMENT_RECEIVED"
+    PAYMENT_MADE = "PAYMENT_MADE"
+    INVOICE_SENT = "INVOICE_SENT"
+    EXPENSE_RECORDED = "EXPENSE_RECORDED"

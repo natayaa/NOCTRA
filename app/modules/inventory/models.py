@@ -208,6 +208,7 @@ class PurchaseOrder(Base, UUIDMixin, TimestampMixin):
         back_populates="purchase_order",
         cascade="all, delete-orphan",
         order_by="PurchaseOrderItem.created_at",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

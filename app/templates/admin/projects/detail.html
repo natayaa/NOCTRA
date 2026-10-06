@@ -20,6 +20,10 @@
     {% if customer %}<a href="/admin/customers/{{ customer.id }}" class="btn btn-secondary btn-sm">Customer</a>{% endif %}
     {% if vehicle %}<a href="/admin/vehicles/{{ vehicle.id }}" class="btn btn-secondary btn-sm">Vehicle</a>{% endif %}
     <a href="/admin/projects/{{ project.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+    {% if project.status in ('APPROVED', 'IN_PROGRESS', 'PAINTING', 'ASSEMBLY', 'QC', 'COMPLETED', 'DELIVERED') %}
+    <a href="/admin/invoices/new?customer_id={{ project.customer_id }}&project_id={{ project.id }}"
+        class="btn btn-secondary btn-sm">Create Invoice</a>
+    {% endif %}
   </div>
 </div>
 
@@ -62,6 +66,90 @@
     </div>
   </div>
 </div>
+
+{# ── Live pricing recommendation ────────────────────── #}
+{% if pricing_recommendation %}
+<div class="panel mb-6">
+  <div class="flex items-start justify-between gap-6 flex-wrap">
+    <div>
+      <div class="panel-title">Pricing recommendation</div>
+      <p class="text-xs text-neutral-500 mt-1">
+        Based on {{ 'actual' if project.actual_hpp and project.actual_hpp > 0 else 'estimated' }} HPP
+        of <strong>{{ pricing_recommendation.hpp | rupiah }}</strong>
+        {% if pricing_recommendation.complexity_factor != 1.0 %}
+          × {{ pricing_recommendation.complexity_factor }}× complexity
+          = <strong>{{ pricing_recommendation.adjusted_hpp | rupiah }}</strong> adjusted
+        {% endif %}
+        {% if pricing_recommendation.rule_name %}
+          · Rule: <em>{{ pricing_recommendation.rule_name }}</em>
+        {% else %}
+          · No matching rule — using defaults
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-4 gap-4 mt-4">
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Target margin</div>
+      <div class="text-lg font-semibold text-noctra-accent">{{ pricing_recommendation.target_margin_pct }}%</div>
+    </div>
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Minimum margin</div>
+      <div class="text-lg font-semibold text-neutral-400">{{ pricing_recommendation.min_margin_pct }}%</div>
+    </div>
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Minimum price</div>
+      <div class="text-lg font-mono text-neutral-300">{{ pricing_recommendation.minimum_price | rupiah }}</div>
+    </div>
+    <div>
+      <div class="text-xs text-neutral-500 uppercase tracking-wider">Recommended price</div>
+      <div class="text-2xl font-mono font-semibold text-noctra-success">{{ pricing_recommendation.recommended_price | rupiah }}</div>
+      <div class="text-xs text-neutral-500 mt-1">Implies {{ pricing_recommendation.recommended_markup_pct }}% markup</div>
+    </div>
+  </div>
+
+  {% if pricing_evaluation %}
+  <div class="mt-5 pt-5 border-t border-noctra-border">
+    <div class="text-xs text-neutral-500 uppercase tracking-wider mb-2">Evaluation of current quote</div>
+    <div class="flex items-center gap-4 flex-wrap">
+      <div class="flex items-center gap-3">
+        <span class="badge
+          {% if pricing_evaluation.health == 'excellent' %}badge-success
+          {% elif pricing_evaluation.health == 'good' %}badge-success
+          {% elif pricing_evaluation.health == 'acceptable' %}badge-warning
+          {% elif pricing_evaluation.health == 'below_minimum' %}badge-danger
+          {% else %}badge-danger{% endif %}">
+          {% if pricing_evaluation.health == 'excellent' %}Excellent
+          {% elif pricing_evaluation.health == 'good' %}On target
+          {% elif pricing_evaluation.health == 'acceptable' %}Acceptable
+          {% elif pricing_evaluation.health == 'below_minimum' %}Below minimum
+          {% else %}Loss{% endif %}
+        </span>
+        <span class="text-sm">
+          At <strong class="font-mono">{{ pricing_evaluation.selling_price | rupiah }}</strong>,
+          margin is <strong class="font-mono">{{ pricing_evaluation.margin_pct }}%</strong>
+          ({{ pricing_evaluation.gross_profit | rupiah }} profit)
+        </span>
+      </div>
+      <div class="ml-auto text-xs text-neutral-500">
+        {% if pricing_evaluation.meets_target %}
+          ✓ Above target price
+        {% elif pricing_evaluation.meets_minimum %}
+          <span class="text-noctra-warning">Below target by {{ (pricing_evaluation.price_vs_target | abs) | rupiah }}</span>
+        {% else %}
+          <span class="text-noctra-danger">Below minimum by {{ (pricing_evaluation.price_vs_minimum | abs) | rupiah }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="mt-5 pt-5 border-t border-noctra-border text-xs text-neutral-500">
+    No quote set yet. Set a quoted price on the edit page to see how it stacks up.
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="grid lg:grid-cols-3 gap-6">
 

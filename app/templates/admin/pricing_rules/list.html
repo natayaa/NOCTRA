@@ -1,0 +1,65 @@
+{% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Pricing Rules</h1>
+    <p class="page-subtitle">{{ page_meta.total }} total</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/pricing-rules/new" class="btn btn-primary btn-sm">New Rule</a>
+  </div>
+</div>
+
+<p class="text-xs text-neutral-500 mb-4">
+  The most specific rule wins. Service + category beats service-only, which beats category-only, which beats the default.
+</p>
+
+<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="q">Search</label>
+    <input class="input" id="q" name="q" value="{{ q }}" data-search-input />
+  </div>
+  <button class="btn btn-secondary">Filter</button>
+</form>
+
+{% if rules %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Service</th>
+        <th>Vehicle category</th>
+        <th class="text-right">Target</th>
+        <th class="text-right">Min</th>
+        <th class="text-right">Complexity</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rules %}
+      <tr>
+        <td class="font-medium">{{ r.name }}</td>
+        <td class="text-xs text-neutral-400">{{ service_labels.get(r.service_interest, r.service_interest) if r.service_interest else 'any' }}</td>
+        <td class="text-xs text-neutral-400">{{ r.vehicle_category or 'any' }}</td>
+        <td class="text-right font-mono text-sm text-noctra-accent">{{ r.target_margin_pct }}%</td>
+        <td class="text-right font-mono text-sm text-neutral-400">{{ r.min_margin_pct }}%</td>
+        <td class="text-right font-mono text-sm">{{ r.complexity_factor }}×</td>
+        <td>
+          {% if r.is_active %}<span class="badge badge-success">Active</span>
+          {% else %}<span class="badge badge-neutral">Inactive</span>{% endif %}
+        </td>
+        <td class="text-right"><a href="/admin/pricing-rules/{{ r.id }}" class="btn btn-ghost btn-sm">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% include "components/pagination.html" %}
+{% else %}
+{{ empty_state('No pricing rules', 'Create a rule to start pricing from HPP.', '/admin/pricing-rules/new', 'New Rule', 'plus') }}
+{% endif %}
+{% endblock %}

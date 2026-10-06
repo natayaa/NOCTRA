@@ -1,0 +1,136 @@
+"""Admin web routes for payments."""
+
+from __future__ import annotations
+
+from datetime import UTC, date, datetime
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
+
+from app.core.deps import DbSession
+from app.core.exceptions import AppError
+from app.core.pagination import PageParams, paginate, page_params
+from app.modules.auth.dependencies import get_current_user
+from app.modules.finance.constants import (
+    PAYMENT_DIRECTIONS,
+    PAYMENT_METHODS,
+    PAYMENT_METHOD_LABELS,
+    PAYMENT_REFERENCE_TYPES,
+)
+from app.modules.finance.repository import (
+    AccountRepository,
+    PaymentRepository,
+)
+from app.modules.finance.schemas import PaymentCreate
+from app.modules.finance.service import PaymentService
+from app.web.templates_env import templates
+
+router = APIRouter(prefix="/admin/payments", tags=["admin-payments"])
+
+
+@router.get("", response_class=HTMLResponse)
+async def list_view(
+    request: Request,
+    db: DbSession,
+    params: PageParams = Depends(page_params),
+    direction: str | None = Query(None),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
+    stmt = PaymentRepository(db).query(direction=direction)
+    rows, meta = await paginate(db, stmt, params)
+
+    from app.modules.customers.models import Customer
+    from app.modules.inventory.models import Supplier
+    cids = {r.customer_id for r in rows if r.customer_id}
+    sids = {r.supplier_id for r in rows if r.supplier_id}
+    customers, suppliers = {}, {}
+    if cids:
+        c_rows = await db.execute(select(Customer).where(Customer.id.in_(cids)))
+        customers = {c.id: c for c in c_rows.scalars().all()}
+    if sids:
+        s_rows = await db.execute(select(Supplier).where(Supplier.id.in_(sids)))
+        suppliers = {s.id: s for s in s_rows.scalars().all()}
+
+    enriched = [{
+        "payment": p,
+        "customer": customers.get(p.customer_id),
+        "supplier": suppliers.get(p.supplier_id),
+    } for p in rows]
+
+    return templates.render(
+        request,
+        "admin/payments/list.html",
+        {
+            "title": "Payments",
+            "rows": enriched,
+            "page_meta": meta,
+            "direction_filter": direction or "",
+            "directions": PAYMENT_DIRECTIONS,
+        },
+    )
+
+
+@router.get("/new", response_class=HTMLResponse)
+async def new_view(
+    request: Request,
+    db: DbSession,
+    direction: str = Query("IN"),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
+    accounts = (await db.execute(AccountRepository(db).query())).scalars().all()
+    today = datetime.now(UTC).date()
+    return templates.render(
+        request,
+        "admin/payments/form.html",
+        {
+            "title": "Record Payment",
+            "direction": direction,
+            "accounts": accounts,
+            "payment_methods": PAYMENT_METHODS,
+            "payment_method_labels": PAYMENT_METHOD_LABELS,
+            "reference_types": PAYMENT_REFERENCE_TYPES,
+            "today": today,
+        },
+    )
+
+
+@router.post("")
+async def create_submit(request: Request, db: DbSession, current=Depends(get_current_user)):
+    form = await request.form()
+    payload = PaymentCreate(
+        direction=(form.get("direction") or "IN").strip(),
+        method=(form.get("method") or "BANK_TRANSFER").strip(),
+        amount=float(form.get("amount") or 0),
+        payment_date=date.fromisoformat(form["payment_date"]),
+        customer_id=(UUID(form["customer_id"]) if form.get("customer_id") else None),
+        supplier_id=(UUID(form["supplier_id"]) if form.get("supplier_id") else None),
+        account_id=(UUID(form["account_id"]) if form.get("account_id") else None),
+        reference_type=(form.get("reference_type") or "").strip() or None,
+        reference_id=(UUID(form["reference_id"]) if form.get("reference_id") else None),
+        reference_number=(form.get("reference_number") or "").strip() or None,
+        notes=(form.get("notes") or "").strip() or None,
+    )
+    try:
+        payment = await PaymentService(db).record(payload, actor=current)
+        await db.commit()
+    except AppError as exc:
+        await db.rollback()
+        return RedirectResponse(url=f"/admin/payments/new?error={exc.message}", status_code=303)
+    return RedirectResponse(url=f"/admin/payments/{payment.id}", status_code=303)
+
+
+@router.get("/{payment_id}", response_class=HTMLResponse)
+async def detail_view(
+    payment_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+) -> HTMLResponse:
+    p = await PaymentRepository(db).get(payment_id)
+    if not p:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError("Payment not found")
+    return templates.render(
+        request,
+        "admin/payments/detail.html",
+        {"title": p.code, "payment": p},
+    )

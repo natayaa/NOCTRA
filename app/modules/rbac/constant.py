@@ -42,6 +42,16 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.PROJECT_DELETE,
         PermissionCode.EMPLOYEE_READ,
         PermissionCode.EMPLOYEE_WRITE,
+        # Phase 5
+        PermissionCode.PRICING_READ,
+        PermissionCode.PRICING_WRITE,
+
+        # Phase 6
+        PermissionCode.FINANCE_READ,
+        PermissionCode.INVOICE_WRITE,
+        PermissionCode.PAYMENT_WRITE,
+        PermissionCode.EXPENSE_WRITE,
+        PermissionCode.FINANCE_REPORTS,
     },
 
     RoleName.SALES: {
@@ -65,6 +75,10 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.PROJECT_UPDATE,
         PermissionCode.PROJECT_APPROVE,
         PermissionCode.EMPLOYEE_READ,
+        # Phase 5
+        PermissionCode.PRICING_READ,
+        # Phase 6
+        PermissionCode.FINANCE_READ, 
     },
 
     RoleName.WORKSHOP: {
@@ -81,6 +95,8 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.PROJECT_UPDATE,
         PermissionCode.PROJECT_COST,
         PermissionCode.EMPLOYEE_READ,
+        PermissionCode.PRICING_READ,
+        PermissionCode.FINANCE_READ,
     },
 
     RoleName.FINANCE: {
@@ -97,6 +113,13 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.PROJECT_COST,
         PermissionCode.EMPLOYEE_READ,
         PermissionCode.EMPLOYEE_WRITE,
+        PermissionCode.PRICING_READ,
+        PermissionCode.PRICING_WRITE,
+        PermissionCode.FINANCE_READ,
+        PermissionCode.INVOICE_WRITE,
+        PermissionCode.PAYMENT_WRITE,
+        PermissionCode.EXPENSE_WRITE,
+        PermissionCode.FINANCE_REPORTS,
     },
 
     RoleName.VIEWER: {
@@ -108,5 +131,8 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.SUPPLIER_READ,
         PermissionCode.PROJECT_READ,
         PermissionCode.EMPLOYEE_READ,
+        PermissionCode.PRICING_READ,
+        PermissionCode.FINANCE_READ,
+        PermissionCode.FINANCE_REPORTS,
     },
 }

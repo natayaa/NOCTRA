@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -14,23 +15,27 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from app.core.database import Base, get_session
-from app.main import create_app
 
-# Register every model so Base.metadata is fully populated.
-import app.core.models_registry  # noqa: F401
+# Disable debug re-raise so error handlers return JSON
+settings.APP_DEBUG = False
+
+from app.core.database import Base, get_session  # noqa: E402
+from app.main import create_app  # noqa: E402
+
+# Register every SQLAlchemy model
+import app.core.models_registry  # noqa: F401,E402
 
 
-# ── Dedicated test database: <POSTGRES_DB>_test
+# Dedicated test DB: <POSTGRES_DB>_test
 TEST_DB_URL = settings.database_url.replace(
     f"/{settings.POSTGRES_DB}",
     f"/{settings.POSTGRES_DB}_test",
 )
 
 
-# ── Session-scoped engine (NullPool prevents cross-loop reuse) ──
 @pytest_asyncio.fixture(scope="session")
 async def engine():
+    """Session-scoped engine with NullPool — no cross-loop connection reuse."""
     eng = create_async_engine(
         TEST_DB_URL,
         poolclass=NullPool,
@@ -43,7 +48,15 @@ async def engine():
     await eng.dispose()
 
 
-# ── Function-scoped DB session ──────────────────────────────────
+@pytest_asyncio.fixture(autouse=True)
+async def _clean_tables(engine):
+    """Truncate every table after each test — keeps tests isolated."""
+    yield
+    async with engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(text(f'TRUNCATE TABLE "{table.name}" CASCADE'))
+
+
 @pytest_asyncio.fixture
 async def db(engine) -> AsyncGenerator[AsyncSession, None]:
     Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -52,7 +65,6 @@ async def db(engine) -> AsyncGenerator[AsyncSession, None]:
         await session.rollback()
 
 
-# ── Function-scoped HTTP client (via ASGI transport) ────────────
 @pytest_asyncio.fixture
 async def client(engine) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
@@ -69,8 +81,11 @@ async def client(engine) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_session] = _override_get_session
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://localhost",
+    ) as ac:
         yield ac
 
     app.dependency_overrides.clear()

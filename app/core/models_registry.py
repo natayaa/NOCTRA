@@ -28,4 +28,10 @@ from app.modules.inventory import models as _inventory_models  # noqa: F401
 # Phase 4
 from app.modules.projects import models as _project_models  # noqa: F401
 
+# Phase 5
+from app.modules.pricing import models as _pricing_models  # noqa: F401\
+
+# Phase 6
+from app.modules.finance import models as _finance_models  # noqa: F401
+
 __all__: list[str] = []

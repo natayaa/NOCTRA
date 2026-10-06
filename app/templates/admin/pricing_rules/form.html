@@ -1,0 +1,104 @@
+{% extends "admin/base.html" %}
+{% block content %}
+{% set fv = form_values or {} %}
+
+<div class="page-header">
+  <div><h1 class="page-title">{{ 'New Pricing Rule' if mode == 'create' else 'Edit Pricing Rule' }}</h1></div>
+  <div class="page-actions"><a href="/admin/pricing-rules" class="btn btn-secondary btn-sm">Back</a></div>
+</div>
+
+{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
+
+<form method="post" action="{{ '/admin/pricing-rules' if mode == 'create' else '/admin/pricing-rules/' ~ rule.id }}"
+      class="max-w-3xl panel space-y-5" data-guard>
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+  <div class="form-row">
+    <label class="form-label" for="name">Name <span class="req">*</span></label>
+    <input class="input" id="name" name="name" required maxlength="255"
+           placeholder="e.g. Full body repaint — Scooter"
+           value="{{ fv.get('name') or (rule.name if rule else '') }}" />
+  </div>
+
+  <section>
+    <h2 class="panel-title">Match criteria</h2>
+    <p class="text-xs text-neutral-500 mt-1 mb-3">Leave blank for "any". More specific rules win.</p>
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="service_interest">Service interest</label>
+        <select class="select" id="service_interest" name="service_interest">
+          <option value="">Any service</option>
+          {% for s in services %}
+            {% set cur = fv.get('service_interest') or (rule.service_interest if rule else '') %}
+            <option value="{{ s }}" {% if cur == s %}selected{% endif %}>{{ service_labels.get(s, s) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="vehicle_category">Vehicle category</label>
+        <select class="select" id="vehicle_category" name="vehicle_category">
+          <option value="">Any category</option>
+          {% for c in vehicle_categories %}
+            {% set cur = fv.get('vehicle_category') or (rule.vehicle_category if rule else '') %}
+            <option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c.replace('_', ' ').title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="panel-title">Margin policy</h2>
+    <div class="grid md:grid-cols-3 gap-5 mt-3">
+      <div class="form-row">
+        <label class="form-label" for="target_margin_pct">Target margin (%) <span class="req">*</span></label>
+        <input class="input" type="number" step="0.1" min="0" max="99.9"
+               id="target_margin_pct" name="target_margin_pct" required
+               value="{{ fv.get('target_margin_pct') or (rule.target_margin_pct if rule else '50') }}" />
+        <div class="form-hint">Recommended price derives from this.</div>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="min_margin_pct">Minimum margin (%) <span class="req">*</span></label>
+        <input class="input" type="number" step="0.1" min="0" max="99.9"
+               id="min_margin_pct" name="min_margin_pct" required
+               value="{{ fv.get('min_margin_pct') or (rule.min_margin_pct if rule else '30') }}" />
+        <div class="form-hint">Below this, quote requires approval.</div>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="complexity_factor">Complexity factor</label>
+        <input class="input" type="number" step="0.05" min="0.1" max="10"
+               id="complexity_factor" name="complexity_factor"
+               value="{{ fv.get('complexity_factor') or (rule.complexity_factor if rule else '1.0') }}" />
+        <div class="form-hint">1.0 = baseline. 1.15 = +15% on HPP.</div>
+      </div>
+    </div>
+
+    <div class="form-row mt-3">
+      <label class="form-label" for="min_price_floor">Minimum price floor (IDR)</label>
+      <input class="input" type="number" step="10000" min="0"
+             id="min_price_floor" name="min_price_floor"
+             value="{{ fv.get('min_price_floor') or (rule.min_price_floor if rule else '') or '' }}" />
+      <div class="form-hint">Optional. If the computed minimum is below this, use this instead.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="panel-title">Notes</h2>
+    <div class="form-row mt-3">
+      <label class="form-label" for="notes">Internal notes</label>
+      <textarea class="textarea" id="notes" name="notes" rows="2">{{ fv.get('notes') or (rule.notes if rule else '') }}</textarea>
+    </div>
+  </section>
+
+  {% if mode == 'edit' %}
+  <label class="flex items-center gap-2 text-sm">
+    <input type="checkbox" name="is_active" value="true" {% if rule.is_active %}checked{% endif %} /> Active
+  </label>
+  {% endif %}
+
+  <div class="flex gap-2 pt-2">
+    <button class="btn btn-primary">{{ 'Create' if mode == 'create' else 'Save changes' }}</button>
+    <a href="/admin/pricing-rules" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

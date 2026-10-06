@@ -1,0 +1,30 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1 class="page-title">Receivables</h1></div>
+  <div class="page-actions">
+    <a href="/admin/reports/pnl" class="btn btn-secondary btn-sm">P&amp;L</a>
+    <a href="/admin/reports/payables" class="btn btn-secondary btn-sm">Payables</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-label">Total outstanding</div>
+    <div class="stat-value">{{ summary.total_outstanding | rupiah }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Overdue</div>
+    <div class="stat-value {% if summary.total_overdue > 0 %}text-noctra-danger{% endif %}">{{ summary.total_overdue | rupiah }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Open invoices</div>
+    <div class="stat-value">{{ summary.invoice_count }}</div>
+    <div class="stat-delta">{{ summary.overdue_count }} overdue</div>
+  </div>
+</div>
+
+<p class="text-sm text-neutral-500">
+  See the full list at <a href="/admin/invoices?only_unpaid=true" class="text-noctra-accent hover:underline">/admin/invoices?only_unpaid=true</a>
+</p>
+{% endblock %}

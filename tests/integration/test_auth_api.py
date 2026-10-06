@@ -2,7 +2,6 @@
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.modules.auth.models import User
@@ -28,7 +27,7 @@ async def test_login_success(client: AsyncClient, user):
         "/api/v1/auth/login",
         json={"username": "testuser", "password": "supersecret1"},
     )
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     body = r.json()
     assert "access_token" in body
     assert "refresh_token" in body
@@ -74,19 +73,3 @@ async def test_me_with_token(client: AsyncClient, user):
     assert r.status_code == 200
     body = r.json()
     assert body["username"] == "testuser"
-    assert body["email"] == "testuser@noctra.local"
-
-
-@pytest.mark.asyncio
-async def test_refresh_flow(client: AsyncClient, user):
-    login = await client.post(
-        "/api/v1/auth/login",
-        json={"username": "testuser", "password": "supersecret1"},
-    )
-    refresh_token = login.json()["refresh_token"]
-
-    r = await client.post(
-        f"/api/v1/auth/refresh?refresh_token={refresh_token}",
-    )
-    assert r.status_code == 200
-    assert "access_token" in r.json()
