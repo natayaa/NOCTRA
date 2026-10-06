@@ -52,6 +52,8 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.PAYMENT_WRITE,
         PermissionCode.EXPENSE_WRITE,
         PermissionCode.FINANCE_REPORTS,
+
+        PermissionCode.ANALYTICS_READ,
     },
 
     RoleName.SALES: {
@@ -79,6 +81,8 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.PRICING_READ,
         # Phase 6
         PermissionCode.FINANCE_READ, 
+        # Phase 7
+        PermissionCode.ANALYTICS_READ,
     },
 
     RoleName.WORKSHOP: {
@@ -97,6 +101,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.EMPLOYEE_READ,
         PermissionCode.PRICING_READ,
         PermissionCode.FINANCE_READ,
+        PermissionCode.ANALYTICS_READ,
     },
 
     RoleName.FINANCE: {
@@ -120,6 +125,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.PAYMENT_WRITE,
         PermissionCode.EXPENSE_WRITE,
         PermissionCode.FINANCE_REPORTS,
+        PermissionCode.ANALYTICS_READ,
     },
 
     RoleName.VIEWER: {
@@ -134,5 +140,6 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[PermissionCode]] = {
         PermissionCode.PRICING_READ,
         PermissionCode.FINANCE_READ,
         PermissionCode.FINANCE_REPORTS,
+        PermissionCode.ANALYTICS_READ,
     },
 }

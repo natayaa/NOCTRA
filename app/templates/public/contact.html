@@ -1,236 +1,227 @@
 {% extends "public/base.html" %}
 
 {% block content %}
-<div class="container-narrow py-16">
+<div class="pub-page-header">
+  <div class="pub-section-eyebrow">Minta penawaran</div>
+  <h1 class="pub-page-title">Ceritakan proyek Anda.</h1>
+  <p class="pub-page-sub">
+    Isi sebanyak yang Anda bisa. Kami membalas dalam satu hari kerja
+    dengan penawaran yang jujur.
+  </p>
+</div>
 
-  <div class="text-center mb-12">
-    <p class="eyebrow mb-3">Get a quote</p>
-    <h1 class="text-3xl md:text-4xl font-semibold tracking-tight">Tell us about your project</h1>
-    <p class="text-neutral-400 mt-4 max-w-xl mx-auto">
-      Fill in as much as you can. We reply within one business day with an honest quote.
+<div class="container-narrow" style="padding-bottom: 96px;"></div>
+
+{% set fv = form_values or {} %}
+
+{% if error %}
+<div class="panel mb-6" style="border-color: rgba(239,68,68,0.4);">
+  <div class="form-error">{{ error }}</div>
+</div>
+{% endif %}
+
+<form method="post" action="/contact" enctype="multipart/form-data" class="panel space-y-8" style="background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.08);" data-guard>
+
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+  {# Honeypot — hidden from real users, tempting to bots #}
+  <div style="position:absolute;left:-9999px;" aria-hidden="true">
+    <label for="website">Do not fill this in</label>
+    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+  </div>
+
+  {# ── Contact ───────────────────────────────────── #}
+  <section>
+    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Your details</h2>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="name">Full name <span class="req">*</span></label>
+        <input class="input" id="name" name="name" required maxlength="255" value="{{ fv.get('name') or '' }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="phone">Phone / WhatsApp <span class="req">*</span></label>
+        <input class="input" type="tel" id="phone" name="phone" required maxlength="32" placeholder="08xx xxxx xxxx"
+          value="{{ fv.get('phone') or '' }}" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="email">Email</label>
+      <input class="input" type="email" id="email" name="email" maxlength="255" value="{{ fv.get('email') or '' }}" />
+    </div>
+  </section>
+
+  {# ── Vehicle ───────────────────────────────────── #}
+  <section>
+    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Your motorcycle</h2>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="vehicle_brand">Brand</label>
+        <input class="input" id="vehicle_brand" name="vehicle_brand" maxlength="100" placeholder="Yamaha, Honda, …"
+          value="{{ fv.get('vehicle_brand') or '' }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="vehicle_model">Model</label>
+        <input class="input" id="vehicle_model" name="vehicle_model" maxlength="120" placeholder="Mio Sporty, Beat, …"
+          value="{{ fv.get('vehicle_model') or '' }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="vehicle_year">Year</label>
+        <input class="input" type="number" id="vehicle_year" name="vehicle_year" min="1950" max="2100"
+          value="{{ fv.get('vehicle_year') or '' }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="vehicle_plate">Plate number</label>
+        <input class="input mono" id="vehicle_plate" name="vehicle_plate" maxlength="20" placeholder="B 1234 XYZ"
+          value="{{ fv.get('vehicle_plate') or '' }}" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="vehicle_category">Category</label>
+      <select class="select" id="vehicle_category" name="vehicle_category">
+        <option value="">—</option>
+        {% for c in vehicle_categories %}
+        <option value="{{ c }}" {% if fv.get('vehicle_category')==c %}selected{% endif %}>
+          {{ c.replace('_', ' ').title() }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+  </section>
+
+  {# ── What you want ─────────────────────────────── #}
+  <section>
+    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">What you're after</h2>
+
+    <div class="form-row">
+      <label class="form-label" for="service_interest">Service <span class="req">*</span></label>
+      <select class="select" id="service_interest" name="service_interest" required>
+        <option value="">Choose…</option>
+        {% for s in services %}
+        <option value="{{ s }}" {% if fv.get('service_interest')==s %}selected{% endif %}>
+          {{ service_labels.get(s, s) }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="description">Describe your project <span class="req">*</span></label>
+      <textarea class="textarea" id="description" name="description" required minlength="20" maxlength="5000" rows="4"
+        placeholder="What do you want done? Any specific ideas, references, or concerns?">{{ fv.get('description') or '' }}</textarea>
+      <div class="form-hint">Minimum 20 characters.</div>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="color_preference">Color (in your words)</label>
+        <input class="input" id="color_preference" name="color_preference" maxlength="64"
+          placeholder="matte black, pearl white…" value="{{ fv.get('color_preference') or '' }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="color_family">Color family</label>
+        <select class="select" id="color_family" name="color_family">
+          <option value="">—</option>
+          {% for c in color_families %}
+          <option value="{{ c }}" {% if fv.get('color_family')==c %}selected{% endif %}>
+            {{ color_labels.get(c, c) }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="finish_preference">Finish</label>
+        <select class="select" id="finish_preference" name="finish_preference">
+          <option value="">—</option>
+          {% for f in finishes %}
+          <option value="{{ f }}" {% if fv.get('finish_preference')==f %}selected{% endif %}>
+            {{ finish_labels.get(f, f) }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <label class="flex items-center gap-2 text-sm mt-2">
+      <input type="checkbox" name="has_custom_graphics" value="true" {% if fv.get('has_custom_graphics')=='true'
+        %}checked{% endif %} />
+      I want custom graphics (pinstripe, airbrush, decals, etc.)
+    </label>
+  </section>
+
+  {# ── Optional details ──────────────────────────── #}
+  <section>
+    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">A few more details (optional)
+    </h2>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="budget_range">Budget range</label>
+        <select class="select" id="budget_range" name="budget_range">
+          <option value="">—</option>
+          {% for b in budget_ranges %}
+          <option value="{{ b }}" {% if fv.get('budget_range')==b %}selected{% endif %}>
+            {{ budget_labels.get(b, b) }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="desired_date">When do you need it?</label>
+        <input class="input" type="date" id="desired_date" name="desired_date"
+          value="{{ fv.get('desired_date') or '' }}" />
+      </div>
+    </div>
+
+    {# Preference extras from PREFERENCE_KEYS — the essentials only on public form #}
+    <div class="grid md:grid-cols-2 gap-5">
+      {% for pk in preference_keys[:4] %}
+      {% if pk.type == 'bool' %}
+      <label class="flex items-center gap-2 text-sm pt-6">
+        <input type="checkbox" name="pref_{{ pk.key }}" value="true" {% if fv.get('pref_' ~ pk.key)=='true' %}checked{%
+          endif %} />
+        {{ pk.label }}
+      </label>
+      {% else %}
+      <div class="form-row">
+        <label class="form-label" for="pref_{{ pk.key }}">{{ pk.label }}</label>
+        <input class="input" id="pref_{{ pk.key }}" name="pref_{{ pk.key }}"
+          value="{{ fv.get('pref_' ~ pk.key) or '' }}" />
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ── Photos ────────────────────────────────────── #}
+  <section>
+    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Photos (up to 5)</h2>
+    <p class="text-xs text-neutral-500 mb-3">
+      Current state of your bike, or reference photos of what you want.
+      JPG/PNG/WebP, 10 MB each max.
+    </p>
+
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      {% for i in [1, 2, 3, 4, 5] %}
+      <div class="form-row !mb-0">
+        <label class="form-label" for="photo_{{ i }}">Photo {{ i }}</label>
+        <input class="input" type="file" id="photo_{{ i }}" name="photo_{{ i }}"
+          accept="image/jpeg,image/png,image/webp,image/gif" />
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-noctra-border">
+    <button type="submit" class="btn btn-primary btn-lg">Send inquiry</button>
+    <p class="text-xs text-neutral-500 sm:ml-3">
+      By submitting you agree we may contact you about your inquiry. We never share your details.
     </p>
   </div>
-
-  {% set fv = form_values or {} %}
-
-  {% if error %}
-  <div class="panel mb-6" style="border-color: rgba(239,68,68,0.4);">
-    <div class="form-error">{{ error }}</div>
-  </div>
-  {% endif %}
-
-  <form method="post" action="/contact"
-        enctype="multipart/form-data"
-        class="panel space-y-8"
-        data-guard>
-
-    <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-
-    {# Honeypot — hidden from real users, tempting to bots #}
-    <div style="position:absolute;left:-9999px;" aria-hidden="true">
-      <label for="website">Do not fill this in</label>
-      <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
-    </div>
-
-    {# ── Contact ───────────────────────────────────── #}
-    <section>
-      <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Your details</h2>
-
-      <div class="grid md:grid-cols-2 gap-5">
-        <div class="form-row">
-          <label class="form-label" for="name">Full name <span class="req">*</span></label>
-          <input class="input" id="name" name="name" required maxlength="255"
-                 value="{{ fv.get('name') or '' }}" />
-        </div>
-        <div class="form-row">
-          <label class="form-label" for="phone">Phone / WhatsApp <span class="req">*</span></label>
-          <input class="input" type="tel" id="phone" name="phone" required maxlength="32"
-                 placeholder="08xx xxxx xxxx"
-                 value="{{ fv.get('phone') or '' }}" />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <label class="form-label" for="email">Email</label>
-        <input class="input" type="email" id="email" name="email" maxlength="255"
-               value="{{ fv.get('email') or '' }}" />
-      </div>
-    </section>
-
-    {# ── Vehicle ───────────────────────────────────── #}
-    <section>
-      <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Your motorcycle</h2>
-
-      <div class="grid md:grid-cols-2 gap-5">
-        <div class="form-row">
-          <label class="form-label" for="vehicle_brand">Brand</label>
-          <input class="input" id="vehicle_brand" name="vehicle_brand" maxlength="100"
-                 placeholder="Yamaha, Honda, …"
-                 value="{{ fv.get('vehicle_brand') or '' }}" />
-        </div>
-        <div class="form-row">
-          <label class="form-label" for="vehicle_model">Model</label>
-          <input class="input" id="vehicle_model" name="vehicle_model" maxlength="120"
-                 placeholder="Mio Sporty, Beat, …"
-                 value="{{ fv.get('vehicle_model') or '' }}" />
-        </div>
-        <div class="form-row">
-          <label class="form-label" for="vehicle_year">Year</label>
-          <input class="input" type="number" id="vehicle_year" name="vehicle_year" min="1950" max="2100"
-                 value="{{ fv.get('vehicle_year') or '' }}" />
-        </div>
-        <div class="form-row">
-          <label class="form-label" for="vehicle_plate">Plate number</label>
-          <input class="input mono" id="vehicle_plate" name="vehicle_plate" maxlength="20"
-                 placeholder="B 1234 XYZ"
-                 value="{{ fv.get('vehicle_plate') or '' }}" />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <label class="form-label" for="vehicle_category">Category</label>
-        <select class="select" id="vehicle_category" name="vehicle_category">
-          <option value="">—</option>
-          {% for c in vehicle_categories %}
-            <option value="{{ c }}" {% if fv.get('vehicle_category') == c %}selected{% endif %}>
-              {{ c.replace('_', ' ').title() }}
-            </option>
-          {% endfor %}
-        </select>
-      </div>
-    </section>
-
-    {# ── What you want ─────────────────────────────── #}
-    <section>
-      <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">What you're after</h2>
-
-      <div class="form-row">
-        <label class="form-label" for="service_interest">Service <span class="req">*</span></label>
-        <select class="select" id="service_interest" name="service_interest" required>
-          <option value="">Choose…</option>
-          {% for s in services %}
-            <option value="{{ s }}" {% if fv.get('service_interest') == s %}selected{% endif %}>
-              {{ service_labels.get(s, s) }}
-            </option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div class="form-row">
-        <label class="form-label" for="description">Describe your project <span class="req">*</span></label>
-        <textarea class="textarea" id="description" name="description" required
-                  minlength="20" maxlength="5000" rows="4"
-                  placeholder="What do you want done? Any specific ideas, references, or concerns?">{{ fv.get('description') or '' }}</textarea>
-        <div class="form-hint">Minimum 20 characters.</div>
-      </div>
-
-      <div class="grid md:grid-cols-3 gap-5">
-        <div class="form-row">
-          <label class="form-label" for="color_preference">Color (in your words)</label>
-          <input class="input" id="color_preference" name="color_preference" maxlength="64"
-                 placeholder="matte black, pearl white…"
-                 value="{{ fv.get('color_preference') or '' }}" />
-        </div>
-        <div class="form-row">
-          <label class="form-label" for="color_family">Color family</label>
-          <select class="select" id="color_family" name="color_family">
-            <option value="">—</option>
-            {% for c in color_families %}
-              <option value="{{ c }}" {% if fv.get('color_family') == c %}selected{% endif %}>
-                {{ color_labels.get(c, c) }}
-              </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-row">
-          <label class="form-label" for="finish_preference">Finish</label>
-          <select class="select" id="finish_preference" name="finish_preference">
-            <option value="">—</option>
-            {% for f in finishes %}
-              <option value="{{ f }}" {% if fv.get('finish_preference') == f %}selected{% endif %}>
-                {{ finish_labels.get(f, f) }}
-              </option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-
-      <label class="flex items-center gap-2 text-sm mt-2">
-        <input type="checkbox" name="has_custom_graphics" value="true"
-               {% if fv.get('has_custom_graphics') == 'true' %}checked{% endif %} />
-        I want custom graphics (pinstripe, airbrush, decals, etc.)
-      </label>
-    </section>
-
-    {# ── Optional details ──────────────────────────── #}
-    <section>
-      <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">A few more details (optional)</h2>
-
-      <div class="grid md:grid-cols-2 gap-5">
-        <div class="form-row">
-          <label class="form-label" for="budget_range">Budget range</label>
-          <select class="select" id="budget_range" name="budget_range">
-            <option value="">—</option>
-            {% for b in budget_ranges %}
-              <option value="{{ b }}" {% if fv.get('budget_range') == b %}selected{% endif %}>
-                {{ budget_labels.get(b, b) }}
-              </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-row">
-          <label class="form-label" for="desired_date">When do you need it?</label>
-          <input class="input" type="date" id="desired_date" name="desired_date"
-                 value="{{ fv.get('desired_date') or '' }}" />
-        </div>
-      </div>
-
-      {# Preference extras from PREFERENCE_KEYS — the essentials only on public form #}
-      <div class="grid md:grid-cols-2 gap-5">
-        {% for pk in preference_keys[:4] %}
-          {% if pk.type == 'bool' %}
-            <label class="flex items-center gap-2 text-sm pt-6">
-              <input type="checkbox" name="pref_{{ pk.key }}" value="true"
-                     {% if fv.get('pref_' ~ pk.key) == 'true' %}checked{% endif %} />
-              {{ pk.label }}
-            </label>
-          {% else %}
-            <div class="form-row">
-              <label class="form-label" for="pref_{{ pk.key }}">{{ pk.label }}</label>
-              <input class="input" id="pref_{{ pk.key }}" name="pref_{{ pk.key }}"
-                     value="{{ fv.get('pref_' ~ pk.key) or '' }}" />
-            </div>
-          {% endif %}
-        {% endfor %}
-      </div>
-    </section>
-
-    {# ── Photos ────────────────────────────────────── #}
-    <section>
-      <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Photos (up to 5)</h2>
-      <p class="text-xs text-neutral-500 mb-3">
-        Current state of your bike, or reference photos of what you want.
-        JPG/PNG/WebP, 10 MB each max.
-      </p>
-
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {% for i in [1, 2, 3, 4, 5] %}
-        <div class="form-row !mb-0">
-          <label class="form-label" for="photo_{{ i }}">Photo {{ i }}</label>
-          <input class="input" type="file" id="photo_{{ i }}" name="photo_{{ i }}"
-                 accept="image/jpeg,image/png,image/webp,image/gif" />
-        </div>
-        {% endfor %}
-      </div>
-    </section>
-
-    <div class="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-noctra-border">
-      <button type="submit" class="btn btn-primary btn-lg">Send inquiry</button>
-      <p class="text-xs text-neutral-500 sm:ml-3">
-        By submitting you agree we may contact you about your inquiry. We never share your details.
-      </p>
-    </div>
-  </form>
+</form>
 
 </div>
 {% endblock %}

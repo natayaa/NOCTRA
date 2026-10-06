@@ -3,41 +3,55 @@
           class="btn btn-ghost btn-sm md:hidden"
           data-sidebar-toggle
           aria-label="Toggle navigation">
-    <svg viewBox="0 0 24 24" fill="none" class="w-5 h-5" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
       <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor"
-            stroke-width="1.5" stroke-linecap="round"/>
+            stroke-width="1.75" stroke-linecap="round"/>
     </svg>
   </button>
 
-  <div class="admin-header-title">
-    {{ title or "Dashboard" }}
-  </div>
-
   <div class="admin-header-spacer"></div>
 
+  {# Search #}
+  <div class="admin-header-search">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/>
+      <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <input type="search" placeholder="Search anything…" autocomplete="off" data-search-input />
+  </div>
+
+  {# Notifications #}
+  <button type="button" class="admin-icon-btn" aria-label="Notifications">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" stroke="currentColor"
+            stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" stroke="currentColor"
+            stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <span class="dot" aria-hidden="true"></span>
+  </button>
+
+  {# User #}
   {% if current_user %}
   <div class="admin-user">
     <div class="avatar" aria-hidden="true">
       {{ (current_user.full_name or current_user.username or "?")[:1] | upper }}
     </div>
-    <div class="hidden sm:block min-w-0">
-      <div class="font-medium leading-tight truncate max-w-[16ch]">
+    <div class="hidden md:block min-w-0">
+      <div class="font-medium leading-tight truncate max-w-[14ch] text-[13px]">
         {{ current_user.full_name or current_user.username }}
-      </div>
-      <div class="text-xs text-neutral-500 leading-tight truncate max-w-[20ch]">
-        {{ current_user.email or "—" }}
       </div>
     </div>
 
     <form method="post" action="/admin/logout" class="inline-flex">
-      <input type="hidden" name="_csrf" value="{{ csrf_token or '' }}" />
+      <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
       <button type="submit"
-              class="btn btn-ghost btn-sm"
+              class="admin-icon-btn"
               title="Sign out"
               aria-label="Sign out">
-        <svg viewBox="0 0 24 24" fill="none" class="w-4 h-4" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M15 12H3m0 0 4-4m-4 4 4 4M10 4h9v16h-9"
-                stroke="currentColor" stroke-width="1.5"
+                stroke="currentColor" stroke-width="1.75"
                 stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>

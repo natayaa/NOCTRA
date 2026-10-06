@@ -46,6 +46,4 @@ async def refresh(refresh_token: str, db: DbSession) -> TokenPair:
 
 @router.get("/me", response_model=MeResponse)
 async def me(user: CurrentUser) -> MeResponse:
-    data = MeResponse.model_validate(user)
-    data.roles = [r.name for r in user.roles]
-    return data
+    return MeResponse.model_validate(user)

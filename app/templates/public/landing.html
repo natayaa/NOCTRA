@@ -2,97 +2,136 @@
 
 {% block content %}
 
-<!-- Hero -->
-<section class="relative overflow-hidden">
-  <div class="absolute inset-0 -z-10">
-    <div class="absolute inset-0 bg-gradient-to-b from-noctra-surface/50 to-noctra-bg"></div>
-    <div class="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full bg-noctra-accent/10 blur-3xl"></div>
-  </div>
+{# ============================================================
+   HERO
+   ============================================================ #}
+<section class="pub-hero">
+  <div class="pub-hero-grid" aria-hidden="true"></div>
 
-  <div class="container-wide pt-20 pb-24 md:pt-32 md:pb-32">
-    <p class="eyebrow mb-6">Est. 2024 · Jakarta</p>
-    <h1 class="text-4xl md:text-6xl font-bold tracking-tight max-w-3xl text-balance">
-      Your motorcycle deserves<br/>
-      <span class="text-noctra-accent">flawless paint.</span>
+  <div class="pub-hero-inner">
+
+    <div class="pub-pill">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M13 2 4.5 13.5h6L10 22l9-12h-6l0-8Z"/>
+      </svg>
+      <span><strong>Bengkel</strong> Sepeda Motor Premium</span>
+    </div>
+
+    <h1 class="pub-hero-title">
+      <span class="pub-hero-title-line-1">NOCTRA</span>
+      <span class="pub-hero-title-line-2">Autoworks</span>
     </h1>
-    <p class="text-lg text-neutral-400 mt-6 max-w-2xl text-pretty">
-      NOCTRA Autoworks is a specialist refinishing studio. Full-body repaints, restorations,
-      custom paint — all executed with production-grade materials and documented craftsmanship.
+
+    <p class="pub-hero-sub">
+      Restorasi, pengecatan ulang, dan kustomisasi premium bengkel untuk budaya
+      sepeda motor modern dengan style classy.
     </p>
-    <div class="flex flex-wrap gap-3 mt-10">
-      <a href="/contact" class="btn btn-primary btn-lg">Request a Quote</a>
-      <a href="/services" class="btn btn-secondary btn-lg">See Services</a>
+
+    <div class="pub-hero-actions">
+      <a href="/services" class="pub-btn pub-btn-primary">
+        Explore Services
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16">
+          <path d="M5 12h14m-6-6 6 6-6 6"/>
+        </svg>
+      </a>
+      <a href="https://wa.me/6281234567890" target="_blank" rel="noopener" class="pub-btn pub-btn-secondary">
+        WhatsApp
+      </a>
     </div>
+
   </div>
 </section>
 
-<!-- Trust strip -->
-<section class="border-y border-noctra-border bg-noctra-surface/40">
-  <div class="container-wide grid grid-cols-2 md:grid-cols-4 divide-x divide-noctra-border">
+{# ============================================================
+   TRUST STRIP
+   ============================================================ #}
+<section class="pub-trust">
+  <div class="pub-trust-inner">
     {% for label, value in [
-      ('Projects Delivered', '500+'),
-      ('Years of Craft', '10+'),
-      ('Satisfaction Rate', '98%'),
-      ('Avg. Turnaround', '5 days'),
+      ('Proyek Selesai', '500+'),
+      ('Tahun Pengalaman', '10+'),
+      ('Kepuasan Pelanggan', '98%'),
+      ('Rata-rata Durasi', '5 hari'),
     ] %}
-    <div class="px-6 py-8 text-center">
-      <div class="text-3xl font-semibold">{{ value }}</div>
-      <div class="text-xs uppercase tracking-widest text-neutral-500 mt-2">{{ label }}</div>
+    <div class="pub-trust-item">
+      <div class="pub-trust-value">{{ value }}</div>
+      <div class="pub-trust-label">{{ label }}</div>
     </div>
     {% endfor %}
   </div>
 </section>
 
-<!-- Services -->
-<section class="container-wide py-24">
-  <div class="max-w-2xl mb-14">
-    <p class="eyebrow mb-3">What we do</p>
-    <h2 class="text-3xl md:text-4xl font-semibold tracking-tight">Refinishing built around your motorcycle.</h2>
-    <p class="text-neutral-400 mt-4">Every service is quoted from a real cost model — materials, labor, and overhead — not guesswork.</p>
-  </div>
+{# ============================================================
+   SERVICES
+   ============================================================ #}
+<section class="pub-section">
+  <div class="pub-section-inner">
 
-  <div class="grid md:grid-cols-3 gap-6">
-    {% for svc in [
-      {'title': 'Full Body Repaint', 'desc': 'Complete disassembly, prep, primer, base, and clear. Color change or OEM match.', 'code': 'REPAINT'},
-      {'title': 'Restoration', 'desc': 'From patina-preserving touch-ups to ground-up nut-and-bolt restorations.', 'code': 'RESTORE'},
-      {'title': 'Custom Paint', 'desc': 'Airbrush, graphics, pinstriping, and one-off paint schemes.', 'code': 'CUSTOM'},
-    ] %}
-    <a href="/services" class="panel block group hover:border-noctra-accent/50 transition">
-      <div class="text-xs uppercase tracking-widest text-noctra-accent mb-2">{{ svc.code }}</div>
-      <h3 class="text-lg font-semibold">{{ svc.title }}</h3>
-      <p class="text-neutral-400 text-sm mt-2">{{ svc.desc }}</p>
-      <div class="text-noctra-accent text-sm mt-4 inline-flex items-center gap-1 group-hover:gap-2 transition-all">
-        Learn more
-        <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      </div>
-    </a>
-    {% endfor %}
+    <div class="pub-section-head">
+      <div class="pub-section-eyebrow">Layanan kami</div>
+      <h2 class="pub-section-title">Refinishing yang dirancang untuk motor Anda.</h2>
+      <p class="pub-section-sub">
+        Setiap layanan dihitung dari model biaya nyata — material, tenaga kerja,
+        dan overhead — bukan tebakan.
+      </p>
+    </div>
+
+    <div class="pub-grid-3">
+      {% for svc in [
+        {'title': 'Full Body Repaint', 'desc': 'Bongkar total, persiapan panel, primer, base coat, clear coat, dan perakitan ulang. Ganti warna atau samakan dengan OEM.', 'code': 'REPAINT'},
+        {'title': 'Restorasi', 'desc': 'Dari sentuhan halus yang menjaga patina hingga restorasi total baut-demi-baut.', 'code': 'RESTORE'},
+        {'title': 'Custom Paint', 'desc': 'Airbrush, grafis, pinstriping, dan skema warna satu-satunya.', 'code': 'CUSTOM'},
+      ] %}
+      <a href="/services" class="pub-card">
+        <div class="pub-card-code">{{ svc.code }}</div>
+        <h3 class="pub-card-title">{{ svc.title }}</h3>
+        <p class="pub-card-desc">{{ svc.desc }}</p>
+        <span class="pub-card-link">
+          Selengkapnya
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M5 12h14m-6-6 6 6-6 6"/>
+          </svg>
+        </span>
+      </a>
+      {% endfor %}
+    </div>
   </div>
 </section>
 
-<!-- Portfolio -->
-<section id="portfolio" class="container-wide py-24 border-t border-noctra-border">
-  <div class="flex items-end justify-between mb-10">
-    <div>
-      <p class="eyebrow mb-3">Recent work</p>
-      <h2 class="text-3xl md:text-4xl font-semibold tracking-tight">Selected projects.</h2>
+{# ============================================================
+   PORTFOLIO
+   ============================================================ #}
+<section class="pub-section" id="portfolio">
+  <div class="pub-section-inner">
+
+    <div class="pub-section-head">
+      <div class="pub-section-eyebrow">Karya terbaru</div>
+      <h2 class="pub-section-title">Proyek pilihan.</h2>
     </div>
-  </div>
-  <div class="grid md:grid-cols-3 gap-4">
-    {% for i in range(1, 7) %}
-    <div class="aspect-[4/3] bg-noctra-surface rounded-lg border border-noctra-border overflow-hidden relative group">
-      <div class="absolute inset-0 grid place-items-center text-neutral-600 text-xs">Photo {{ i }}</div>
+
+    <div class="pub-portfolio">
+      {% for i in range(1, 7) %}
+      <div class="pub-portfolio-item" data-label="Photo {{ i }}"></div>
+      {% endfor %}
     </div>
-    {% endfor %}
   </div>
 </section>
 
-<!-- CTA -->
-<section class="container-wide py-24">
-  <div class="panel p-10 md:p-16 text-center bg-gradient-to-b from-noctra-surface2 to-noctra-surface">
-    <h2 class="text-3xl md:text-4xl font-semibold tracking-tight">Ready to start?</h2>
-    <p class="text-neutral-400 mt-4 max-w-xl mx-auto">Send us your motorcycle, your idea, and a photo. We'll send back an honest quote within 24 hours.</p>
-    <a href="/contact" class="btn btn-primary btn-lg mt-8 inline-flex">Request a Quote</a>
+{# ============================================================
+   CTA BANNER
+   ============================================================ #}
+<section class="pub-section" style="border-top: none;">
+  <div class="pub-section-inner">
+    <div class="pub-cta-banner">
+      <h2>Siap memulai?</h2>
+      <p>Kirimkan motor Anda, ide Anda, dan sebuah foto. Kami akan membalas dengan penawaran yang jujur dalam 24 jam.</p>
+      <a href="/contact" class="pub-btn pub-btn-primary">
+        Minta Penawaran
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16">
+          <path d="M5 12h14m-6-6 6 6-6 6"/>
+        </svg>
+      </a>
+    </div>
   </div>
 </section>
 

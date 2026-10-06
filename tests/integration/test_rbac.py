@@ -1,12 +1,13 @@
 """RBAC permission resolution tests."""
 
 import pytest
+from sqlalchemy import select
 
-from app.core.constants import PermissionCode, RoleName
-from app.modules.rbac.models import Permission, Role, RolePermission, UserRole
-from app.modules.rbac.permissions import permissions_for_user
+from app.core.constants import PermissionCode
 from app.core.security import hash_password
 from app.modules.auth.models import User
+from app.modules.rbac.models import Permission, Role, RolePermission, UserRole
+from app.modules.rbac.permissions import permissions_for_user
 
 
 async def _make_role(db, name: str, codes: list[PermissionCode]) -> Role:
@@ -16,9 +17,7 @@ async def _make_role(db, name: str, codes: list[PermissionCode]) -> Role:
 
     for code in codes:
         perm = (
-            await db.execute(
-                __import__("sqlalchemy").select(Permission).where(Permission.code == code.value)
-            )
+            await db.execute(select(Permission).where(Permission.code == code.value))
         ).scalar_one_or_none()
         if perm is None:
             perm = Permission(code=code.value, description=code.name)

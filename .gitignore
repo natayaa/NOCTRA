@@ -174,5 +174,6 @@ poetry.toml
 pyrightconfig.json
 
 media/
+app.bak/
 
 # End of https://www.toptal.com/developers/gitignore/api/python

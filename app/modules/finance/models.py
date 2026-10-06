@@ -102,6 +102,7 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
         back_populates="invoice",
         cascade="all, delete-orphan",
         order_by="InvoiceItem.created_at",
+        lazy="selectin",  
     )
 
     def __repr__(self) -> str:

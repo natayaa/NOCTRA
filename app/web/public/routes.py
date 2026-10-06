@@ -27,8 +27,3 @@ async def services(request: Request) -> HTMLResponse:
     )
 
 
-@router.get("/contact", response_class=HTMLResponse)
-async def contact(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "public/contact.html", {"title": "Contact — NOCTRA"}
-    )

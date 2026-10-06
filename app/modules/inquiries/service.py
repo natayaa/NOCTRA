@@ -87,6 +87,8 @@ class InquiryService:
                 "source": inquiry.source,
             },
         )
+
+        await self.db.refresh(inquiry, ["photos"])
         return inquiry
 
     # ── Update ────────────────────────────────────────

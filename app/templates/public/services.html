@@ -1,21 +1,26 @@
 {% extends "public/base.html" %}
 
 {% block content %}
-<div class="container-wide py-20">
-  <div class="max-w-2xl">
-    <p class="eyebrow mb-3">Services</p>
-    <h1 class="text-4xl md:text-5xl font-semibold tracking-tight">What we offer.</h1>
-    <p class="text-neutral-400 mt-4">Transparent pricing. Real materials. Documented work.</p>
-  </div>
+<div class="pub-page-header">
+  <div class="pub-section-eyebrow">Layanan</div>
+  <h1 class="pub-page-title">Yang kami kerjakan.</h1>
+  <p class="pub-page-sub">Harga transparan. Material nyata. Pekerjaan terdokumentasi.</p>
+</div>
+
+<div class="container-wide" style="padding-bottom: 96px;">
 
   <div class="mt-14 grid md:grid-cols-2 gap-6">
     {% for s in [
-      {'name': 'Full Body Repaint', 'price_from': 850000, 'desc': 'Complete disassembly, panel prep, primer, base coat, clear coat, and reassembly.'},
-      {'name': 'Panel Repaint', 'price_from': 350000, 'desc': 'Single panel refinishing — tank, fender, fairing, or cowl.'},
-      {'name': 'Minor Restoration', 'price_from': 1500000, 'desc': 'Surface refinishing, engine bay detailing, chrome polish.'},
-      {'name': 'Full Restoration', 'price_from': 6000000, 'desc': 'Ground-up restoration with mechanical refurbishment.'},
-      {'name': 'Custom Paint', 'price_from': 2000000, 'desc': 'Airbrush, graphics, and one-off paint schemes.'},
-      {'name': 'Detailing & Polish', 'price_from': 250000, 'desc': 'Deep clean, compound, polish, and ceramic protection.'},
+    {'name': 'Full Body Repaint', 'price_from': 850000, 'desc': 'Complete disassembly, panel prep, primer, base coat,
+    clear coat, and reassembly.'},
+    {'name': 'Panel Repaint', 'price_from': 350000, 'desc': 'Single panel refinishing — tank, fender, fairing, or
+    cowl.'},
+    {'name': 'Minor Restoration', 'price_from': 1500000, 'desc': 'Surface refinishing, engine bay detailing, chrome
+    polish.'},
+    {'name': 'Full Restoration', 'price_from': 6000000, 'desc': 'Ground-up restoration with mechanical refurbishment.'},
+    {'name': 'Custom Paint', 'price_from': 2000000, 'desc': 'Airbrush, graphics, and one-off paint schemes.'},
+    {'name': 'Detailing & Polish', 'price_from': 250000, 'desc': 'Deep clean, compound, polish, and ceramic
+    protection.'},
     ] %}
     <div class="panel">
       <h2 class="text-xl font-semibold">{{ s.name }}</h2>

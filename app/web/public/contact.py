@@ -47,9 +47,20 @@ async def contact_form(request: Request) -> HTMLResponse:
     return templates.render(
         request,
         "public/contact.html",
-        {"title": "Contact NOCTRA"},
+        {
+            "title": "Contact NOCTRA",
+            **_catalog_context(),          # ← add this
+        },
     )
 
+@router.get("/contact/success", response_class=HTMLResponse)
+async def contact_success(request: Request) -> HTMLResponse:
+    ref = request.query_params.get("ref", "")
+    return templates.render(
+        request,
+        "public/inquiry_success.html",
+        {"title": "Thank you", "reference": ref},
+    )
 
 @router.post("/contact")
 async def contact_submit(request: Request, db: DbSession):

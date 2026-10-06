@@ -84,6 +84,9 @@ class PermissionCode(StrEnum):
     EXPENSE_WRITE = "expense:write"
     FINANCE_REPORTS = "finance:reports"
 
+    # Analytics (Phase 7)
+    ANALYTICS_READ = "analytics:read"
+
 
 class RoleName(StrEnum):
     SUPERUSER = "superuser"

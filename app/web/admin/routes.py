@@ -118,17 +118,3 @@ async def logout_get() -> RedirectResponse:
 # DASHBOARD
 # ════════════════════════════════════════════════════════════════
 
-@router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request) -> HTMLResponse:
-    stats = {
-        "active_projects": 0,
-        "pending_inquiries": 0,
-        "revenue_month": 0,
-        "hpp_month": 0,
-        "gross_margin_pct": 0.0,
-    }
-    return templates.render(
-        request,
-        "admin/dashboard.html",
-        {"title": "Dashboard", "stats": stats},
-    )

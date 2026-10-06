@@ -71,6 +71,12 @@ class CustomerService:
                 "phone": customer.phone,
             },
         )
+
+        # ── Load relationships that Pydantic will read ──
+        # `lazy="selectin"` only fires on objects loaded from a query,
+        # not on freshly created+flushed objects. Force the load here.
+        await self.db.refresh(customer, ["contacts"])
+
         return customer
 
     # ── Find-or-create (used by Phase 2c public intake) ─
@@ -104,6 +110,9 @@ class CustomerService:
             record_id=customer.id,
             new_data={"code": customer.code, "name": customer.name, "source": source},
         )
+
+        await self.db.refresh(customer, ["contacts"])     # ← add
+
         return customer, True
 
     # ── Update ────────────────────────────────────────

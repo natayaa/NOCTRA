@@ -345,6 +345,8 @@ class PurchaseOrderService:
             user_id=actor.id,
             new_data={"code": po.code, "supplier_id": str(payload.supplier_id)},
         )
+        # ── Load items so Pydantic serialization doesn't lazy-load ──
+        await self.db.refresh(po, ["items"])      # ← add
         return po
 
     async def update(

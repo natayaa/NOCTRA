@@ -40,6 +40,26 @@ class InquirySource(StrEnum):
 INQUIRY_STATUSES: list[str] = [s.value for s in InquiryStatus]
 INQUIRY_SOURCES: list[str] = [s.value for s in InquirySource]
 
+INQUIRY_STATUS_LABELS: dict[str, str] = {
+    InquiryStatus.NEW.value:         "New",
+    InquiryStatus.CONTACTED.value:   "Contacted",
+    InquiryStatus.QUOTED.value:      "Quoted",
+    InquiryStatus.NEGOTIATING.value: "Negotiating",
+    InquiryStatus.APPROVED.value:    "Approved",
+    InquiryStatus.CONVERTED.value:   "Converted",
+    InquiryStatus.LOST.value:        "Lost",
+}
+
+SERVICE_INTEREST_LABELS: dict[str, str] = {
+    "REPAINT":       "Full body repaint",
+    "PANEL_REPAINT": "Panel repaint",
+    "RESTORATION":   "Restoration",
+    "CUSTOM_PAINT":  "Custom paint",
+    "DETAILING":     "Detailing & polish",
+    "PANEL_REPAIR":  "Panel repair",
+    "OTHER":         "Other / not sure",
+}
+
 TERMINAL_STATUSES: frozenset[str] = frozenset({
     InquiryStatus.CONVERTED.value,
     InquiryStatus.LOST.value,
