@@ -21,6 +21,44 @@ from app.web.templates_env import templates
 router = APIRouter(prefix="/admin/vehicles", tags=["admin-vehicles"])
 
 
+@router.get("/api/search-customers", response_class=HTMLResponse)
+async def search_customers_fragment(
+    request: Request,
+    db: DbSession,
+    q: str = Query("", max_length=100),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
+    """HTML fragment for the customer picker dropdown."""
+    from sqlalchemy import and_, or_, select
+    from app.modules.customers.models import Customer
+
+    customers = []
+    if q.strip():
+        like = f"%{q.strip()}%"
+        stmt = (
+            select(Customer)
+            .where(
+                and_(
+                    Customer.is_active.is_(True),
+                    or_(
+                        Customer.name.ilike(like),
+                        Customer.code.ilike(like),
+                        Customer.phone.ilike(like),
+                        Customer.email.ilike(like),
+                    ),
+                )
+            )
+            .order_by(Customer.name)
+            .limit(10)
+        )
+        customers = (await db.execute(stmt)).scalars().all()
+
+    return templates.render(
+        request,
+        "admin/vehicles/_customer_options.html",
+        {"customers": customers, "q": q},
+    )
+
 # ── List ────────────────────────────────────────────────────
 @router.get("", response_class=HTMLResponse)
 async def list_view(

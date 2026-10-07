@@ -18,10 +18,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin, UUIDMixin
-from app.modules.finance.constants import (
-    InvoiceStatus,
-    PaymentDirection,
-)
+from app.modules.finance.constants import InvoiceStatus
 
 
 # ════════════════════════════════════════════════════════════════
@@ -51,7 +48,7 @@ class Account(Base, UUIDMixin, TimestampMixin):
 
 
 # ════════════════════════════════════════════════════════════════
-# INVOICES — bills sent to customers
+# INVOICES
 # ════════════════════════════════════════════════════════════════
 
 class Invoice(Base, UUIDMixin, TimestampMixin):
@@ -77,7 +74,6 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     issue_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date | None] = mapped_column(Date)
 
-    # Money (IDR)
     subtotal: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False, server_default="0")
     discount_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False, server_default="0")
     tax_rate_pct: Mapped[float] = mapped_column(Numeric(5, 2), default=0, nullable=False, server_default="0")
@@ -102,7 +98,7 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
         back_populates="invoice",
         cascade="all, delete-orphan",
         order_by="InvoiceItem.created_at",
-        lazy="selectin",  
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:
@@ -127,7 +123,7 @@ class InvoiceItem(Base, UUIDMixin, TimestampMixin):
 
 
 # ════════════════════════════════════════════════════════════════
-# PAYMENTS — every money movement (in or out)
+# PAYMENTS
 # ════════════════════════════════════════════════════════════════
 
 class Payment(Base, UUIDMixin, TimestampMixin):
@@ -146,7 +142,6 @@ class Payment(Base, UUIDMixin, TimestampMixin):
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     payment_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
 
-    # Optional link to who paid / who was paid
     customer_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("customers.id", ondelete="SET NULL"),
@@ -156,17 +151,15 @@ class Payment(Base, UUIDMixin, TimestampMixin):
         ForeignKey("suppliers.id", ondelete="SET NULL"),
     )
 
-    # Reference to what this payment is against
     reference_type: Mapped[str | None] = mapped_column(String(32))
     reference_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
 
-    # Which account the money moved through
     account_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("accounts.id", ondelete="SET NULL"),
     )
 
-    reference_number: Mapped[str | None] = mapped_column(String(100))  # bank ref
+    reference_number: Mapped[str | None] = mapped_column(String(100))
     notes: Mapped[str | None] = mapped_column(Text)
 
     created_by_id: Mapped[UUID | None] = mapped_column(
@@ -179,7 +172,7 @@ class Payment(Base, UUIDMixin, TimestampMixin):
 
 
 # ════════════════════════════════════════════════════════════════
-# EXPENSES — operational spending
+# EXPENSES
 # ════════════════════════════════════════════════════════════════
 
 class Expense(Base, UUIDMixin, TimestampMixin):
@@ -195,13 +188,11 @@ class Expense(Base, UUIDMixin, TimestampMixin):
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     expense_date: Mapped[date] = mapped_column(Date, nullable=False)
 
-    # Optional: link to an account for reporting
     account_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("accounts.id", ondelete="SET NULL"),
     )
 
-    # Optional: link to a payment if it was paid via the payments flow
     payment_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("payments.id", ondelete="SET NULL"),

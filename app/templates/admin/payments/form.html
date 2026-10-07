@@ -1,13 +1,26 @@
 {% extends "admin/base.html" %}
 {% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">Record {{ 'payment in' if direction == 'IN' else 'payment out' }}</h1></div>
+  <div>
+    <h1 class="page-title">Record {{ 'payment in' if direction == 'IN' else 'payment out' }}</h1>
+  </div>
   <div class="page-actions"><a href="/admin/payments" class="btn btn-secondary btn-sm">Back</a></div>
 </div>
+
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
+  <div class="form-error">{{ error }}</div>
+</div>
+{% endif %}
 
 <form method="post" action="/admin/payments" class="max-w-2xl panel space-y-5" data-guard>
   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
   <input type="hidden" name="direction" value="{{ direction }}" />
+
+  {# Hidden reference_type / reference_id — set by JS when an invoice is picked,
+  or preserved from the URL when arriving via the "Record DP" button. #}
+  <input type="hidden" name="reference_type" id="reference_type" value="{{ reference_type or '' }}" />
+  <input type="hidden" name="reference_id" id="reference_id" value="{{ reference_id or '' }}" />
 
   <div class="grid md:grid-cols-2 gap-5">
     <div class="form-row">
@@ -18,7 +31,7 @@
     </div>
     <div class="form-row">
       <label class="form-label" for="amount">Amount (IDR) <span class="req">*</span></label>
-      <input class="input" type="number" step="1000" id="amount" name="amount" required />
+      <input class="input" type="number" id="amount" name="amount" required />
     </div>
   </div>
 
@@ -36,22 +49,84 @@
     </div>
   </div>
 
+  {# ═══════════════ IN: customer + invoice picker ═══════════════ #}
   {% if direction == 'IN' %}
-  <div class="form-row">
-    <label class="form-label" for="customer_id">Customer ID</label>
-    <input class="input mono" id="customer_id" name="customer_id" placeholder="paste UUID (optional)" />
+
+  {# ── Preset context: arriving from project page as a DP ── #}
+  {% if reference_type == 'PROJECT' and reference_id %}
+  <div class="panel text-xs text-neutral-400">
+    Recording a <strong>DP</strong> against project
+    <span class="mono">{{ reference_id }}</span>.
+    It will be auto-applied when an invoice is created for that project.
   </div>
+  {% endif %}
+
+  <div class="form-row" data-party-picker>
+    <label class="form-label" for="customer_id">Customer</label>
+    {% if customers %}
+    <input class="input mb-2" type="text" placeholder="Type to filter…" data-party-search autocomplete="off" />
+    <select class="select" id="customer_id" name="customer_id" data-party-select>
+      <option value="">— None —</option>
+      {% for c in customers %}
+      <option value="{{ c.id }}" data-search="{{ ((c.code or '') ~ ' ' ~ c.name)|lower }}" {% if customer_id and
+        customer_id|string==c.id|string %}selected{% endif %}>
+        {% if c.code %}{{ c.code }} — {% endif %}{{ c.name }}
+      </option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <p class="text-neutral-500 text-xs">
+      No customers in the system yet.
+      <a href="/admin/customers/new" class="text-noctra-accent hover:underline">Create one first</a>.
+    </p>
+    {% endif %}
+  </div>
+
+  {# ── Invoice picker — only shown when recording against an invoice ── #}
+  {% if reference_type != 'PROJECT' %}
+  <div class="form-row" id="invoice-picker-row">
+    <label class="form-label" for="invoice_id">Apply to invoice <span class="text-neutral-500 text-xs">(optional — leave
+        blank for a customer advance)</span></label>
+    <select class="select" id="invoice_id" name="__invoice_picker">
+      <option value="">— Customer advance (unapplied) —</option>
+      {% for inv in open_invoices %}
+      <option value="{{ inv.id }}" data-customer="{{ inv.customer_id }}" data-balance="{{ inv.balance }}">
+        {{ inv.code }} — {{ inv.customer_name }} — balance Rp {{ '{:,.0f}'.format(inv.balance) }}
+      </option>
+      {% endfor %}
+    </select>
+    <p class="text-xs text-neutral-500 mt-1" id="invoice-hint"></p>
+  </div>
+  {% endif %}
+
   {% else %}
-  <div class="form-row">
-    <label class="form-label" for="supplier_id">Supplier ID</label>
-    <input class="input mono" id="supplier_id" name="supplier_id" placeholder="paste UUID (optional)" />
+  {# ── OUT: supplier picker ── #}
+  <div class="form-row" data-party-picker>
+    <label class="form-label" for="supplier_id">Supplier</label>
+    {% if suppliers %}
+    <input class="input mb-2" type="text" placeholder="Type to filter…" data-party-search autocomplete="off" />
+    <select class="select" id="supplier_id" name="supplier_id" data-party-select>
+      <option value="">— None —</option>
+      {% for s in suppliers %}
+      <option value="{{ s.id }}" data-search="{{ ((s.code or '') ~ ' ' ~ s.name)|lower }}">
+        {% if s.code %}{{ s.code }} — {% endif %}{{ s.name }}
+      </option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <p class="text-neutral-500 text-xs">
+      No suppliers yet.
+      <a href="/admin/suppliers/new" class="text-noctra-accent hover:underline">Create one first</a>.
+    </p>
+    {% endif %}
   </div>
   {% endif %}
 
   <div class="grid md:grid-cols-2 gap-5">
     <div class="form-row">
       <label class="form-label" for="reference_number">Reference number</label>
-      <input class="input" id="reference_number" name="reference_number" maxlength="100" placeholder="bank ref, receipt no." />
+      <input class="input" id="reference_number" name="reference_number" maxlength="100"
+        placeholder="bank ref, receipt no." />
     </div>
     <div class="form-row">
       <label class="form-label" for="notes">Notes</label>
@@ -64,4 +139,97 @@
     <a href="/admin/payments" class="btn btn-secondary">Cancel</a>
   </div>
 </form>
+
+<script>
+  // ── Party picker filter (customer/supplier) ─────────────────
+  document.querySelectorAll('[data-party-picker]').forEach(picker => {
+    const search = picker.querySelector('[data-party-search]');
+    const select = picker.querySelector('[data-party-select]');
+    if (!search || !select) return;
+    const all = Array.from(select.options);
+    const noneOpt = all[0];
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      const currentValue = select.value;
+      select.innerHTML = '';
+      select.appendChild(noneOpt);
+      for (const opt of all.slice(1)) {
+        if (!q || opt.dataset.search.includes(q)) select.appendChild(opt);
+      }
+      if (Array.from(select.options).some(o => o.value === currentValue)) {
+        select.value = currentValue;
+      }
+      select.dispatchEvent(new Event('change'));
+    });
+  });
+
+  // ── Invoice picker ─────────────────────────────────────────
+  const customerSelect = document.getElementById('customer_id');
+  const invoiceSelect = document.getElementById('invoice_id');
+  const amountInput = document.getElementById('amount');
+  const refTypeInput = document.getElementById('reference_type');
+  const refIdInput = document.getElementById('reference_id');
+  const invoiceHint = document.getElementById('invoice-hint');
+
+  function refreshInvoiceOptions() {
+    if (!invoiceSelect) return;
+    const customerId = customerSelect ? customerSelect.value : '';
+    const current = invoiceSelect.value;
+    const options = Array.from(invoiceSelect.options);
+
+    // Show only invoices for the selected customer (or all if none picked).
+    let lastSelected = '';
+    options.forEach((opt, idx) => {
+      if (idx === 0) return; // placeholder
+      const matches = !customerId || opt.dataset.customer === customerId;
+      opt.hidden = !matches;
+      opt.disabled = !matches;
+    });
+
+    // If the currently selected invoice no longer matches, clear it.
+    if (current) {
+      const sel = invoiceSelect.querySelector(`option[value="${current}"]`);
+      if (sel && (sel.hidden || sel.disabled)) {
+        invoiceSelect.value = '';
+      } else {
+        lastSelected = current;
+      }
+    }
+    updateFromInvoice();
+  }
+
+  function updateFromInvoice() {
+    if (!invoiceSelect) return;
+    const opt = invoiceSelect.options[invoiceSelect.selectedIndex];
+    if (!opt || !opt.value) {
+      refTypeInput.value = '';
+      refIdInput.value = '';
+      if (invoiceHint) invoiceHint.textContent = '';
+      return;
+    }
+    const rawBalance = parseFloat(opt.dataset.balance || '0');
+    refTypeInput.value = 'INVOICE';
+    refIdInput.value = opt.value;
+
+    if (rawBalance > 0) {
+      const rounded = Math.round(rawBalance);
+      amountInput.value = rounded > 0 ? rounded : 1;   // never 0
+      if (invoiceHint) {
+        invoiceHint.textContent =
+          `Outstanding balance: Rp ${rawBalance.toLocaleString('id-ID')}`;
+      }
+    } else if (invoiceHint) {
+      invoiceHint.textContent = 'This invoice has no outstanding balance.';
+    }
+  }
+
+  if (customerSelect) {
+    customerSelect.addEventListener('change', refreshInvoiceOptions);
+  }
+  if (invoiceSelect) {
+    invoiceSelect.addEventListener('change', updateFromInvoice);
+    // Initial pass — respects any pre-selected values.
+    refreshInvoiceOptions();
+  }
+</script>
 {% endblock %}

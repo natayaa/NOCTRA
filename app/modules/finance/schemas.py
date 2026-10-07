@@ -198,6 +198,10 @@ class PaymentDetail(PaymentListItem):
     created_at: datetime
 
 
+class PaymentReverse(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+
+
 # ════════════════════════════════════════════════════════════════
 # EXPENSES
 # ════════════════════════════════════════════════════════════════
@@ -257,18 +261,15 @@ class PnLReport(BaseModel):
     period_start: date
     period_end: date
 
-    # Revenue breakdown
     revenue_lines: list[PnLLine]
     total_revenue: float
 
-    # COGS breakdown
     cogs_lines: list[PnLLine]
     total_cogs: float
 
     gross_profit: float
     gross_margin_pct: float
 
-    # Operating expenses breakdown
     opex_lines: list[PnLLine]
     total_opex: float
 

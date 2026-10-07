@@ -63,7 +63,10 @@ from app.web.admin import finance_reports as admin_finance_reports
 from app.web.admin import invoices as admin_invoices
 from app.web.admin import payments as admin_payments
 from app.web.admin import dashboard as admin_dashboard
-
+from app.web.admin import audit as admin_audit
+from app.web.admin import roles as admin_roles
+from app.web.admin import settings as admin_settings
+from app.web.admin import users as admin_users
 
 
 @asynccontextmanager
@@ -167,7 +170,11 @@ def create_app() -> FastAPI:
     app.include_router(admin_expenses.router)
     app.include_router(admin_finance_reports.router)
     app.include_router(admin_dashboard.router)
-    
+    app.include_router(admin_users.router)
+    app.include_router(admin_roles.router)
+    app.include_router(admin_audit.router)
+    app.include_router(admin_settings.router)
+        
 
     return app
 

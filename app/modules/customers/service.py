@@ -121,16 +121,23 @@ class CustomerService:
     ) -> Customer:
         customer = await self._get_or_404(customer_id)
         before = self._snapshot(customer)
+        fields = payload.model_fields_set
 
-        if payload.email is not None and payload.email != customer.email:
-            if (existing := await self.repo.find_by_email(str(payload.email))) and existing.id != customer.id:
-                raise ConflictError("Email already in use by another customer")
-            customer.email = payload.email
+        if "email" in fields:
+            new_email = str(payload.email) if payload.email else None
+            if new_email and new_email != customer.email:
+                existing = await self.repo.find_by_email(new_email)
+                if existing and existing.id != customer.id:
+                    raise ConflictError("Email already in use by another customer")
+            customer.email = new_email
 
-        if payload.phone is not None and payload.phone != customer.phone:
-            if (existing := await self.repo.find_by_phone(payload.phone)) and existing.id != customer.id:
-                raise ConflictError("Phone already in use by another customer")
-            customer.phone = payload.phone
+        if "phone" in fields:
+            new_phone = payload.phone or None
+            if new_phone and new_phone != customer.phone:
+                existing = await self.repo.find_by_phone(new_phone)
+                if existing and existing.id != customer.id:
+                    raise ConflictError("Phone already in use by another customer")
+            customer.phone = new_phone
 
         for field in (
             "name", "alt_phone",
@@ -138,9 +145,8 @@ class CustomerService:
             "postal_code", "country", "tax_id", "notes",
             "status", "is_active",
         ):
-            value = getattr(payload, field, None)
-            if value is not None:
-                setattr(customer, field, value)
+            if field in fields:
+                setattr(customer, field, getattr(payload, field))
 
         await self.db.flush()
 

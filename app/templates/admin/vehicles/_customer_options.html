@@ -1,0 +1,16 @@
+{% if customers %}
+  {% for c in customers %}
+  <button type="button"
+          class="w-full text-left px-3 py-2 hover:bg-noctra-surface2 border-b border-noctra-border last:border-0"
+          onclick="selectCustomer('{{ c.id }}', '{{ c.name|e }}', '{{ c.code }}')">
+    <div class="font-medium text-sm">{{ c.name }}</div>
+    <div class="text-xs text-neutral-500">
+      {{ c.code }}{% if c.phone %} · {{ c.phone }}{% endif %}
+    </div>
+  </button>
+  {% endfor %}
+{% elif q %}
+  <div class="px-3 py-3 text-xs text-neutral-500">No matches for "{{ q }}"</div>
+{% else %}
+  <div class="px-3 py-3 text-xs text-neutral-500">Start typing to search…</div>
+{% endif %}

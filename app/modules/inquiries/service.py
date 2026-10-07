@@ -1,11 +1,4 @@
-"""Business rules for the inquiries module.
-
-Enforces:
-- Allowed status transitions only.
-- Auto-set `last_contacted_at` when moving out of NEW.
-- Audit logging on every mutation.
-- Assignment validation.
-"""
+"""Business rules for the inquiries module."""
 
 from __future__ import annotations
 
@@ -14,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import log
 from app.core.constants import AuditAction
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.modules.audit.service import AuditService
@@ -43,7 +37,6 @@ class InquiryService:
         self.vehicles = VehicleRepository(db)
         self.audit = AuditService(db)
 
-    # ── Create ────────────────────────────────────────
     async def create(
         self, payload: InquiryCreate, *, actor: User | None = None
     ) -> Inquiry:
@@ -60,13 +53,11 @@ class InquiryService:
             vehicle_id=payload.vehicle_id,
             service_interest=payload.service_interest,
             description=payload.description.strip(),
-
             color_preference=payload.color_preference,
             color_family=payload.color_family,
             finish_preference=payload.finish_preference,
-            has_custom_graphics=payload.has_custom_graphics,
+            has_custom_graphics=payload.has_custom_graphics or False,
             preferences=payload.preferences,
-
             status=InquiryStatus.NEW.value,
             source=payload.source,
             budget_range=payload.budget_range,
@@ -87,11 +78,8 @@ class InquiryService:
                 "source": inquiry.source,
             },
         )
-
-        await self.db.refresh(inquiry, ["photos"])
         return inquiry
 
-    # ── Update ────────────────────────────────────────
     async def update(
         self, inquiry_id: UUID, payload: InquiryUpdate, *, actor: User
     ) -> Inquiry:
@@ -103,13 +91,14 @@ class InquiryService:
             )
 
         before = self._snapshot(inquiry)
+        fields = payload.model_fields_set
 
-        if payload.customer_id is not None:
+        if "customer_id" in fields:
             if payload.customer_id and not await self.customers.get(payload.customer_id):
                 raise NotFoundError("Customer not found")
             inquiry.customer_id = payload.customer_id
 
-        if payload.vehicle_id is not None:
+        if "vehicle_id" in fields:
             if payload.vehicle_id and not await self.vehicles.get(payload.vehicle_id):
                 raise NotFoundError("Vehicle not found")
             inquiry.vehicle_id = payload.vehicle_id
@@ -127,9 +116,8 @@ class InquiryService:
             "follow_up_date",
             "notes",
         ):
-            value = getattr(payload, field, None)
-            if value is not None:
-                setattr(inquiry, field, value)
+            if field in fields:
+                setattr(inquiry, field, getattr(payload, field))
 
         await self.db.flush()
 
@@ -143,7 +131,6 @@ class InquiryService:
         )
         return inquiry
 
-    # ── Assignment ────────────────────────────────────
     async def assign(
         self, inquiry_id: UUID, assignee_id: UUID | None, *, actor: User
     ) -> Inquiry:
@@ -166,7 +153,6 @@ class InquiryService:
         )
         return inquiry
 
-    # ── Status transition ─────────────────────────────
     async def change_status(
         self,
         inquiry_id: UUID,
@@ -191,14 +177,22 @@ class InquiryService:
                 "A closing note is required when marking an inquiry as LOST"
             )
 
+        if target == InquiryStatus.CONVERTED.value:
+            inquiry, _project = await self.convert_to_project(
+                inquiry_id, actor=actor,
+            )
+            if payload.closing_note:
+                inquiry.closing_note = payload.closing_note
+                await self.db.flush()
+            return inquiry
+
         before = current
         inquiry.status = target
 
-        # Auto-set last_contacted_at when leaving NEW
         if current == InquiryStatus.NEW.value and target != InquiryStatus.NEW.value:
             inquiry.last_contacted_at = datetime.now(UTC)
 
-        if payload.closing_note:
+        if "closing_note" in payload.model_fields_set:
             inquiry.closing_note = payload.closing_note
 
         await self.db.flush()
@@ -213,7 +207,6 @@ class InquiryService:
         )
         return inquiry
 
-    # ── Mark contacted (shortcut) ─────────────────────
     async def mark_contacted(self, inquiry_id: UUID, *, actor: User) -> Inquiry:
         return await self.change_status(
             inquiry_id,
@@ -221,14 +214,12 @@ class InquiryService:
             actor=actor,
         )
 
-    # ── Photos ────────────────────────────────────────
     async def add_photo(
         self, inquiry_id: UUID, payload: InquiryPhotoIn, *, actor: User
     ) -> InquiryPhoto:
         inquiry = await self._get_or_404(inquiry_id)
 
         if payload.is_primary:
-            # Unset any previous primary
             for existing in await self.repo.list_photos(inquiry_id):
                 existing.is_primary = False
 
@@ -250,7 +241,55 @@ class InquiryService:
         )
         return photo
 
-    # ── Helpers ───────────────────────────────────────
+    async def convert_to_project(
+        self,
+        inquiry_id: UUID,
+        *,
+        actor: User,
+        quoted_price: float | None = None,
+        approved_price: float | None = None,
+    ) -> tuple[Inquiry, "Project"]:
+        """Convert an APPROVED inquiry into a Project."""
+        from app.modules.projects.service import ProjectService
+
+        inquiry = await self._get_or_404(inquiry_id)
+
+        if inquiry.status != InquiryStatus.APPROVED.value:
+            raise ConflictError(
+                f"Cannot convert an inquiry in status '{inquiry.status}'. "
+                f"Move it to APPROVED first."
+            )
+
+        project = await ProjectService(self.db).create_from_inquiry(
+            inquiry_id,
+            actor=actor,
+            quoted_price=quoted_price,
+            approved_price=approved_price,
+        )
+
+        inquiry.status = InquiryStatus.CONVERTED.value
+        await self.db.flush()
+
+        await self.audit.log(
+            action=AuditAction.STATUS_CHANGE,
+            table_name="inquiries",
+            record_id=inquiry.id,
+            user_id=actor.id,
+            old_data={"status": InquiryStatus.APPROVED.value},
+            new_data={
+                "status": InquiryStatus.CONVERTED.value,
+                "project_id": str(project.id),
+                "project_code": project.code,
+            },
+        )
+
+        log.info(
+            "inquiry_converted",
+            inquiry_code=inquiry.code,
+            project_code=project.code,
+        )
+        return inquiry, project
+
     async def _get_or_404(self, inquiry_id: UUID) -> Inquiry:
         inquiry = await self.repo.get(inquiry_id)
         if not inquiry:
@@ -262,8 +301,14 @@ class InquiryService:
         return {
             "status": i.status,
             "assigned_to_id": str(i.assigned_to_id) if i.assigned_to_id else None,
+            "customer_id": str(i.customer_id) if i.customer_id else None,
+            "vehicle_id": str(i.vehicle_id) if i.vehicle_id else None,
             "service_interest": i.service_interest,
             "color_family": i.color_family,
+            "color_preference": i.color_preference,
             "finish_preference": i.finish_preference,
             "has_custom_graphics": i.has_custom_graphics,
+            "budget_range": i.budget_range,
+            "desired_date": i.desired_date.isoformat() if i.desired_date else None,
+            "follow_up_date": i.follow_up_date.isoformat() if i.follow_up_date else None,
         }

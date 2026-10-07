@@ -139,6 +139,7 @@ class Project(Base, UUIDMixin, TimestampMixin):
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="ProjectItem.created_at",
+        lazy="selectin",   # ← add this
     )
 
     # ── Derived properties ─────────────────────────────

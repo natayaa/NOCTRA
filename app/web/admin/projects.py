@@ -38,6 +38,7 @@ from app.modules.projects.service import CostingService, ProjectService
 from app.modules.vehicles.repository import VehicleRepository
 from app.web.templates_env import templates
 
+
 router = APIRouter(prefix="/admin/projects", tags=["admin-projects"])
 
 
@@ -188,6 +189,10 @@ async def detail_view(
 ) -> HTMLResponse:
     from app.modules.inquiries.repository import InquiryRepository
     from app.modules.pricing.service import PricingService
+    from app.modules.finance.repository import PaymentRepository
+
+    payments = await PaymentRepository(db).payments_for_project(project_id)
+    total_received = sum(float(p.amount) for p in payments)
 
     repo = ProjectRepository(db)
     project = await repo.get(project_id)
@@ -258,6 +263,8 @@ async def detail_view(
             "assignees": await _load_assignees(db),
             "pricing_recommendation": pricing_recommendation,
             "pricing_evaluation": pricing_evaluation,
+            "payments": payments,
+            "total_received": total_received,
             **_catalog(),
         },
     )

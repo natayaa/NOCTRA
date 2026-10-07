@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.projects.constants import (
     COST_CATEGORIES,
+    PROJECT_ITEM_STATUSES,
     PROJECT_STATUSES,
 )
 
@@ -32,7 +33,7 @@ class EmployeeUpdate(BaseModel):
     name: str | None = Field(None, min_length=2, max_length=255)
     position: str | None = None
     hourly_rate: float | None = Field(None, ge=0)
-    monthly_salary: float | None = None
+    monthly_salary: float | None = Field(None, ge=0)
     joined_at: date | None = None
     phone: str | None = None
     notes: str | None = None
@@ -102,6 +103,13 @@ class ProjectItemUpdate(BaseModel):
     status: str | None = None
     notes: str | None = None
 
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, v):
+        if v is not None and v not in PROJECT_ITEM_STATUSES:
+            raise ValueError(f"status must be one of {PROJECT_ITEM_STATUSES}")
+        return v
+
 
 class ProjectItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -125,7 +133,6 @@ class ProjectItemOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    # Derived helpers (computed by the service)
     variance: float = 0.0
     variance_pct: float = 0.0
 
@@ -198,14 +205,11 @@ class ProjectListItem(BaseModel):
     target_end_date: date | None
     created_at: datetime
 
-    # Derived
     variance: float = 0.0
     gross_margin_pct: float = 0.0
 
 
 class ProjectCostBreakdown(BaseModel):
-    """Side-by-side estimated vs actual per category."""
-
     estimated_materials: float
     estimated_parts: float
     estimated_labor: float
@@ -238,15 +242,10 @@ class ProjectDetail(ProjectListItem):
     items: list[ProjectItemOut] = Field(default_factory=list)
     cost_breakdown: ProjectCostBreakdown | None = None
 
-    # Customer + vehicle snapshots for the header
     customer_name: str | None = None
     customer_code: str | None = None
     vehicle_label: str | None = None
 
-
-# ════════════════════════════════════════════════════════════════
-# COSTING UTILITIES — response for the overhead-rate endpoint
-# ════════════════════════════════════════════════════════════════
 
 class OverheadRateInfo(BaseModel):
     monthly_overhead: float

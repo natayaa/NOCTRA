@@ -1,20 +1,133 @@
 {% extends "admin/base.html" %}
 {% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">{{ payment.code }}</h1></div>
-  <div class="page-actions"><a href="/admin/payments" class="btn btn-secondary btn-sm">Back</a></div>
+  <div>
+    <h1 class="page-title">{{ payment.code }}</h1>
+    <p class="page-subtitle">
+      <span class="badge {% if payment.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %}">
+        {{ payment.direction }}
+      </span>
+      {% if customer %}· {{ customer.name }}
+      {% elif supplier %}· {{ supplier.name }}{% endif %}
+      {% if reversal %}<span class="badge badge-warning ml-2">Reversed</span>{% endif %}
+      {% if is_reversal %}<span class="badge badge-info ml-2">Reversal entry</span>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/payments" class="btn btn-secondary btn-sm">Back</a>
+  </div>
 </div>
+
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
+  <div class="form-error">{{ error }}</div>
+</div>
+{% endif %}
+
+{% if reversal %}
+<div class="panel mb-4" style="border-color: rgba(234,179,8,0.4);">
+  <p class="text-sm">
+    This payment has been reversed by
+    <a href="/admin/payments/{{ reversal.id }}" class="mono hover:underline">{{ reversal.code }}</a>
+    on {{ reversal.created_at.strftime('%d %b %Y') }}.
+  </p>
+</div>
+{% endif %}
+
+{% if is_reversal and original %}
+<div class="panel mb-4" style="border-color: rgba(59,130,246,0.4);">
+  <p class="text-sm">
+    This is a reversal of
+    <a href="/admin/payments/{{ original.id }}" class="mono hover:underline">{{ original.code }}</a>.
+  </p>
+</div>
+{% endif %}
 
 <div class="panel max-w-2xl">
   <dl class="grid grid-cols-2 gap-4 text-sm">
-    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Direction</dt>
-      <dd><span class="badge {% if payment.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %}">{{ payment.direction }}</span></dd></div>
-    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Amount</dt>
-      <dd class="font-mono">{{ payment.amount | rupiah }}</dd></div>
-    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Date</dt><dd>{{ payment.payment_date.strftime('%d %b %Y') }}</dd></div>
-    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Method</dt><dd>{{ payment.method }}</dd></div>
-    <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Reference number</dt><dd>{{ payment.reference_number or '—' }}</dd></div>
+    <div>
+      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Direction</dt>
+      <dd><span class="badge {% if payment.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %}">{{ payment.direction }}</span></dd>
+    </div>
+    <div>
+      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Amount</dt>
+      <dd class="font-mono">{{ payment.amount | rupiah }}</dd>
+    </div>
+    <div>
+      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Date</dt>
+      <dd>{{ payment.payment_date.strftime('%d %b %Y') }}</dd>
+    </div>
+    <div>
+      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Method</dt>
+      <dd>{{ payment_method_labels.get(payment.method, payment.method) }}</dd>
+    </div>
+    <div>
+      <dt class="text-neutral-500 text-xs uppercase tracking-wider">
+        {{ 'Customer' if payment.direction == 'IN' else 'Supplier' }}
+      </dt>
+      <dd>
+        {% if customer %}
+          <a href="/admin/customers/{{ customer.id }}" class="hover:underline">{{ customer.name }}</a>
+        {% elif supplier %}
+          <a href="/admin/suppliers/{{ supplier.id }}" class="hover:underline">{{ supplier.name }}</a>
+        {% else %}
+          <span class="text-neutral-500">—</span>
+        {% endif %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Account</dt>
+      <dd>
+        {% if account %}{{ account.code }} — {{ account.name }}
+        {% else %}<span class="text-neutral-500">—</span>{% endif %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Reference number</dt>
+      <dd>{{ payment.reference_number or '—' }}</dd>
+    </div>
+    <div>
+      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Applied to</dt>
+      <dd>
+        {% if invoice %}
+          <a href="/admin/invoices/{{ invoice.id }}" class="hover:underline">{{ invoice.code }}</a>
+        {% elif payment.reference_type %}
+          {{ payment.reference_type }}
+        {% else %}
+          <span class="text-neutral-500">—</span>
+        {% endif %}
+      </dd>
+    </div>
   </dl>
-  {% if payment.notes %}<p class="text-neutral-300 mt-4 text-sm">{{ payment.notes }}</p>{% endif %}
+
+  {% if payment.notes %}
+  <div class="mt-4">
+    <dt class="text-neutral-500 text-xs uppercase tracking-wider">Notes</dt>
+    <p class="text-neutral-300 mt-1 text-sm whitespace-pre-line">{{ payment.notes }}</p>
+  </div>
+  {% endif %}
 </div>
+
+{% if not reversal and not is_reversal %}
+<div class="panel max-w-2xl mt-6">
+  <div class="panel-title">Reverse this payment</div>
+  <p class="text-neutral-400 text-xs mt-1">
+    Creates a compensating entry in the opposite direction. The original
+    payment stays in the audit trail, and any linked invoice status is
+    re-evaluated.
+  </p>
+  <form method="post" action="/admin/payments/{{ payment.id }}/reverse"
+        class="mt-3 grid md:grid-cols-4 gap-3 items-end" data-guard
+        onsubmit="return confirm('Reverse this payment? This cannot be undone.');">
+    <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+    <div class="form-row !mb-0 md:col-span-3">
+      <label class="form-label" for="reverse_reason">Reason</label>
+      <input class="input" id="reverse_reason" name="reason" required
+             minlength="3" maxlength="500"
+             placeholder="e.g. recorded against wrong invoice" />
+    </div>
+    <button class="btn btn-danger">Reverse payment</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

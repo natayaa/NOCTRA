@@ -23,6 +23,57 @@ from app.modules.customers.service import CustomerService
 router = APIRouter(prefix="/customers", tags=["customers"])
 
 
+# ════════════════════════════════════════════════════════════════
+# SEARCH — MUST be declared BEFORE /{customer_id}
+# ════════════════════════════════════════════════════════════════
+
+@router.get("/search", response_model=list[dict])
+async def search_customers(
+    db: DbSession,
+    q: str = Query("", min_length=1, max_length=100),
+    limit: int = Query(10, ge=1, le=50),
+    _=Depends(require_permission(PermissionCode.CUSTOMER_READ)),
+) -> list[dict]:
+    """Lightweight search for autocomplete pickers."""
+    from sqlalchemy import and_, or_, select
+    from app.modules.customers.models import Customer
+
+    like = f"%{q.strip()}%"
+    stmt = (
+        select(Customer)
+        .where(
+            and_(
+                Customer.is_active.is_(True),
+                or_(
+                    Customer.name.ilike(like),
+                    Customer.code.ilike(like),
+                    Customer.phone.ilike(like),
+                    Customer.email.ilike(like),
+                ),
+            )
+        )
+        .order_by(Customer.name)
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "id": str(c.id),
+            "code": c.code,
+            "name": c.name,
+            "phone": c.phone,
+            "city": c.city,
+            "label": f"{c.name} ({c.code})",
+            "sublabel": c.phone or c.email or "",
+        }
+        for c in rows
+    ]
+
+
+# ════════════════════════════════════════════════════════════════
+# CRUD
+# ════════════════════════════════════════════════════════════════
+
 @router.get("", response_model=Page[CustomerListItem])
 async def list_customers(
     db: DbSession,
@@ -108,46 +159,3 @@ async def deactivate_customer(
     _=Depends(require_permission(PermissionCode.CUSTOMER_DELETE)),
 ) -> None:
     await CustomerService(db).deactivate(customer_id, actor=actor)
-
-
-@router.get("/search", response_model=list[dict])
-async def search_customers(
-    db: DbSession,
-    q: str = Query("", min_length=1, max_length=100),
-    limit: int = Query(10, ge=1, le=50),
-    _=Depends(require_permission(PermissionCode.CUSTOMER_READ)),
-) -> list[dict]:
-    """Lightweight search for autocomplete pickers."""
-    from sqlalchemy import and_, or_, select
-    from app.modules.customers.models import Customer
-
-    like = f"%{q.strip()}%"
-    stmt = (
-        select(Customer)
-        .where(
-            and_(
-                Customer.is_active.is_(True),
-                or_(
-                    Customer.name.ilike(like),
-                    Customer.code.ilike(like),
-                    Customer.phone.ilike(like),
-                    Customer.email.ilike(like),
-                ),
-            )
-        )
-        .order_by(Customer.name)
-        .limit(limit)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    return [
-        {
-            "id": str(c.id),
-            "code": c.code,
-            "name": c.name,
-            "phone": c.phone,
-            "city": c.city,
-            "label": f"{c.name} ({c.code})",
-            "sublabel": c.phone or c.email or "",
-        }
-        for c in rows
-    ]

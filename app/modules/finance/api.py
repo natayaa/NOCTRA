@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import select
 
 from app.core.constants import PermissionCode
 from app.core.deps import DbSession
@@ -37,12 +38,14 @@ from app.modules.finance.schemas import (
     InvoiceCreate,
     InvoiceDetail,
     InvoiceFromProject,
+    InvoiceItemOut,
     InvoiceListItem,
     InvoiceStatusChange,
     InvoiceUpdate,
     PaymentCreate,
     PaymentDetail,
     PaymentListItem,
+    PaymentReverse,
     PayablesSummary,
     PnLReport,
     ReceivablesSummary,
@@ -76,7 +79,7 @@ async def catalog() -> dict:
 
 
 # ════════════════════════════════════════════════════════════════
-# ACCOUNTS (read-only)
+# ACCOUNTS
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/accounts", response_model=list[AccountOut])
@@ -113,17 +116,17 @@ async def list_invoices(
     )
     rows, meta = await paginate(db, stmt, params)
 
-    # Enrich with customer names + paid amounts
     from app.modules.customers.models import Customer
+
     customer_ids = {r.customer_id for r in rows if r.customer_id}
-    customers = {}
+    customers: dict = {}
     if customer_ids:
         c_rows = await db.execute(select(Customer).where(Customer.id.in_(customer_ids)))
         customers = {c.id: c for c in c_rows.scalars().all()}
 
     repo = InvoiceRepository(db)
-    today = date.today()
-    items = []
+    today = datetime.now(UTC).date()
+    items: list[InvoiceListItem] = []
     for r in rows:
         item = InvoiceListItem.model_validate(r)
         item.paid_amount = await repo.paid_amount(r.id)
@@ -178,17 +181,12 @@ async def get_invoice(
     detail.balance_due = float(inv.total) - detail.paid_amount
     detail.is_overdue = (
         inv.due_date is not None
-        and date.today() > inv.due_date
+        and datetime.now(UTC).date() > inv.due_date
         and inv.status not in ("PAID", "CANCELLED")
     )
 
-    from sqlalchemy import select
-    from app.modules.finance.models import InvoiceItem
-    from app.modules.finance.schemas import InvoiceItemOut
-    items = (await db.execute(
-        select(InvoiceItem).where(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.created_at)
-    )).scalars().all()
-    detail.items = [InvoiceItemOut.model_validate(i) for i in items]
+    # Invoice.items has lazy="selectin" so it's already loaded.
+    detail.items = [InvoiceItemOut.model_validate(i) for i in inv.items]
 
     return detail
 
@@ -241,24 +239,23 @@ async def list_payments(
     )
     rows, meta = await paginate(db, stmt, params)
 
-    # Enrich
-    from sqlalchemy import select
     from app.modules.customers.models import Customer
     from app.modules.inventory.models import Supplier
 
     cids = {r.customer_id for r in rows if r.customer_id}
     sids = {r.supplier_id for r in rows if r.supplier_id}
 
-    customers = {}
+    customers: dict = {}
     if cids:
         c_rows = await db.execute(select(Customer).where(Customer.id.in_(cids)))
         customers = {c.id: c for c in c_rows.scalars().all()}
-    suppliers = {}
+
+    suppliers: dict = {}
     if sids:
         s_rows = await db.execute(select(Supplier).where(Supplier.id.in_(sids)))
         suppliers = {s.id: s for s in s_rows.scalars().all()}
 
-    items = []
+    items: list[PaymentListItem] = []
     for r in rows:
         item = PaymentListItem.model_validate(r)
         if r.customer_id in customers:
@@ -291,6 +288,20 @@ async def get_payment(
     if not p:
         raise NotFoundError("Payment not found")
     return PaymentDetail.model_validate(p)
+
+
+@router.post("/payments/{payment_id}/reverse", response_model=PaymentDetail)
+async def reverse_payment(
+    payment_id: UUID,
+    payload: PaymentReverse,
+    db: DbSession,
+    actor: CurrentUser,
+    _=Depends(require_permission(PermissionCode.PAYMENT_WRITE)),
+) -> PaymentDetail:
+    reversal = await PaymentService(db).reverse(
+        payment_id, actor=actor, reason=payload.reason,
+    )
+    return PaymentDetail.model_validate(reversal)
 
 
 # ════════════════════════════════════════════════════════════════

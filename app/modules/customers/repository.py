@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.customers.models import Customer, CustomerContact
@@ -22,11 +22,15 @@ class CustomerRepository:
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def find_by_email(self, email: str) -> Customer | None:
-        stmt = select(Customer).where(Customer.email == email).limit(1)
+        stmt = (
+            select(Customer)
+            .where(func.lower(Customer.email) == email.strip().lower())
+            .limit(1)
+        )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def find_by_phone(self, phone: str) -> Customer | None:
-        stmt = select(Customer).where(Customer.phone == phone).limit(1)
+        stmt = select(Customer).where(Customer.phone == phone.strip()).limit(1)
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     def query(

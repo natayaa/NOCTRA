@@ -5,18 +5,19 @@
   <div>
     <h1 class="page-title">{{ inquiry.code }}</h1>
     <p class="page-subtitle">
-      <span class="badge {% if inquiry.status == 'NEW' %}badge-info{% elif inquiry.status in ('APPROVED', 'CONVERTED') %}badge-success{% elif inquiry.status == 'LOST' %}badge-danger{% else %}badge-accent{% endif %}">
+      <span
+        class="badge {% if inquiry.status == 'NEW' %}badge-info{% elif inquiry.status in ('APPROVED', 'CONVERTED') %}badge-success{% elif inquiry.status == 'LOST' %}badge-danger{% else %}badge-accent{% endif %}">
         {{ inquiry.status }}
       </span>
       <span class="ml-2">· {{ inquiry.source }}</span>
     </p>
   </div>
   <div class="page-actions">
-    {% if inquiry.customer %}
-      <a href="/admin/customers/{{ inquiry.customer_id }}" class="btn btn-secondary btn-sm">Customer</a>
+    {% if customer %}
+    <a href="/admin/customers/{{ inquiry.customer_id }}" class="btn btn-secondary btn-sm">Customer</a>
     {% endif %}
     {% if inquiry.status not in ('CONVERTED', 'LOST') %}
-      <a href="/admin/inquiries/{{ inquiry.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+    <a href="/admin/inquiries/{{ inquiry.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
     {% endif %}
   </div>
 </div>
@@ -53,12 +54,13 @@
           <div class="text-neutral-500 text-xs uppercase tracking-wider">Color</div>
           <div>{{ inquiry.color_preference or '—' }}</div>
           {% if inquiry.color_family %}
-            <div class="text-xs text-neutral-500">{{ color_labels.get(inquiry.color_family, inquiry.color_family) }}</div>
+          <div class="text-xs text-neutral-500">{{ color_labels.get(inquiry.color_family, inquiry.color_family) }}</div>
           {% endif %}
         </div>
         <div class="text-sm">
           <div class="text-neutral-500 text-xs uppercase tracking-wider">Finish</div>
-          <div>{{ finish_labels.get(inquiry.finish_preference, inquiry.finish_preference) if inquiry.finish_preference else '—' }}</div>
+          <div>{{ finish_labels.get(inquiry.finish_preference, inquiry.finish_preference) if inquiry.finish_preference
+            else '—' }}</div>
         </div>
         <div class="text-sm">
           <div class="text-neutral-500 text-xs uppercase tracking-wider">Custom graphics</div>
@@ -90,10 +92,22 @@
     <div class="panel">
       <div class="panel-title">Logistics</div>
       <dl class="grid grid-cols-2 gap-4 mt-3 text-sm">
-        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Budget</dt><dd>{{ budget_labels.get(inquiry.budget_range, inquiry.budget_range) if inquiry.budget_range else '—' }}</dd></div>
-        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Desired date</dt><dd>{{ inquiry.desired_date.strftime('%d %b %Y') if inquiry.desired_date else '—' }}</dd></div>
-        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Follow-up</dt><dd>{{ inquiry.follow_up_date.strftime('%d %b %Y') if inquiry.follow_up_date else '—' }}</dd></div>
-        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Last contacted</dt><dd>{{ inquiry.last_contacted_at | dt_id if inquiry.last_contacted_at else '—' }}</dd></div>
+        <div>
+          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Budget</dt>
+          <dd>{{ budget_labels.get(inquiry.budget_range, inquiry.budget_range) if inquiry.budget_range else '—' }}</dd>
+        </div>
+        <div>
+          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Desired date</dt>
+          <dd>{{ inquiry.desired_date.strftime('%d %b %Y') if inquiry.desired_date else '—' }}</dd>
+        </div>
+        <div>
+          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Follow-up</dt>
+          <dd>{{ inquiry.follow_up_date.strftime('%d %b %Y') if inquiry.follow_up_date else '—' }}</dd>
+        </div>
+        <div>
+          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Last contacted</dt>
+          <dd>{{ inquiry.last_contacted_at | dt_id if inquiry.last_contacted_at else '—' }}</dd>
+        </div>
       </dl>
     </div>
 
@@ -113,8 +127,8 @@
       {% endif %}
 
       <form method="post" action="/admin/inquiries/{{ inquiry.id }}/photos"
-            class="mt-4 grid md:grid-cols-4 gap-3 items-end" data-guard>
-            <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+        class="mt-4 grid md:grid-cols-4 gap-3 items-end" data-guard>
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
         <div class="form-row !mb-0">
           <label class="form-label" for="photo_file_path">Image URL</label>
           <input class="input" id="photo_file_path" name="file_path" required maxlength="500" />
@@ -152,35 +166,81 @@
   {# Sidebar #}
   <aside class="space-y-6">
 
+    {# ── Convert to Project — only when APPROVED ── #}
+    {% if inquiry.status == 'APPROVED' %}
+    <div class="panel panel-accent">
+      <div class="panel-title">Ready to start?</div>
+      <p class="text-xs text-neutral-500 mt-1">
+        This inquiry is approved. Convert it into a project to begin costing and execution.
+      </p>
+      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/convert" class="mt-3 space-y-3" data-guard>
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+        <div class="form-row !mb-0">
+          <label class="form-label" for="convert_price">Selling price (IDR)</label>
+          <input class="input" type="number" step="1000" min="0" id="convert_price" name="quoted_price"
+            placeholder="e.g. 1800000" />
+          <div class="form-hint">Optional — you can also set it on the project page.</div>
+        </div>
+        <button class="btn btn-primary btn-sm btn-block">
+          Convert to Project →
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    {# ── View linked project — only when CONVERTED ── #}
+    {% if inquiry.status == 'CONVERTED' %}
+    <div class="panel" style="border-color: rgba(34,197,94,0.35);">
+      <div class="panel-title">Project</div>
+      {% if project %}
+      <p class="text-xs text-neutral-500 mt-1">
+        This inquiry has been converted into a project.
+      </p>
+      <a href="/admin/projects/{{ project.id }}" class="btn btn-primary btn-sm btn-block mt-3">
+        Open {{ project.code }} →
+      </a>
+      <div class="text-xs text-neutral-500 mt-2">
+        Status: {{ project.status }}
+        {% if project.quoted_price %}
+        · {{ project.quoted_price | rupiah }}
+        {% endif %}
+      </div>
+      {% else %}
+      <p class="text-xs text-neutral-500 mt-1">
+        Inquiry is marked as CONVERTED but no project was found.
+        This shouldn't happen — check the audit log.
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {# Customer + Vehicle #}
     <div class="panel">
       <div class="panel-title">Customer</div>
-      {% if inquiry.customer %}
-        <a href="/admin/customers/{{ inquiry.customer.id }}"
-           class="block mt-3 font-medium hover:text-noctra-accent">
-          {{ inquiry.customer.name }}
-        </a>
-        <div class="mono text-xs text-neutral-500 mt-1">{{ inquiry.customer.code }}</div>
-        {% if inquiry.customer.phone %}<div class="text-xs text-neutral-500 mt-2">{{ inquiry.customer.phone }}</div>{% endif %}
-        {% if inquiry.customer.email %}<div class="text-xs text-neutral-500">{{ inquiry.customer.email }}</div>{% endif %}
+      {% if customer %}
+      <a href="/admin/customers/{{ customer.id }}" class="block mt-3 font-medium hover:text-noctra-accent">
+        {{ customer.name }}
+      </a>
+      <div class="mono text-xs text-neutral-500 mt-1">{{ customer.code }}</div>
+      {% if customer.phone %}<div class="text-xs text-neutral-500 mt-2">{{ customer.phone }}</div>{% endif %}
+      {% if customer.email %}<div class="text-xs text-neutral-500">{{ customer.email }}</div>{% endif %}
       {% else %}
-        <p class="text-neutral-500 text-sm mt-2">No customer linked yet.</p>
+      <p class="text-neutral-500 text-sm mt-2">No customer linked yet.</p>
       {% endif %}
     </div>
 
     <div class="panel">
       <div class="panel-title">Vehicle</div>
-      {% if inquiry.vehicle %}
-        <a href="/admin/vehicles/{{ inquiry.vehicle.id }}"
-           class="block mt-3 font-medium hover:text-noctra-accent">
-          {{ inquiry.vehicle.brand }} {{ inquiry.vehicle.model }}
-        </a>
-        {% if inquiry.vehicle.plate_number %}
-          <div class="mono text-xs text-neutral-500 mt-1">{{ inquiry.vehicle.plate_number }}</div>
-        {% endif %}
-        {% if inquiry.vehicle.year %}<div class="text-xs text-neutral-500">{{ inquiry.vehicle.year }}</div>{% endif %}
+      {% if vehicle %}
+      <a href="/admin/vehicles/{{ vehicle.id }}" class="block mt-3 font-medium hover:text-noctra-accent">
+        {{ vehicle.brand }} {{ vehicle.model }}
+      </a>
+      {% if vehicle.plate_number %}
+      <div class="mono text-xs text-neutral-500 mt-1">{{ vehicle.plate_number }}</div>
+      {% endif %}
+      {% if vehicle.year %}<div class="text-xs text-neutral-500">{{ vehicle.year }}</div>{% endif %}
       {% else %}
-        <p class="text-neutral-500 text-sm mt-2">No vehicle linked yet.</p>
+      <p class="text-neutral-500 text-sm mt-2">No vehicle linked yet.</p>
       {% endif %}
     </div>
 
@@ -188,24 +248,23 @@
     <div class="panel">
       <div class="panel-title">Assignment</div>
       {% if inquiry.status not in ('CONVERTED', 'LOST') %}
-      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/assign"
-            class="mt-3 space-y-3" data-guard>
-            <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/assign" class="mt-3 space-y-3" data-guard>
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
         <select class="select" name="assigned_to_id">
           <option value="">Unassigned</option>
           {% for u in assignees %}
-            <option value="{{ u.id }}" {% if inquiry.assigned_to_id == u.id %}selected{% endif %}>
-              {{ u.full_name }}
-            </option>
+          <option value="{{ u.id }}" {% if inquiry.assigned_to_id==u.id %}selected{% endif %}>
+            {{ u.full_name }}
+          </option>
           {% endfor %}
         </select>
         <button class="btn btn-secondary btn-sm btn-block">Update</button>
       </form>
       {% else %}
-        <p class="text-neutral-500 text-sm mt-2">
-          {% if assignee %}{{ assignee.full_name }}{% else %}Unassigned{% endif %}
-        </p>
-        <p class="text-xs text-neutral-500 mt-1">Closed inquiries can't be reassigned.</p>
+      <p class="text-neutral-500 text-sm mt-2">
+        {% if assignee %}{{ assignee.full_name }}{% else %}Unassigned{% endif %}
+      </p>
+      <p class="text-xs text-neutral-500 mt-1">Closed inquiries can't be reassigned.</p>
       {% endif %}
     </div>
 
@@ -216,20 +275,21 @@
       <p class="text-xs text-neutral-500 mt-1">
         From <strong>{{ inquiry.status }}</strong>, allowed next:
       </p>
-      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/status"
-            class="mt-3 space-y-3" data-guard>
-            <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/status" class="mt-3 space-y-3" data-guard>
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
         <select class="select" name="status" id="status-select"
-                onchange="document.getElementById('closing-wrap').style.display = this.value === 'LOST' ? 'block' : 'none'">
+          onchange="document.getElementById('closing-wrap').style.display = this.value === 'LOST' ? 'block' : 'none'">
           {% for s in next_statuses %}
-            <option value="{{ s }}">{{ s }}</option>
+            {% if s != 'CONVERTED' %}
+              <option value="{{ s }}">{{ s }}</option>
+            {% endif %}
           {% endfor %}
         </select>
 
         <div id="closing-wrap" style="display: none;">
           <label class="form-label" for="closing_note">Closing note (required for LOST)</label>
-          <textarea class="textarea" id="closing_note" name="closing_note"
-                    rows="2" placeholder="Why was this inquiry lost?"></textarea>
+          <textarea class="textarea" id="closing_note" name="closing_note" rows="2"
+            placeholder="Why was this inquiry lost?"></textarea>
         </div>
 
         <button class="btn btn-primary btn-sm btn-block">Apply</button>

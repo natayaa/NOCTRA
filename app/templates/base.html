@@ -74,45 +74,6 @@
   <script defer src="/static/js/confirm.js"></script>
   <script defer src="/static/js/htmx-config.js"></script>
   <script src="https://cdn.tailwindcss.com/3.4.5?plugins=forms,typography" defer></script>
-  <script>
-    window.tailwind = window.tailwind || {};
-    window.tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            noctra: {
-              bg: '#070b16',
-              elevated: '#0a0f1e',
-              surface: '#0d1220',
-              surface2: '#111827',
-              surface3: '#1a2030',
-              border: '#1e293b',
-              'border-2': '#334155',
-              muted: '#94a3b8',
-              dim: '#64748b',
-              faint: '#475569',
-              accent: '#0ea5e9',
-              accent2: '#0284c7',
-              'accent-br': '#38bdf8',
-            },
-            tone: {
-              blue: '#0ea5e9',
-              green: '#10b981',
-              purple: '#8b5cf6',
-              orange: '#f59e0b',
-              pink: '#ec4899',
-              teal: '#14b8a6',
-            },
-          },
-          fontFamily: {
-            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-          },
-        },
-      },
-    };
-  </script>
 
   {% block extra_head %}{% endblock %}
 </head>

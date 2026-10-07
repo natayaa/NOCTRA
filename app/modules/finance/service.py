@@ -1,17 +1,11 @@
-"""Business logic for the finance module.
-
-- Invoices: create, send, apply payments, cancel
-- Payments: record in/out, apply to invoices, update invoice status
-- Expenses: record operational spending
-- Reports: P&L, cash flow, receivables, payables
-"""
+"""Business logic for the finance module."""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import AuditAction
@@ -20,6 +14,7 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.finance.constants import (
     EXPENSE_CATEGORY_LABELS,
+    INVOICE_STATUSES,
     InvoiceStatus,
     PaymentDirection,
     PaymentReferenceType,
@@ -49,7 +44,6 @@ from app.modules.finance.schemas import (
     PnLReport,
     ReceivablesSummary,
 )
-from app.modules.finance.constants import ExpenseCategory
 
 
 # ════════════════════════════════════════════════════════════════
@@ -64,6 +58,7 @@ class InvoiceService:
 
     async def create(self, payload: InvoiceCreate, *, actor: User) -> Invoice:
         from app.modules.customers.repository import CustomerRepository
+
         if not await CustomerRepository(self.db).get(payload.customer_id):
             raise NotFoundError("Customer not found")
 
@@ -83,24 +78,36 @@ class InvoiceService:
         await self.repo.add(invoice)
 
         for item_in in payload.items:
-            await self.repo.add_item(
+            invoice.items.append(
                 InvoiceItem(
-                    invoice_id=invoice.id,
                     description=item_in.description,
                     quantity=item_in.quantity,
                     unit_price=item_in.unit_price,
                     amount=item_in.quantity * item_in.unit_price,
                 )
             )
+        await self.db.flush()
 
         await self._recalc_totals(invoice)
+
+        # If the invoice links to a project, pull in any DP payments.
+        if invoice.project_id:
+            await PaymentService(self.db).link_project_payments_to_invoice(
+                project_id=invoice.project_id,
+                invoice_id=invoice.id,
+                actor=actor,
+            )
 
         await self.audit.log(
             action=AuditAction.CREATE,
             table_name="invoices",
             record_id=invoice.id,
             user_id=actor.id,
-            new_data={"code": invoice.code, "customer_id": str(payload.customer_id), "total": float(invoice.total)},
+            new_data={
+                "code": invoice.code,
+                "customer_id": str(payload.customer_id),
+                "total": float(invoice.total),
+            },
         )
         return invoice
 
@@ -116,8 +123,6 @@ class InvoiceService:
             raise ValidationError("Project has no approved or quoted price")
 
         price = float(project.approved_price or project.quoted_price)
-
-        # Build a sensible default line item from the project
         description = project.title or f"Project {project.code}"
         issue = payload.issue_date or datetime.now(UTC).date()
 
@@ -136,24 +141,35 @@ class InvoiceService:
         )
         await self.repo.add(invoice)
 
-        await self.repo.add_item(
+        invoice.items.append(
             InvoiceItem(
-                invoice_id=invoice.id,
                 description=description,
                 quantity=1,
                 unit_price=price,
                 amount=price,
             )
         )
+        await self.db.flush()
 
         await self._recalc_totals(invoice)
+
+        # Auto-apply any DP payments made on the project.
+        await PaymentService(self.db).link_project_payments_to_invoice(
+            project_id=project.id,
+            invoice_id=invoice.id,
+            actor=actor,
+        )
 
         await self.audit.log(
             action=AuditAction.CREATE,
             table_name="invoices",
             record_id=invoice.id,
             user_id=actor.id,
-            new_data={"code": invoice.code, "project_id": str(project.id), "total": float(invoice.total)},
+            new_data={
+                "code": invoice.code,
+                "project_id": str(project.id),
+                "total": float(invoice.total),
+            },
         )
         return invoice
 
@@ -164,11 +180,13 @@ class InvoiceService:
         if invoice.status in TERMINAL_INVOICE_STATUSES:
             raise ConflictError(f"Cannot edit a {invoice.status} invoice")
 
-        for field, value in payload.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(invoice, field, value)
+        for field in payload.model_fields_set:
+            setattr(invoice, field, getattr(payload, field))
 
         await self._recalc_totals(invoice)
+        # If total changed, re-evaluate status against payments.
+        await self.apply_payment_status(iid)
+
         await self.audit.log(
             action=AuditAction.UPDATE,
             table_name="invoices",
@@ -181,10 +199,12 @@ class InvoiceService:
     async def change_status(
         self, iid: UUID, new_status: str, *, actor: User
     ) -> Invoice:
+        if new_status not in INVOICE_STATUSES:
+            raise ValidationError(f"status must be one of {INVOICE_STATUSES}")
+
         invoice = await self._get_or_404(iid)
         current = invoice.status
 
-        # Validate transition
         if current == InvoiceStatus.CANCELLED.value:
             raise ConflictError("Cancelled invoices cannot be modified")
         if current == InvoiceStatus.PAID.value and new_status != InvoiceStatus.PAID.value:
@@ -208,10 +228,7 @@ class InvoiceService:
         return invoice
 
     async def apply_payment_status(self, iid: UUID) -> Invoice:
-        """
-        Recompute the invoice status based on its payments.
-        Called after a payment is recorded against it.
-        """
+        """Recompute the invoice status based on its net payments."""
         invoice = await self._get_or_404(iid)
         if invoice.status in TERMINAL_INVOICE_STATUSES:
             return invoice
@@ -219,18 +236,16 @@ class InvoiceService:
         paid = await self.repo.paid_amount(iid)
         total = float(invoice.total)
 
-        if paid <= 0:
-            # No payments — leave at current status (SENT or DRAFT)
-            pass
-        elif paid >= total - 0.01:
+        if paid >= total - 0.01 and total > 0:
             invoice.status = InvoiceStatus.PAID.value
-        else:
+        elif paid > 0:
             invoice.status = InvoiceStatus.PARTIALLY_PAID.value
-
-        # Check for overdue
-        if invoice.status not in TERMINAL_INVOICE_STATUSES and invoice.due_date:
-            if datetime.now(UTC).date() > invoice.due_date:
-                invoice.status = InvoiceStatus.OVERDUE.value
+        elif (
+            invoice.status == InvoiceStatus.SENT.value
+            and invoice.due_date
+            and datetime.now(UTC).date() > invoice.due_date
+        ):
+            invoice.status = InvoiceStatus.OVERDUE.value
 
         await self.db.flush()
         return invoice
@@ -269,7 +284,6 @@ class PaymentService:
         self.audit = AuditService(db)
 
     async def record(self, payload: PaymentCreate, *, actor: User) -> Payment:
-        # Validation
         if payload.direction == PaymentDirection.IN.value:
             if not payload.customer_id and not payload.reference_id:
                 raise ValidationError("Direction IN requires a customer or a reference")
@@ -277,13 +291,26 @@ class PaymentService:
             if not payload.supplier_id and not payload.reference_id:
                 raise ValidationError("Direction OUT requires a supplier or a reference")
 
-        # Validate reference exists if given
-        if payload.reference_type == PaymentReferenceType.INVOICE.value and payload.reference_id:
+        # Invoice validation + overpayment guard.
+        if (
+            payload.reference_type == PaymentReferenceType.INVOICE.value
+            and payload.reference_id
+        ):
             inv = await self.invoices.get(payload.reference_id)
             if not inv:
                 raise NotFoundError("Referenced invoice not found")
             if inv.status == InvoiceStatus.CANCELLED.value:
                 raise ConflictError("Cannot apply a payment to a cancelled invoice")
+
+            if payload.direction == PaymentDirection.IN.value:
+                already_paid = await self.invoices.paid_amount(payload.reference_id)
+                remaining = float(inv.total) - already_paid
+                if payload.amount > remaining + 0.01:
+                    raise ConflictError(
+                        f"Payment of {payload.amount:,.0f} exceeds the outstanding "
+                        f"balance of {remaining:,.0f}. Record the excess as a "
+                        f"separate unapplied payment."
+                    )
 
         payment = Payment(
             code=await self.repo.next_code(),
@@ -302,7 +329,6 @@ class PaymentService:
         )
         await self.repo.add(payment)
 
-        # Auto-apply to invoice status
         if (
             payload.reference_type == PaymentReferenceType.INVOICE.value
             and payload.reference_id
@@ -327,6 +353,105 @@ class PaymentService:
             },
         )
         return payment
+
+    async def reverse(
+        self, payment_id: UUID, *, actor: User, reason: str
+    ) -> Payment:
+        """Reverse a payment by creating a compensating opposite entry."""
+        original = await self.repo.get(payment_id)
+        if not original:
+            raise NotFoundError("Payment not found")
+
+        if original.notes and original.notes.startswith("Reversal of "):
+            raise ConflictError("Cannot reverse a reversal entry")
+
+        if await self.repo.find_reversal_for(original.code):
+            raise ConflictError(
+                f"Payment {original.code} has already been reversed"
+            )
+
+        opposite = (
+            PaymentDirection.OUT.value
+            if original.direction == PaymentDirection.IN.value
+            else PaymentDirection.IN.value
+        )
+
+        reversal = Payment(
+            code=await self.repo.next_code(),
+            direction=opposite,
+            method=original.method,
+            amount=original.amount,
+            payment_date=datetime.now(UTC).date(),
+            customer_id=original.customer_id,
+            supplier_id=original.supplier_id,
+            account_id=original.account_id,
+            reference_type=original.reference_type,
+            reference_id=original.reference_id,
+            reference_number=original.reference_number,
+            notes=f"Reversal of {original.code} — {reason}",
+            created_by_id=actor.id,
+        )
+        await self.repo.add(reversal)
+
+        if (
+            original.reference_type == PaymentReferenceType.INVOICE.value
+            and original.reference_id
+        ):
+            await InvoiceService(self.db).apply_payment_status(original.reference_id)
+
+        await self.audit.log(
+            action=AuditAction.DELETE,
+            table_name="payments",
+            record_id=original.id,
+            user_id=actor.id,
+            old_data={"code": original.code, "amount": float(original.amount)},
+            new_data={
+                "reversal_code": reversal.code,
+                "reversed_direction": opposite,
+                "reason": reason,
+            },
+        )
+        return reversal
+
+    async def link_project_payments_to_invoice(
+        self, *, project_id: UUID, invoice_id: UUID, actor: User
+    ) -> int:
+        """
+        Re-point IN payments made against a project to its newly created
+        invoice. Returns the number of payments relinked.
+        """
+        stmt = (
+            select(Payment)
+            .where(Payment.direction == PaymentDirection.IN.value)
+            .where(Payment.reference_type == PaymentReferenceType.PROJECT.value)
+            .where(Payment.reference_id == project_id)
+        )
+        payments = list((await self.db.execute(stmt)).scalars().all())
+
+        if not payments:
+            return 0
+
+        for p in payments:
+            p.reference_type = PaymentReferenceType.INVOICE.value
+            p.reference_id = invoice_id
+
+        await self.db.flush()
+
+        await InvoiceService(self.db).apply_payment_status(invoice_id)
+
+        await self.audit.log(
+            action=AuditAction.UPDATE,
+            table_name="payments",
+            record_id=invoice_id,
+            user_id=actor.id,
+            new_data={
+                "relinked_count": len(payments),
+                "invoice_id": str(invoice_id),
+                "project_id": str(project_id),
+                "payment_codes": [p.code for p in payments],
+            },
+        )
+        return len(payments)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -367,9 +492,10 @@ class ExpenseService:
         exp = await self.repo.get(eid)
         if not exp:
             raise NotFoundError("Expense not found")
-        for field, value in payload.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(exp, field, value)
+
+        for field in payload.model_fields_set:
+            setattr(exp, field, getattr(payload, field))
+
         await self.db.flush()
         await self.audit.log(
             action=AuditAction.UPDATE,
@@ -404,20 +530,14 @@ class FinanceReportService:
         self.db = db
 
     async def pnl(self, *, from_date: date, to_date: date) -> PnLReport:
-        """
-        Compute a Profit & Loss statement for the period.
-
-        Revenue  = sum of payments IN with reference_type=INVOICE
-                   (cash-basis, not accrual — matches how a workshop thinks)
-        COGS     = materials consumed + labor + outsourcing on projects
-                   delivered in the period (from inventory_transactions
-                   and project_items)
-        OpEx     = sum of expenses in the period
-        """
-        # ── Revenue (cash received) ────────────────────
+        # Revenue = net cash received against invoices (reversals subtract).
+        amount_expr = case(
+            (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+            else_=-Payment.amount,
+        )
         rev_stmt = (
-            select(func.coalesce(func.sum(Payment.amount), 0))
-            .where(Payment.direction == PaymentDirection.IN.value)
+            select(func.coalesce(func.sum(amount_expr), 0))
+            .where(Payment.reference_type == PaymentReferenceType.INVOICE.value)
             .where(Payment.payment_date >= from_date)
             .where(Payment.payment_date <= to_date)
         )
@@ -427,7 +547,7 @@ class FinanceReportService:
             PnLLine(label="Customer payments received", amount=total_revenue)
         ]
 
-        # ── COGS (materials consumed in period) ────────
+        # COGS — materials consumed.
         from app.modules.inventory.models import InventoryTransaction
         from app.modules.inventory.constants import TransactionType
 
@@ -439,8 +559,7 @@ class FinanceReportService:
         )
         cogs_materials = float((await self.db.execute(cogs_materials_stmt)).scalar_one() or 0)
 
-        # Labor + outsource from project items where actual_cost is set
-        # and the project was delivered/started in the period
+        # COGS — labor + outsource.
         from app.modules.projects.models import ProjectItem
         from app.modules.projects.constants import CostCategory
 
@@ -472,7 +591,7 @@ class FinanceReportService:
             (gross_profit / total_revenue) * 100 if total_revenue > 0 else 0.0
         )
 
-        # ── Operating expenses ─────────────────────────
+        # OpEx.
         opex_stmt = (
             select(
                 Expense.category,
@@ -497,7 +616,6 @@ class FinanceReportService:
             (net_profit / total_revenue) * 100 if total_revenue > 0 else 0.0
         )
 
-        # Fill in pct_of_revenue for all lines
         if total_revenue > 0:
             for line in revenue_lines + cogs_lines + opex_lines:
                 line.pct_of_revenue = round((line.amount / total_revenue) * 100, 2)
@@ -518,20 +636,30 @@ class FinanceReportService:
         )
 
     async def cash_flow(self, *, from_date: date, to_date: date) -> CashFlowSummary:
+        amount_expr = case(
+            (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+            else_=-Payment.amount,
+        )
+        net_stmt = (
+            select(func.coalesce(func.sum(amount_expr), 0))
+            .where(Payment.payment_date >= from_date)
+            .where(Payment.payment_date <= to_date)
+        )
+        net = float((await self.db.execute(net_stmt)).scalar_one() or 0)
+
         inflow_stmt = (
             select(func.coalesce(func.sum(Payment.amount), 0))
             .where(Payment.direction == PaymentDirection.IN.value)
             .where(Payment.payment_date >= from_date)
             .where(Payment.payment_date <= to_date)
         )
-        inflow = float((await self.db.execute(inflow_stmt)).scalar_one() or 0)
-
         outflow_stmt = (
             select(func.coalesce(func.sum(Payment.amount), 0))
             .where(Payment.direction == PaymentDirection.OUT.value)
             .where(Payment.payment_date >= from_date)
             .where(Payment.payment_date <= to_date)
         )
+        inflow = float((await self.db.execute(inflow_stmt)).scalar_one() or 0)
         outflow = float((await self.db.execute(outflow_stmt)).scalar_one() or 0)
 
         return CashFlowSummary(
@@ -539,11 +667,10 @@ class FinanceReportService:
             period_end=to_date,
             total_inflow=inflow,
             total_outflow=outflow,
-            net_cash_flow=inflow - outflow,
+            net_cash_flow=net,
         )
 
     async def receivables(self) -> ReceivablesSummary:
-        """Sum of unpaid invoices."""
         stmt = select(Invoice).where(
             Invoice.status.not_in([InvoiceStatus.PAID.value, InvoiceStatus.CANCELLED.value])
         )
@@ -571,7 +698,6 @@ class FinanceReportService:
         )
 
     async def payables(self) -> PayablesSummary:
-        """Sum of unpaid purchase orders."""
         from app.modules.inventory.constants import PurchaseOrderStatus
         from app.modules.inventory.models import PurchaseOrder
 
@@ -585,7 +711,6 @@ class FinanceReportService:
 
         total = 0.0
         for po in pos:
-            # Payments out referencing this PO
             paid_stmt = (
                 select(func.coalesce(func.sum(Payment.amount), 0))
                 .where(Payment.direction == PaymentDirection.OUT.value)

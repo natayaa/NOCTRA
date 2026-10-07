@@ -24,6 +24,8 @@ class VehicleCreate(BaseModel):
     vin: str | None = Field(None, max_length=64)
     engine_number: str | None = Field(None, max_length=64)
     notes: str | None = None
+    brand_id: UUID | None = None
+    model_id: UUID | None = None
 
     @field_validator("category")
     @classmethod
@@ -32,15 +34,17 @@ class VehicleCreate(BaseModel):
 
 
 class VehicleUpdate(BaseModel):
-    plate_number: str | None = None
-    brand: str | None = None
-    model: str | None = None
-    year: int | None = None
-    color: str | None = None
+    plate_number: str | None = Field(None, max_length=20)
+    brand: str | None = Field(None, min_length=1, max_length=100)
+    model: str | None = Field(None, min_length=1, max_length=120)
+    year: int | None = Field(None, ge=1900, le=2100)
+    color: str | None = Field(None, max_length=64)
     category: str | None = None
-    vin: str | None = None
-    engine_number: str | None = None
+    vin: str | None = Field(None, max_length=64)
+    engine_number: str | None = Field(None, max_length=64)
     notes: str | None = None
+    brand_id: UUID | None = None
+    model_id: UUID | None = None
 
     @field_validator("category")
     @classmethod
@@ -58,6 +62,8 @@ class VehicleListItem(BaseModel):
     year: int | None
     color: str | None
     category: str | None
+    brand_id: UUID | None
+    model_id: UUID | None
 
 
 class VehicleDetail(VehicleListItem):

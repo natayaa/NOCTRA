@@ -10,11 +10,11 @@ from enum import StrEnum
 # ════════════════════════════════════════════════════════════════
 
 class AccountType(StrEnum):
-    ASSET = "ASSET"           # bank, cash, receivables
-    LIABILITY = "LIABILITY"   # payables, loans
-    EQUITY = "EQUITY"         # owner's equity
-    REVENUE = "REVENUE"       # sales income
-    EXPENSE = "EXPENSE"       # costs, operating expenses
+    ASSET = "ASSET"
+    LIABILITY = "LIABILITY"
+    EQUITY = "EQUITY"
+    REVENUE = "REVENUE"
+    EXPENSE = "EXPENSE"
 
 
 ACCOUNT_TYPES: list[str] = [t.value for t in AccountType]
@@ -63,8 +63,8 @@ TERMINAL_INVOICE_STATUSES: frozenset[str] = frozenset({
 # ════════════════════════════════════════════════════════════════
 
 class PaymentDirection(StrEnum):
-    IN = "IN"     # received from customer
-    OUT = "OUT"   # paid to supplier or expense
+    IN = "IN"
+    OUT = "OUT"
 
 
 class PaymentMethod(StrEnum):
@@ -93,7 +93,7 @@ class PaymentReferenceType(StrEnum):
     INVOICE = "INVOICE"
     PURCHASE_ORDER = "PURCHASE_ORDER"
     EXPENSE = "EXPENSE"
-    PROJECT = "PROJECT"           # for ad-hoc payments against a project
+    PROJECT = "PROJECT"
     OTHER = "OTHER"
 
 
@@ -106,13 +106,13 @@ PAYMENT_REFERENCE_TYPES: list[str] = [r.value for r in PaymentReferenceType]
 
 class ExpenseCategory(StrEnum):
     RENT = "RENT"
-    UTILITIES = "UTILITIES"          # electricity, water, internet
-    SALARIES = "SALARIES"            # staff wages
+    UTILITIES = "UTILITIES"
+    SALARIES = "SALARIES"
     MARKETING = "MARKETING"
-    SUPPLIES = "SUPPLIES"            # consumables bought directly (not via PO)
+    SUPPLIES = "SUPPLIES"
     TRANSPORT = "TRANSPORT"
     MAINTENANCE = "MAINTENANCE"
-    PROFESSIONAL = "PROFESSIONAL"    # accountants, legal
+    PROFESSIONAL = "PROFESSIONAL"
     TAX = "TAX"
     OTHER = "OTHER"
 

@@ -14,8 +14,9 @@ class RoleRepository:
         self.db = db
 
     async def list(self) -> list[Role]:
-        stmt = select(Role).order_by(Role.name)
-        return list((await self.db.execute(stmt)).scalars().all())
+        from sqlalchemy import select
+        from app.modules.rbac.models import Role
+        return list((await self.db.execute(select(Role).order_by(Role.name))).scalars().all())
 
     async def by_names(self, names: list[str]) -> list[Role]:
         if not names:

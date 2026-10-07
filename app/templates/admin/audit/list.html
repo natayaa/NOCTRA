@@ -1,11 +1,11 @@
 {% extends "admin/base.html" %}
-{% from "components/empty_state.html" import empty_state %}
+{% include "components/pagination.html" %}
 
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Audit Log</h1>
-    <p class="page-subtitle">Every sensitive action, in order</p>
+    <p class="page-subtitle">{{ page_meta.total }} entries</p>
   </div>
 </div>
 
@@ -14,33 +14,44 @@
     <label class="form-label" for="action">Action</label>
     <select class="select" id="action" name="action">
       <option value="">Any</option>
-      {% for a in ['CREATE','UPDATE','DELETE','LOGIN','LOGIN_FAILED','LOGOUT','EXPORT','VIEW'] %}
-      <option value="{{ a }}" {% if request.query_params.get('action') == a %}selected{% endif %}>{{ a }}</option>
+      {% for a in actions %}
+        <option value="{{ a }}" {% if action_filter == a %}selected{% endif %}>{{ a }}</option>
       {% endfor %}
     </select>
   </div>
   <div class="form-row !mb-0">
     <label class="form-label" for="table_name">Table</label>
-    <input class="input" id="table_name" name="table_name" value="{{ request.query_params.get('table_name','') }}" />
+    <select class="select" id="table_name" name="table_name">
+      <option value="">Any</option>
+      {% for t in tables %}
+        <option value="{{ t }}" {% if table_filter == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
   </div>
   <div class="form-row !mb-0">
-    <label class="form-label" for="since">Since</label>
-    <input class="input" type="date" id="since" name="since" value="{{ request.query_params.get('since','') }}" />
+    <label class="form-label" for="since_days">Time range</label>
+    <select class="select" id="since_days" name="since_days">
+      <option value="">All time</option>
+      <option value="1" {% if since_days_filter == 1 %}selected{% endif %}>Last 24 hours</option>
+      <option value="7" {% if since_days_filter == 7 %}selected{% endif %}>Last 7 days</option>
+      <option value="30" {% if since_days_filter == 30 %}selected{% endif %}>Last 30 days</option>
+      <option value="90" {% if since_days_filter == 90 %}selected{% endif %}>Last 90 days</option>
+    </select>
   </div>
   <div class="form-row !mb-0 flex items-end">
-    <button class="btn btn-primary btn-block">Filter</button>
+    <button class="btn btn-secondary btn-block">Filter</button>
   </div>
 </form>
 
 {% if entries %}
-<div class="panel !p-0 overflow-hidden">
+<div class="table-wrap">
   <table class="table">
     <thead>
       <tr>
         <th>When</th>
-        <th>User</th>
         <th>Action</th>
         <th>Table</th>
+        <th>User</th>
         <th>Record</th>
         <th>IP</th>
       </tr>
@@ -48,29 +59,33 @@
     <tbody>
       {% for e in entries %}
       <tr>
-        <td class="text-xs text-neutral-400 font-mono">{{ e.created_at | dt_id('%Y-%m-%d %H:%M:%S') }}</td>
-        <td class="text-xs font-mono">{{ e.user_id or '—' }}</td>
+        <td class="text-xs text-neutral-500 mono">{{ e.created_at | dt_id('%d %b %Y %H:%M') }}</td>
         <td>
           {% set badge = {
-            'CREATE': 'badge-success',
-            'UPDATE': 'badge-info',
-            'DELETE': 'badge-danger',
-            'LOGIN': 'badge-neutral',
-            'LOGIN_FAILED': 'badge-warning',
+            'CREATE':'badge-success','UPDATE':'badge-info','DELETE':'badge-danger',
+            'LOGIN':'badge-neutral','LOGIN_FAILED':'badge-warning','LOGOUT':'badge-neutral',
+            'STATUS_CHANGE':'badge-accent','ASSIGN':'badge-info',
+            'STOCK_IN':'badge-success','STOCK_OUT':'badge-warning','PRICE_CHANGE':'badge-warning',
+            'COST_ENTRY':'badge-accent','PAYMENT_RECEIVED':'badge-success','PAYMENT_MADE':'badge-info',
+            'INVOICE_SENT':'badge-info','EXPENSE_RECORDED':'badge-neutral',
           }.get(e.action, 'badge-neutral') %}
           <span class="badge {{ badge }}">{{ e.action }}</span>
         </td>
-        <td class="font-mono text-xs">{{ e.table_name }}</td>
-        <td class="font-mono text-xs text-neutral-400">{{ e.record_id[:8] }}</td>
-        <td class="text-xs text-neutral-400 font-mono">{{ e.ip_address or '—' }}</td>
+        <td class="mono text-xs">{{ e.table_name }}</td>
+        <td class="text-xs">
+          {% set u = users_by_id.get(e.user_id) if e.user_id else None %}
+          {% if u %}{{ u.full_name or u.username }}{% else %}<span class="text-neutral-500">system</span>{% endif %}
+        </td>
+        <td class="mono text-xs text-neutral-500">{{ e.record_id[:12] }}</td>
+        <td class="mono text-xs text-neutral-500">{{ e.ip_address or '—' }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
-
-{% if page_meta %}{% include "components/pagination.html" %}{% endif %}
 {% else %}
-{{ empty_state('No audit entries', 'Actions will appear here as they happen.') }}
+<div class="panel text-center py-16">
+  <p class="text-neutral-400">No audit entries match these filters.</p>
+</div>
 {% endif %}
 {% endblock %}

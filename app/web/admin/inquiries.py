@@ -101,6 +101,11 @@ async def list_view(
     only_open: bool = Query(False),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
+    from sqlalchemy import select
+    from app.modules.customers.models import Customer
+    from app.modules.vehicles.models import Vehicle
+    from app.modules.auth.models import User
+
     stmt = InquiryRepository(db).query(
         q=q,
         status=status_,
@@ -112,7 +117,7 @@ async def list_view(
     )
     rows, meta = await paginate(db, stmt, params)
 
-    # Pre-fetch names for display (avoid N+1 in template)
+    # ── Preload related records for display ──
     customer_ids = {r.customer_id for r in rows if r.customer_id}
     vehicle_ids = {r.vehicle_id for r in rows if r.vehicle_id}
     assignee_ids = {r.assigned_to_id for r in rows if r.assigned_to_id}
@@ -122,18 +127,16 @@ async def list_view(
     users_by_id: dict = {}
 
     if customer_ids:
-        from app.modules.customers.models import Customer
-        rows_c = await db.execute(select(Customer).where(Customer.id.in_(customer_ids)))
-        customers_by_id = {c.id: c for c in rows_c.scalars().all()}
+        c_rows = await db.execute(select(Customer).where(Customer.id.in_(customer_ids)))
+        customers_by_id = {c.id: c for c in c_rows.scalars().all()}
 
     if vehicle_ids:
-        from app.modules.vehicles.models import Vehicle
-        rows_v = await db.execute(select(Vehicle).where(Vehicle.id.in_(vehicle_ids)))
-        vehicles_by_id = {v.id: v for v in rows_v.scalars().all()}
+        v_rows = await db.execute(select(Vehicle).where(Vehicle.id.in_(vehicle_ids)))
+        vehicles_by_id = {v.id: v for v in v_rows.scalars().all()}
 
     if assignee_ids:
-        rows_u = await db.execute(select(User).where(User.id.in_(assignee_ids)))
-        users_by_id = {u.id: u for u in rows_u.scalars().all()}
+        u_rows = await db.execute(select(User).where(User.id.in_(assignee_ids)))
+        users_by_id = {u.id: u for u in u_rows.scalars().all()}
 
     return templates.render(
         request,
@@ -256,31 +259,31 @@ async def detail_view(
     db: DbSession,
     current=Depends(get_current_user),
 ) -> HTMLResponse:
+    from app.modules.customers.models import Customer
+    from app.modules.vehicles.models import Vehicle
+    from app.modules.auth.models import User as UserModel
+    from app.modules.inquiries.constants import ALLOWED_TRANSITIONS
+    from app.modules.projects.models import Project
+
     repo = InquiryRepository(db)
     inquiry = await repo.get(inquiry_id)
     if not inquiry:
         raise NotFoundError("Inquiry not found")
 
-    customer = (
-        await CustomerRepository(db).get(inquiry.customer_id)
-        if inquiry.customer_id
-        else None
-    )
-    vehicle = (
-        await VehicleRepository(db).get(inquiry.vehicle_id)
-        if inquiry.vehicle_id
-        else None
-    )
-    assignee = None
-    if inquiry.assigned_to_id:
-        from app.modules.auth.models import User as UserModel
-        assignee = await db.get(UserModel, inquiry.assigned_to_id)
-
+    customer = await db.get(Customer, inquiry.customer_id) if inquiry.customer_id else None
+    vehicle = await db.get(Vehicle, inquiry.vehicle_id) if inquiry.vehicle_id else None
+    assignee = await db.get(UserModel, inquiry.assigned_to_id) if inquiry.assigned_to_id else None
     photos = await repo.list_photos(inquiry_id)
-
-    # Compute next allowed statuses
-    from app.modules.inquiries.constants import ALLOWED_TRANSITIONS
     next_statuses = ALLOWED_TRANSITIONS.get(inquiry.status, frozenset())
+
+    # If already converted, load the linked project so the UI can link to it
+    project = None
+    if inquiry.status == InquiryStatus.CONVERTED.value:
+        project = (
+            await db.execute(
+                select(Project).where(Project.inquiry_id == inquiry.id)
+            )
+        ).scalar_one_or_none()
 
     return templates.render(
         request,
@@ -292,11 +295,55 @@ async def detail_view(
             "vehicle": vehicle,
             "assignee": assignee,
             "photos": photos,
+            "project": project,
             "next_statuses": sorted(next_statuses),
             "assignees": await _load_assignees(db),
             **_catalog_context(),
         },
     )
+
+
+# ════════════════════════════════════════════════════════════════
+# CONVERT
+# ════════════════════════════════════════════════════════════════
+
+@router.post("/{inquiry_id}/convert")
+async def convert_submit(
+    inquiry_id: UUID,
+    request: Request,
+    db: DbSession,
+    current=Depends(get_current_user),
+):
+    """
+    Explicit conversion endpoint.
+
+    Creates a project from an APPROVED inquiry, flips the inquiry
+    to CONVERTED, and redirects to the new project.
+    """
+    form = await request.form()
+
+    # Optional price from the form. If not provided, the project
+    # is created without a price and can be set later.
+    raw_price = (form.get("quoted_price") or "").strip()
+    quoted_price = float(raw_price) if raw_price else None
+
+    try:
+        inquiry, project = await InquiryService(db).convert_to_project(
+            inquiry_id,
+            actor=current,
+            quoted_price=quoted_price,
+            approved_price=quoted_price,
+        )
+        await db.commit()
+    except AppError as exc:
+        await db.rollback()
+        from urllib.parse import quote
+        return RedirectResponse(
+            url=f"/admin/inquiries/{inquiry_id}?error={quote(exc.message)}",
+            status_code=303,
+        )
+
+    return RedirectResponse(url=f"/admin/projects/{project.id}", status_code=303)
 
 
 # ════════════════════════════════════════════════════════════════

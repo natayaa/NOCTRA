@@ -5,18 +5,21 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.modules.customers.constants import CUSTOMER_SOURCES, CUSTOMER_STATUSES
+
 PHONE_PATTERN = r"^[0-9+\-\s()]{6,32}$"
 
 _EMPTY_VALUES = {"", "none", "null", "undefined", "nil"}
 
 
 def _normalize_optional_str(v):
-    """Convert null-ish inputs to real None. Reject nothing else."""
+    """Convert null-ish inputs to real None. Return everything else."""
     if v is None:
         return None
     s = str(v).strip()
     if not s or s.lower() in _EMPTY_VALUES:
         return None
+    return s
 
 
 # ── Customer Contacts ───────────────────────────────────────
@@ -62,15 +65,17 @@ class CustomerCreate(BaseModel):
     notes: str | None = None
     source: str | None = Field(None, max_length=32)
 
-    @field_validator("email", mode="before")
-    @classmethod
-    def _blank_email_to_none(cls, v):
-        return v or None
-    
     @field_validator("email", "phone", "alt_phone", "tax_id", mode="before")
     @classmethod
     def _clean_optional(cls, v):
         return _normalize_optional_str(v)
+
+    @field_validator("source")
+    @classmethod
+    def _validate_source(cls, v):
+        if v is not None and v not in CUSTOMER_SOURCES:
+            raise ValueError(f"source must be one of {CUSTOMER_SOURCES}")
+        return v
 
 
 class CustomerUpdate(BaseModel):
@@ -95,6 +100,13 @@ class CustomerUpdate(BaseModel):
     @classmethod
     def _clean_optional(cls, v):
         return _normalize_optional_str(v)
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, v):
+        if v is not None and v not in CUSTOMER_STATUSES:
+            raise ValueError(f"status must be one of {CUSTOMER_STATUSES}")
+        return v
 
 
 # ── Output ──────────────────────────────────────────────────

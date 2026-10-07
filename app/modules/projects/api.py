@@ -67,19 +67,28 @@ async def overhead_rate(
     db: DbSession,
     _=Depends(require_permission(PermissionCode.PROJECT_READ)),
 ) -> OverheadRateInfo:
-    svc = CostingService(db)
     from app.modules.projects.constants import (
         SETTING_MONTHLY_LABOR_HOURS,
         SETTING_MONTHLY_OVERHEAD,
     )
     from app.modules.settings.service import SettingsService
-    o = float(await SettingsService(db).get_value(SETTING_MONTHLY_OVERHEAD, "0") or 0)
-    h = float(await SettingsService(db).get_value(SETTING_MONTHLY_LABOR_HOURS, "0") or 0)
+
+    settings = SettingsService(db)
+    o_raw = await settings.get_value(SETTING_MONTHLY_OVERHEAD, "0")
+    h_raw = await settings.get_value(SETTING_MONTHLY_LABOR_HOURS, "0")
+
+    try:
+        o = float(o_raw or 0)
+        h = float(h_raw or 0)
+    except (TypeError, ValueError):
+        o, h = 0.0, 0.0
+
     return OverheadRateInfo(
         monthly_overhead=o,
         monthly_labor_hours=h,
-        overhead_rate_per_hour=await svc.overhead_rate_per_hour(),
+        overhead_rate_per_hour=(o / h if h > 0 else 0.0),
     )
+
 
 
 # ════════════════════════════════════════════════════════════════
@@ -130,9 +139,9 @@ async def get_project(
     if not project:
         raise NotFoundError("Project not found")
 
+    # Project.items has lazy="selectin" so it's already loaded.
     detail = ProjectDetail.model_validate(project)
-    items = await ProjectRepository(db).list_items(project_id)
-    detail.items = [_item_out(i) for i in items]
+    detail.items = [_item_out(i) for i in project.items]
 
     detail.variance = project.hpp_variance
     detail.gross_margin_pct = project.actual_gross_margin_pct
@@ -159,9 +168,9 @@ async def get_project(
         ),
     )
 
-    # Populate snapshots
     from app.modules.customers.repository import CustomerRepository
     from app.modules.vehicles.repository import VehicleRepository
+
     if project.customer_id:
         c = await CustomerRepository(db).get(project.customer_id)
         if c:
@@ -170,7 +179,10 @@ async def get_project(
     if project.vehicle_id:
         v = await VehicleRepository(db).get(project.vehicle_id)
         if v:
-            detail.vehicle_label = f"{v.brand} {v.model}" + (f" — {v.plate_number}" if v.plate_number else "")
+            detail.vehicle_label = (
+                f"{v.brand} {v.model}"
+                + (f" — {v.plate_number}" if v.plate_number else "")
+            )
 
     return detail
 

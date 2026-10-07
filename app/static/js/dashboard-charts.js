@@ -45,7 +45,7 @@
     // "2026-10-01" → "01 Oct"
     const d = new Date(iso + 'T00:00:00');
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return String(d.getDate()).padStart(2, '0') + ' ' + months[d.getMonth()];
+    return String(d.getDate()).padStart(2, '0') + ' ' + months[d.getMonth()]; ccccccc
   }
 
   function initRevenueChart(data) {

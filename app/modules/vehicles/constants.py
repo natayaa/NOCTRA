@@ -14,3 +14,13 @@ class VehicleCategory(StrEnum):
 
 
 VEHICLE_CATEGORIES = [c.value for c in VehicleCategory]
+
+VEHICLE_CATEGORY_LABELS: dict[str, str] = {
+    VehicleCategory.SCOOTER.value:   "Scooter",
+    VehicleCategory.UNDERBONE.value: "Underbone",
+    VehicleCategory.SPORT.value:     "Sport",
+    VehicleCategory.NAKED.value:     "Naked",
+    VehicleCategory.BIG_BIKE.value:  "Big bike",
+    VehicleCategory.CLASSIC.value:   "Classic",
+    VehicleCategory.CUSTOM.value:    "Custom",
+}

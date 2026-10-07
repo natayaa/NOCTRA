@@ -34,13 +34,21 @@ from app.modules.inquiries.service import InquiryService
 router = APIRouter(prefix="/inquiries", tags=["inquiries"])
 
 
+def _detail(inquiry) -> InquiryDetail:
+    """Build an InquiryDetail with photos, ensuring the collection is loaded."""
+    detail = InquiryDetail.model_validate(inquiry)
+    detail.photos = [
+        InquiryPhotoOut.model_validate(p) for p in (inquiry.photos or [])
+    ]
+    return detail
+
+
 # ════════════════════════════════════════════════════════════════
-# CATALOG — static reference data for the UI
+# CATALOG
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/catalog")
 async def catalog() -> dict:
-    """Return all dropdown options and label mappings the UI needs."""
     from app.modules.inquiries.constants import (
         BUDGET_LABELS,
         BUDGET_RANGES,
@@ -107,7 +115,7 @@ async def create_inquiry(
     _=Depends(require_permission(PermissionCode.INQUIRY_CREATE)),
 ) -> InquiryDetail:
     inquiry = await InquiryService(db).create(payload, actor=actor)
-    return InquiryDetail.model_validate(inquiry)
+    return _detail(inquiry)
 
 
 @router.get("/{inquiry_id}", response_model=InquiryDetail)
@@ -116,16 +124,10 @@ async def get_inquiry(
     db: DbSession,
     _=Depends(require_permission(PermissionCode.INQUIRY_READ)),
 ) -> InquiryDetail:
-    repo = InquiryRepository(db)
-    inquiry = await repo.get(inquiry_id)
+    inquiry = await InquiryRepository(db).get(inquiry_id)
     if not inquiry:
         raise NotFoundError("Inquiry not found")
-    detail = InquiryDetail.model_validate(inquiry)
-    detail.photos = [
-        InquiryPhotoOut.model_validate(p)
-        for p in await repo.list_photos(inquiry_id)
-    ]
-    return detail
+    return _detail(inquiry)
 
 
 @router.patch("/{inquiry_id}", response_model=InquiryDetail)
@@ -137,7 +139,7 @@ async def update_inquiry(
     _=Depends(require_permission(PermissionCode.INQUIRY_UPDATE)),
 ) -> InquiryDetail:
     inquiry = await InquiryService(db).update(inquiry_id, payload, actor=actor)
-    return InquiryDetail.model_validate(inquiry)
+    return _detail(inquiry)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -155,7 +157,7 @@ async def assign_inquiry(
     inquiry = await InquiryService(db).assign(
         inquiry_id, payload.assigned_to_id, actor=actor
     )
-    return InquiryDetail.model_validate(inquiry)
+    return _detail(inquiry)
 
 
 @router.post("/{inquiry_id}/status", response_model=InquiryDetail)
@@ -169,7 +171,7 @@ async def change_status(
     inquiry = await InquiryService(db).change_status(
         inquiry_id, payload, actor=actor
     )
-    return InquiryDetail.model_validate(inquiry)
+    return _detail(inquiry)
 
 
 @router.post("/{inquiry_id}/contacted", response_model=InquiryDetail)
@@ -180,7 +182,7 @@ async def mark_contacted(
     _=Depends(require_permission(PermissionCode.INQUIRY_UPDATE)),
 ) -> InquiryDetail:
     inquiry = await InquiryService(db).mark_contacted(inquiry_id, actor=actor)
-    return InquiryDetail.model_validate(inquiry)
+    return _detail(inquiry)
 
 
 # ════════════════════════════════════════════════════════════════

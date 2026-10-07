@@ -20,4 +20,6 @@ class UserRepository:
         return (await self.db.execute(select(User).where(User.email == email))).scalar_one_or_none()
 
     def query(self):
+        from sqlalchemy import select
+        from app.modules.auth.models import User
         return select(User).order_by(User.created_at.desc())

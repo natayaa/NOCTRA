@@ -1,8 +1,4 @@
-"""Pydantic schemas for the inquiries module.
-
-Covers CRUD, status transitions, assignment, and the flexible
-customer-request payload.
-"""
+"""Pydantic schemas for the inquiries module."""
 
 from __future__ import annotations
 
@@ -16,6 +12,7 @@ from app.modules.inquiries.constants import (
     COLOR_FAMILIES,
     FINISH_TYPES,
     INQUIRY_SOURCES,
+    INQUIRY_STATUSES,
     SERVICE_INTERESTS,
 )
 
@@ -42,7 +39,7 @@ class InquiryPhotoOut(BaseModel):
 
 
 # ════════════════════════════════════════════════════════════════
-# CUSTOMER REQUEST BLOCK (reusable)
+# CUSTOMER REQUEST BLOCK
 # ════════════════════════════════════════════════════════════════
 
 class CustomerRequestMixin(BaseModel):
@@ -51,7 +48,8 @@ class CustomerRequestMixin(BaseModel):
     color_preference: str | None = Field(None, max_length=64)
     color_family: str | None = None
     finish_preference: str | None = None
-    has_custom_graphics: bool = False
+    # `None` means "not provided" so PATCH doesn't reset it.
+    has_custom_graphics: bool | None = None
     preferences: dict | None = None
 
     @field_validator("color_family")
@@ -74,15 +72,12 @@ class CustomerRequestMixin(BaseModel):
 # ════════════════════════════════════════════════════════════════
 
 class InquiryCreate(CustomerRequestMixin):
-    # Optional associations
     customer_id: UUID | None = None
     vehicle_id: UUID | None = None
 
-    # Service + description
     service_interest: str | None = Field(None, max_length=32)
     description: str = Field(..., min_length=20, max_length=5000)
 
-    # Intake metadata
     source: str = "ADMIN"
     budget_range: str | None = None
     desired_date: date | None = None
@@ -93,7 +88,6 @@ class InquiryCreate(CustomerRequestMixin):
     @classmethod
     def _validate_service(cls, v):
         if v is not None and v not in SERVICE_INTERESTS:
-            # Allow any 32-char string, but warn if not a known one.
             if len(v) > 32:
                 raise ValueError("service_interest must be <= 32 chars")
         return v
@@ -142,6 +136,13 @@ class InquiryAssign(BaseModel):
 class InquiryStatusChange(BaseModel):
     status: str
     closing_note: str | None = Field(None, max_length=2000)
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, v):
+        if v not in INQUIRY_STATUSES:
+            raise ValueError(f"status must be one of {INQUIRY_STATUSES}")
+        return v
 
 
 # ════════════════════════════════════════════════════════════════

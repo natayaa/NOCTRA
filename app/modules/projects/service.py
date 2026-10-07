@@ -8,11 +8,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
+
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import log
 from app.core.constants import AuditAction
 from app.core.exceptions import (
     ConflictError,
@@ -33,6 +36,7 @@ from app.modules.projects.constants import (
     CostCategory,
     INVENTORY_CATEGORIES,
     LABOR_CATEGORIES,
+    PROJECT_STATUSES,   # ← add
     ProjectStatus,
     SETTING_MONTHLY_LABOR_HOURS,
     SETTING_MONTHLY_OVERHEAD,
@@ -82,9 +86,8 @@ class EmployeeService:
         self, eid: UUID, payload: EmployeeUpdate, *, actor: User
     ) -> Employee:
         emp = await self._get_or_404(eid)
-        for field, value in payload.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(emp, field, value)
+        for field in payload.model_fields_set:
+            setattr(emp, field, getattr(payload, field))
         await self.db.flush()
         await self.audit.log(
             action=AuditAction.UPDATE,
@@ -100,7 +103,6 @@ class EmployeeService:
         if not emp:
             raise NotFoundError("Employee not found")
         return emp
-
 
 # ════════════════════════════════════════════════════════════════
 # COSTING ENGINE
@@ -247,15 +249,11 @@ class CostingService:
             raise ConflictError(f"Cannot edit items on a {project.status} project")
 
         item = await self._get_item_or_404(project_id, item_id)
-
-        # ── Capture the OLD quantity BEFORE we mutate the item ──
         old_actual_qty = float(item.actual_quantity or 0)
 
-        for field, value in payload.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(item, field, value)
+        for field in payload.model_fields_set:
+            setattr(item, field, getattr(payload, field))
 
-        # Re-resolve estimated unit cost if the category's source changed
         if item.category in INVENTORY_CATEGORIES or item.category in LABOR_CATEGORIES:
             resolved = await self.resolve_unit_cost(
                 category=item.category,
@@ -265,10 +263,10 @@ class CostingService:
             )
             item.estimated_unit_cost = resolved
 
-        # Recompute estimated cost
-        item.estimated_cost = float(item.estimated_quantity or 0) * float(item.estimated_unit_cost or 0)
+        item.estimated_cost = (
+            float(item.estimated_quantity or 0) * float(item.estimated_unit_cost or 0)
+        )
 
-        # Recompute actual cost and sync inventory consumption with the correct delta
         await self._sync_actual_cost(item, previous_actual_qty=old_actual_qty)
         await self.recalc_project_totals(project_id)
         await self.audit.log(
@@ -289,7 +287,6 @@ class CostingService:
 
         item = await self._get_item_or_404(project_id, item_id)
 
-        # If the item had a material consumption, reverse it
         if item.material_id and item.actual_quantity:
             await self._record_inventory_adjustment(
                 project=project,
@@ -299,9 +296,22 @@ class CostingService:
                 actor=actor,
             )
 
+        await self.audit.log(
+            action=AuditAction.DELETE,
+            table_name="project_items",
+            record_id=item.id,
+            user_id=actor.id,
+            old_data={
+                "project_id": str(project_id),
+                "category": item.category,
+                "description": item.description,
+                "actual_cost": float(item.actual_cost or 0),
+            },
+        )
+
         await self.projects.delete_item(item)
         await self.recalc_project_totals(project_id)
-
+        
     # ── Internal helpers ───────────────────────────────
 
     async def _sync_actual_cost(
@@ -502,9 +512,8 @@ class ProjectService:
         if project.status in TERMINAL_PROJECT_STATUSES:
             raise ConflictError(f"Cannot edit a {project.status} project")
 
-        for field, value in payload.model_dump(exclude_unset=True).items():
-            if value is not None:
-                setattr(project, field, value)
+        for field in payload.model_fields_set:
+            setattr(project, field, getattr(payload, field))
 
         await self.db.flush()
         await self.audit.log(
@@ -519,6 +528,9 @@ class ProjectService:
     async def change_status(
         self, pid: UUID, new_status: str, *, note: str | None, actor: User
     ) -> Project:
+        if new_status not in PROJECT_STATUSES:
+            raise ValidationError(f"status must be one of {PROJECT_STATUSES}")
+
         project = await self._get_or_404(pid)
         current = project.status
 
@@ -640,6 +652,113 @@ class ProjectService:
         snap.notes = (snap.notes or "") + f"\n[DELIVERED] Final HPP: {final_hpp}, final price: {final_price}."
 
         await self.db.flush()
+
+    async def create_from_inquiry(
+        self,
+        inquiry_id: UUID,
+        *,
+        actor: User,
+        title: str | None = None,
+        quoted_price: float | None = None,
+        approved_price: float | None = None,
+        start_date: Any | None = None,
+        target_end_date: Any | None = None,
+    ) -> Project:
+        """
+        Create a project from an approved inquiry.
+
+        Copies the customer, vehicle, and description. Raises if the
+        inquiry already has a project, or if the inquiry isn't ready.
+        """
+        from app.modules.inquiries.constants import InquiryStatus
+        from app.modules.inquiries.models import Inquiry
+        from app.modules.vehicles.models import Vehicle
+
+        # Load the inquiry
+        inquiry = await self.db.get(Inquiry, inquiry_id)
+        if not inquiry:
+            raise NotFoundError("Inquiry not found")
+
+        # Idempotency — refuse if a project already exists
+        existing = (
+            await self.db.execute(
+                select(Project).where(Project.inquiry_id == inquiry_id)
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise ConflictError(
+                f"A project already exists for this inquiry: {existing.code}"
+            )
+
+        # Only APPROVED or CONVERTED inquiries can become projects
+        if inquiry.status not in (
+            InquiryStatus.APPROVED.value,
+            InquiryStatus.CONVERTED.value,
+        ):
+            raise ConflictError(
+                f"Cannot convert an inquiry in status '{inquiry.status}'. "
+                f"Only APPROVED inquiries can be converted."
+            )
+
+        # A project requires a customer
+        if not inquiry.customer_id:
+            raise ConflictError(
+                "This inquiry has no customer linked — cannot create a project."
+            )
+
+        # Build a sensible default title from the inquiry
+        if not title:
+            parts: list[str] = []
+            if inquiry.service_interest:
+                parts.append(inquiry.service_interest.replace("_", " ").title())
+            if inquiry.vehicle_id:
+                v = await self.db.get(Vehicle, inquiry.vehicle_id)
+                if v:
+                    parts.append(f"{v.brand} {v.model}")
+            title = " — ".join(parts) if parts else f"Project from {inquiry.code}"
+
+        project = Project(
+            code=await self.repo.next_code(),
+            title=title,
+            description=inquiry.description,
+            inquiry_id=inquiry.id,
+            customer_id=inquiry.customer_id,
+            vehicle_id=inquiry.vehicle_id,
+            status=ProjectStatus.ESTIMATING.value,
+            quoted_price=quoted_price,
+            approved_price=approved_price,
+            start_date=start_date,
+            target_end_date=target_end_date,
+            internal_notes=(
+                f"Auto-created from inquiry {inquiry.code}.\n"
+                f"Service: {inquiry.service_interest or '—'}\n"
+                f"Color: {inquiry.color_preference or '—'}\n"
+                f"Finish: {inquiry.finish_preference or '—'}"
+            ),
+            created_by_id=actor.id,
+        )
+        await self.repo.add(project)
+
+        await self.audit.log(
+            action=AuditAction.CREATE,
+            table_name="projects",
+            record_id=project.id,
+            user_id=actor.id,
+            new_data={
+                "code": project.code,
+                "inquiry_id": str(inquiry.id),
+                "inquiry_code": inquiry.code,
+                "customer_id": str(inquiry.customer_id),
+                "vehicle_id": str(inquiry.vehicle_id) if inquiry.vehicle_id else None,
+            },
+        )
+
+        log.info(
+            "project_created_from_inquiry",
+            inquiry_code=inquiry.code,
+            project_code=project.code,
+        )
+        return project
 
     async def _get_or_404(self, pid: UUID) -> Project:
         p = await self.repo.get(pid)

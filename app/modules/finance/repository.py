@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.finance.constants import (
     InvoiceStatus,
     PaymentDirection,
+    PaymentReferenceType,
 )
 from app.modules.finance.models import (
     Account,
@@ -116,21 +117,28 @@ class InvoiceRepository:
         await self.db.flush()
 
     async def payments_for(self, invoice_id: UUID) -> list[Payment]:
+        """All payments tied to this invoice (IN and OUT), oldest first."""
         stmt = (
             select(Payment)
-            .where(Payment.reference_type == "INVOICE")
+            .where(Payment.reference_type == PaymentReferenceType.INVOICE.value)
             .where(Payment.reference_id == invoice_id)
-            .where(Payment.direction == PaymentDirection.IN.value)
-            .order_by(Payment.payment_date)
+            .order_by(Payment.payment_date, Payment.created_at)
         )
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def paid_amount(self, invoice_id: UUID) -> float:
+        """
+        Net amount paid against the invoice.
+        Reversal entries (opposite direction) subtract from the total.
+        """
+        amount_expr = case(
+            (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+            else_=-Payment.amount,
+        )
         stmt = (
-            select(func.coalesce(func.sum(Payment.amount), 0))
-            .where(Payment.reference_type == "INVOICE")
+            select(func.coalesce(func.sum(amount_expr), 0))
+            .where(Payment.reference_type == PaymentReferenceType.INVOICE.value)
             .where(Payment.reference_id == invoice_id)
-            .where(Payment.direction == PaymentDirection.IN.value)
         )
         return float((await self.db.execute(stmt)).scalar_one() or 0)
 
@@ -194,6 +202,41 @@ class PaymentRepository:
         self.db.add(payment)
         await self.db.flush()
         return payment
+
+    async def find_reversal_for(self, original_code: str) -> Payment | None:
+        """Check whether a payment has already been reversed."""
+        stmt = (
+            select(Payment)
+            .where(Payment.notes.like(f"Reversal of {original_code}%"))
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def payments_for_project(self, project_id: UUID) -> list[Payment]:
+        """
+        All IN payments connected to a project — whether they're still
+        PROJECT-referenced (a DP that hasn't been invoiced) or already
+        relinked to an invoice that belongs to this project.
+        """
+        invoice_ids_subq = select(Invoice.id).where(Invoice.project_id == project_id)
+        stmt = (
+            select(Payment)
+            .where(Payment.direction == PaymentDirection.IN.value)
+            .where(
+                or_(
+                    and_(
+                        Payment.reference_type == PaymentReferenceType.PROJECT.value,
+                        Payment.reference_id == project_id,
+                    ),
+                    and_(
+                        Payment.reference_type == PaymentReferenceType.INVOICE.value,
+                        Payment.reference_id.in_(invoice_ids_subq),
+                    ),
+                )
+            )
+            .order_by(Payment.payment_date, Payment.created_at)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
 
 
 # ════════════════════════════════════════════════════════════════
