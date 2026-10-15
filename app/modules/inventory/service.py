@@ -94,13 +94,12 @@ class SupplierService:
         if not supplier:
             raise NotFoundError("Supplier not found")
 
-        for field in (
-            "name", "contact_person", "email", "phone",
-            "address", "tax_id", "payment_terms", "notes", "is_active",
-        ):
-            value = getattr(payload, field, None)
-            if value is not None:
-                setattr(supplier, field, value)
+        # Partial update — respect model_fields_set so clearing works
+        for field in payload.model_fields_set:
+            value = getattr(payload, field)
+            if isinstance(value, str):
+                value = value.strip() or None
+            setattr(supplier, field, value)
 
         await self.db.flush()
         await self.audit.log(
@@ -163,15 +162,13 @@ class MaterialService:
         if not material:
             raise NotFoundError("Material not found")
 
-        for field in (
-            "sku", "name", "brand", "category",
-            "purchase_unit", "stock_unit", "stock_units_per_purchase",
-            "reorder_point", "min_stock", "preferred_supplier_id",
-            "notes", "location", "is_active",
-        ):
-            value = getattr(payload, field, None)
-            if value is not None:
-                setattr(material, field, value)
+        # Partial update — respect model_fields_set so users can clear
+        # optional fields (e.g. remove a supplier or a location).
+        for field in payload.model_fields_set:
+            value = getattr(payload, field)
+            if isinstance(value, str):
+                value = value.strip() or None
+            setattr(material, field, value)
 
         await self.db.flush()
         await self.audit.log(
@@ -236,17 +233,17 @@ class InventoryService:
         if payload.transaction_type not in INBOUND_TYPES | OUTBOUND_TYPES:
             raise ValidationError(f"Unknown transaction type: {payload.transaction_type}")
 
-        # For outbound, warn if it takes stock negative. Allowed but logged.
+        # Detect negative stock but do NOT mutate the payload (Pydantic
+        # objects may be shared with callers).
+        notes = payload.notes
         if payload.transaction_type in OUTBOUND_TYPES:
             current = await self.material_repo.current_stock(payload.material_id)
             if payload.quantity > current:
-                # Allow negative stock (some businesses operate that way),
-                # but flag it via a note on the transaction.
-                payload.notes = (
-                    (payload.notes or "") +
-                    f" [negative stock: {current:.4g} available, "
+                suffix = (
+                    f"[negative stock: {current:.4g} available, "
                     f"{payload.quantity:.4g} requested]"
-                ).strip()
+                )
+                notes = f"{notes} {suffix}".strip() if notes else suffix
 
         # Default unit_cost: from the material's current price
         unit_cost = payload.unit_cost
@@ -261,7 +258,7 @@ class InventoryService:
             reference_type=payload.reference_type,
             reference_id=payload.reference_id,
             reference_note=payload.reference_note,
-            notes=payload.notes,
+            notes=notes,
             created_by_id=actor.id if actor else None,
         )
         await self.tx_repo.add(tx)
@@ -280,6 +277,58 @@ class InventoryService:
             },
         )
         return tx
+
+    async def record_consumption(
+        self,
+        material_id: UUID,
+        quantity: float,
+        *,
+        reference_type: str | None = None,
+        reference_id: UUID | None = None,
+        reference_note: str | None = None,
+        notes: str | None = None,
+        actor: User | None = None,
+    ) -> InventoryTransaction:
+        """
+        Convenience wrapper for external modules (e.g. projects) that need
+        to consume stock. Wraps `record()` with sane defaults.
+        """
+        return await self.record(
+            InventoryTransactionCreate(
+                material_id=material_id,
+                transaction_type=TransactionType.CONSUMPTION.value,
+                quantity=quantity,
+                reference_type=reference_type,
+                reference_id=reference_id,
+                reference_note=reference_note,
+                notes=notes,
+            ),
+            actor=actor,
+        )
+
+    async def ensure_available(
+        self,
+        material_id: UUID,
+        quantity: float,
+        *,
+        allow_negative: bool = False,
+    ) -> None:
+        """
+        Raise ValidationError if the material does not have enough stock.
+        Holds a row-level lock on the material so concurrent transactions
+        cannot race past the check.
+        """
+        material = await self.material_repo.get(material_id)
+        if not material:
+            raise NotFoundError("Material not found")
+
+        current = await self.material_repo.current_stock_for_update(material_id)
+        if not allow_negative and quantity > current:
+            raise ValidationError(
+                f"Insufficient stock for {material.code}: "
+                f"need {quantity:.4g} {material.stock_unit}, "
+                f"have {current:.4g}"
+            )
 
     async def stock_overview(self) -> list[dict]:
         """Return all active materials with current stock and value."""
@@ -345,8 +394,7 @@ class PurchaseOrderService:
             user_id=actor.id,
             new_data={"code": po.code, "supplier_id": str(payload.supplier_id)},
         )
-        # ── Load items so Pydantic serialization doesn't lazy-load ──
-        await self.db.refresh(po, ["items"])      # ← add
+        await self.db.refresh(po, ["items"])
         return po
 
     async def update(
@@ -356,10 +404,12 @@ class PurchaseOrderService:
         if po.status in TERMINAL_PO_STATUSES:
             raise ConflictError(f"Cannot edit {po.status} purchase order")
 
-        if payload.expected_date is not None:
-            po.expected_date = payload.expected_date
-        if payload.notes is not None:
-            po.notes = payload.notes
+        # Partial update — respect model_fields_set so users can clear notes
+        for field in payload.model_fields_set:
+            value = getattr(payload, field)
+            if isinstance(value, str):
+                value = value.strip() or None
+            setattr(po, field, value)
 
         await self.db.flush()
         return po
@@ -406,12 +456,11 @@ class PurchaseOrderService:
         if not item or item.purchase_order_id != po.id:
             raise NotFoundError("Purchase order item not found")
 
-        if payload.quantity is not None:
-            item.quantity = payload.quantity
-        if payload.unit_price is not None:
-            item.unit_price = payload.unit_price
-        if payload.notes is not None:
-            item.notes = payload.notes
+        for field in payload.model_fields_set:
+            value = getattr(payload, field)
+            if isinstance(value, str):
+                value = value.strip() or None
+            setattr(item, field, value)
 
         await self.db.flush()
         await self.repo.recalc_total(po.id)
@@ -466,11 +515,25 @@ class PurchaseOrderService:
         if po.status not in (PurchaseOrderStatus.SENT.value, PurchaseOrderStatus.DRAFT.value):
             raise ConflictError(f"Cannot receive a {po.status} PO")
 
-        # Map item_id → quantity override
         overrides = {ri.item_id: ri.quantity_received for ri in payload.received_items}
+
+        # Pre-validate overrides
+        for ri in payload.received_items:
+            item = next((i for i in po.items if i.id == ri.item_id), None)
+            if not item:
+                raise ValidationError(f"Item {ri.item_id} does not belong to this PO")
+            if ri.quantity_received > float(item.quantity):
+                raise ValidationError(
+                    f"Received quantity ({ri.quantity_received}) cannot exceed "
+                    f"ordered quantity ({float(item.quantity)}) for {item.material_id}"
+                )
 
         now = datetime.now(UTC)
         for item in po.items:
+            # Already received → skip (idempotent)
+            if float(item.quantity_received) > 0:
+                continue
+
             qty = overrides.get(item.id, float(item.quantity))
             if qty <= 0:
                 continue
@@ -481,7 +544,9 @@ class PurchaseOrderService:
 
             # Quantity to add to stock is in *stock units*
             stock_qty = qty * float(material.stock_units_per_purchase)
-            cost_per_stock_unit = float(item.unit_price) / float(material.stock_units_per_purchase)
+            cost_per_stock_unit = (
+                float(item.unit_price) / float(material.stock_units_per_purchase)
+            )
 
             tx = InventoryTransaction(
                 material_id=item.material_id,

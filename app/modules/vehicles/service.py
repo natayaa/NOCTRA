@@ -9,9 +9,12 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.customers.repository import CustomerRepository
+from app.modules.inquiries.models import Inquiry
 from app.modules.vehicles.models import Vehicle
 from app.modules.vehicles.repository import VehicleRepository
 from app.modules.vehicles.schemas import VehicleCreate, VehicleUpdate
+
+from sqlalchemy import func, select
 
 
 class VehicleService:
@@ -30,7 +33,7 @@ class VehicleService:
 
         if payload.plate_number:
             existing = await self.repo.find_by_plate_for_customer(
-                customer_id, payload.plate_number.strip()
+                customer_id, payload.plate_number
             )
             if existing:
                 raise ConflictError(
@@ -39,9 +42,9 @@ class VehicleService:
 
         vehicle = Vehicle(
             customer_id=customer_id,
-            plate_number=(payload.plate_number or "").strip() or None,
-            brand=payload.brand.strip(),
-            model=payload.model.strip(),
+            plate_number=payload.plate_number,
+            brand=payload.brand,
+            model=payload.model,
             year=payload.year,
             color=payload.color,
             category=payload.category,
@@ -75,7 +78,7 @@ class VehicleService:
         fields = payload.model_fields_set
 
         if "plate_number" in fields:
-            new_plate = (payload.plate_number or "").strip() or None
+            new_plate = payload.plate_number
             if new_plate and new_plate != vehicle.plate_number:
                 existing = await self.repo.find_by_plate_for_customer(
                     vehicle.customer_id, new_plate
@@ -92,22 +95,46 @@ class VehicleService:
             "brand_id", "model_id",
         ):
             if field in fields:
-                value = getattr(payload, field)
-                if isinstance(value, str):
-                    value = value.strip() or None
-                setattr(vehicle, field, value)
+                setattr(vehicle, field, getattr(payload, field))
 
         await self.db.flush()
 
-        await self.audit.log(
-            action=AuditAction.UPDATE,
-            table_name="vehicles",
-            record_id=vehicle.id,
-            user_id=actor.id,
-            old_data=before,
-            new_data=self._snapshot(vehicle),
-        )
+        after = self._snapshot(vehicle)
+        if before != after:
+            await self.audit.log(
+                action=AuditAction.UPDATE,
+                table_name="vehicles",
+                record_id=vehicle.id,
+                user_id=actor.id,
+                old_data=before,
+                new_data=after,
+            )
         return vehicle
+
+    async def delete(self, vehicle_id: UUID, *, actor: User) -> None:
+        """Hard delete — only allowed if the vehicle has no inquiries."""
+        vehicle = await self._get_or_404(vehicle_id)
+
+        inq_count = (
+            await self.db.execute(
+                select(func.count(Inquiry.id)).where(Inquiry.vehicle_id == vehicle_id)
+            )
+        ).scalar_one()
+        if inq_count > 0:
+            raise ConflictError(
+                f"Cannot delete: {inq_count} inquiry(ies) reference this vehicle"
+            )
+
+        snapshot = self._snapshot(vehicle)
+        await self.repo.delete(vehicle)
+
+        await self.audit.log(
+            action=AuditAction.DELETE,
+            table_name="vehicles",
+            record_id=vehicle_id,
+            user_id=actor.id,
+            old_data=snapshot,
+        )
 
     async def _get_or_404(self, vid: UUID) -> Vehicle:
         vehicle = await self.repo.get(vid)

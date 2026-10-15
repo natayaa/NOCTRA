@@ -1,11 +1,10 @@
 """Pydantic schemas for the inquiries module."""
-
 from __future__ import annotations
 
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.inquiries.constants import (
     BUDGET_RANGES,
@@ -24,8 +23,16 @@ from app.modules.inquiries.constants import (
 class InquiryPhotoIn(BaseModel):
     file_path: str = Field(..., min_length=1, max_length=500)
     file_name: str | None = Field(None, max_length=255)
-    caption: str | None = None
+    caption: str | None = Field(None, max_length=500)
     is_primary: bool = False
+
+    @field_validator("file_path")
+    @classmethod
+    def _validate_url(cls, v: str) -> str:
+        v = v.strip()
+        if not (v.startswith("http://") or v.startswith("https://") or v.startswith("/")):
+            raise ValueError("file_path must be a URL or absolute path")
+        return v
 
 
 class InquiryPhotoOut(BaseModel):
@@ -43,12 +50,9 @@ class InquiryPhotoOut(BaseModel):
 # ════════════════════════════════════════════════════════════════
 
 class CustomerRequestMixin(BaseModel):
-    """The 'what they want' fields. Shared by Create and Update."""
-
     color_preference: str | None = Field(None, max_length=64)
     color_family: str | None = None
     finish_preference: str | None = None
-    # `None` means "not provided" so PATCH doesn't reset it.
     has_custom_graphics: bool | None = None
     preferences: dict | None = None
 
@@ -82,14 +86,13 @@ class InquiryCreate(CustomerRequestMixin):
     budget_range: str | None = None
     desired_date: date | None = None
     follow_up_date: date | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
 
     @field_validator("service_interest")
     @classmethod
     def _validate_service(cls, v):
-        if v is not None and v not in SERVICE_INTERESTS:
-            if len(v) > 32:
-                raise ValueError("service_interest must be <= 32 chars")
+        if v is not None and v not in SERVICE_INTERESTS and len(v) > 32:
+            raise ValueError("service_interest must be <= 32 chars")
         return v
 
     @field_validator("source")
@@ -106,20 +109,29 @@ class InquiryCreate(CustomerRequestMixin):
             raise ValueError(f"budget_range must be one of {BUDGET_RANGES}")
         return v
 
+    @model_validator(mode="after")
+    def _validate_dates(self):
+        today = date.today()
+        if self.desired_date and self.desired_date < today:
+            raise ValueError("desired_date cannot be in the past")
+        if self.follow_up_date and self.follow_up_date < today:
+            raise ValueError("follow_up_date cannot be in the past")
+        if self.desired_date and self.follow_up_date and self.follow_up_date > self.desired_date:
+            raise ValueError("follow_up_date must be on or before desired_date")
+        return self
+
 
 class InquiryUpdate(CustomerRequestMixin):
     """Partial update. All fields optional."""
 
     customer_id: UUID | None = None
     vehicle_id: UUID | None = None
-
     service_interest: str | None = Field(None, max_length=32)
     description: str | None = Field(None, min_length=20, max_length=5000)
-
     budget_range: str | None = None
     desired_date: date | None = None
     follow_up_date: date | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
 
     @field_validator("budget_range")
     @classmethod

@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.customers.constants import CustomerStatus
 from app.modules.customers.models import Customer, CustomerContact
 
 
@@ -40,8 +41,10 @@ class CustomerRepository:
         status: str | None = None,
         is_active: bool | None = None,
         city: str | None = None,
+        source: str | None = None,
+        sort: str = "created_desc",
     ) -> Select:
-        stmt = select(Customer).order_by(Customer.created_at.desc())
+        stmt = select(Customer)
         conds = []
         if q:
             like = f"%{q.strip()}%"
@@ -50,6 +53,7 @@ class CustomerRepository:
                     Customer.name.ilike(like),
                     Customer.email.ilike(like),
                     Customer.phone.ilike(like),
+                    Customer.alt_phone.ilike(like),
                     Customer.code.ilike(like),
                 )
             )
@@ -59,9 +63,51 @@ class CustomerRepository:
             conds.append(Customer.is_active == is_active)
         if city:
             conds.append(Customer.city.ilike(f"%{city}%"))
+        if source:
+            conds.append(Customer.source == source)
         if conds:
             stmt = stmt.where(and_(*conds))
+
+        # ── Sorting ──
+        if sort == "created_asc":
+            stmt = stmt.order_by(Customer.created_at.asc())
+        elif sort == "name_asc":
+            stmt = stmt.order_by(Customer.name.asc())
+        elif sort == "name_desc":
+            stmt = stmt.order_by(Customer.name.desc())
+        elif sort == "updated_desc":
+            stmt = stmt.order_by(Customer.updated_at.desc())
+        else:
+            stmt = stmt.order_by(Customer.created_at.desc())
+
         return stmt
+
+    async def list_contacts(self, customer_id: UUID) -> list[CustomerContact]:
+        stmt = (
+            select(CustomerContact)
+            .where(CustomerContact.customer_id == customer_id)
+            .order_by(CustomerContact.created_at.desc())
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def stats(self) -> dict[str, int]:
+        """Aggregate counts per status + active totals."""
+        rows = await self.db.execute(
+            select(Customer.status, func.count(Customer.id)).group_by(Customer.status)
+        )
+        by_status = {s: c for s, c in rows.all()}
+
+        active_count = (
+            await self.db.execute(
+                select(func.count(Customer.id)).where(Customer.is_active.is_(True))
+            )
+        ).scalar_one()
+
+        return {
+            "total": sum(by_status.values()),
+            "active_records": active_count,
+            **{f"status_{k}": v for k, v in by_status.items()},
+        }
 
     async def next_code(self) -> str:
         """
@@ -91,11 +137,3 @@ class CustomerRepository:
         self.db.add(contact)
         await self.db.flush()
         return contact
-
-    async def list_contacts(self, customer_id: UUID) -> list[CustomerContact]:
-        stmt = (
-            select(CustomerContact)
-            .where(CustomerContact.customer_id == customer_id)
-            .order_by(CustomerContact.created_at.desc())
-        )
-        return list((await self.db.execute(stmt)).scalars().all())

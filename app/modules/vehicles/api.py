@@ -84,7 +84,7 @@ async def list_vehicles(
 @vehicles_router.get("/search", response_model=list[dict])
 async def search_vehicles(
     db: DbSession,
-    q: str = Query("", min_length=1, max_length=100),
+    q: str = Query(..., min_length=1, max_length=100),  # ← FIX: required
     customer_id: UUID | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
     _=Depends(require_permission(PermissionCode.VEHICLE_READ)),
@@ -123,7 +123,7 @@ async def search_vehicles(
             "id": str(v.id),
             "label": f"{v.brand} {v.model}" + (f" — {v.plate_number}" if v.plate_number else ""),
             "sublabel": f"{v.year or ''} {v.category or ''}".strip(),
-            "customer_id": str(v.customer_id),
+            "customer_id": str(v.customer_id) if v.customer_id else None,
             "customer_name": customers[v.customer_id].name if v.customer_id in customers else None,
         }
         for v in rows

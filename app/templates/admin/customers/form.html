@@ -2,7 +2,6 @@
 
 {% block content %}
 {% set fv = form_values or {} %}
-{% set v = namespace() %}
 
 <div class="page-header">
   <div>
@@ -25,7 +24,7 @@
       class="max-w-3xl panel space-y-5"
       data-guard>
 
-      <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
 
   <div class="form-row">
     <label class="form-label" for="name">Full name <span class="req">*</span></label>
@@ -51,6 +50,21 @@
     <input class="input" type="email" id="email" name="email" maxlength="255"
            value="{{ fv.get('email') or (customer.email if customer else '') }}" />
   </div>
+
+  {% if mode == 'create' %}
+  <div class="form-row">
+    <label class="form-label" for="source">Source</label>
+    <select class="select" id="source" name="source">
+      <option value="">—</option>
+      {% set cur_src = fv.get('source') or '' %}
+      {% for s in sources %}
+        <option value="{{ s }}" {% if cur_src == s %}selected{% endif %}>
+          {{ source_labels.get(s, s) }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
 
   <div class="form-row">
     <label class="form-label" for="address_line1">Address line 1</label>
@@ -96,11 +110,16 @@
   </div>
 
   {% if mode == 'edit' %}
+  {% set cur_status = fv.get('status') or (customer.status if customer else 'LEAD') %}
+  {% set cur_active = fv.get('is_active') == 'true' if 'is_active' in fv else (customer.is_active if customer else True) %}
+
   <div class="form-row">
     <label class="form-label" for="status">Status</label>
     <select class="select" id="status" name="status">
       {% for s in statuses %}
-        <option value="{{ s }}" {% if customer.status == s %}selected{% endif %}>{{ s }}</option>
+        <option value="{{ s }}" {% if cur_status == s %}selected{% endif %}>
+          {{ status_labels.get(s, s) }}
+        </option>
       {% endfor %}
     </select>
   </div>
@@ -108,7 +127,7 @@
   <div class="form-row">
     <label class="flex items-center gap-2 text-sm">
       <input type="checkbox" name="is_active" value="true"
-             {% if customer.is_active %}checked{% endif %} />
+             {% if cur_active %}checked{% endif %} />
       Active
     </label>
   </div>
@@ -116,7 +135,8 @@
 
   <div class="form-row">
     <label class="form-label" for="notes">Notes</label>
-    <textarea class="textarea" id="notes" name="notes">{{ fv.get('notes') or (customer.notes if customer else '') }}</textarea>
+    <textarea class="textarea" id="notes" name="notes"
+              maxlength="5000">{{ fv.get('notes') or (customer.notes if customer else '') }}</textarea>
   </div>
 
   <div class="flex gap-2 pt-2">

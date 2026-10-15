@@ -33,58 +33,58 @@ class PermissionCode(StrEnum):
     SETTINGS_READ = "settings:read"
     SETTINGS_UPDATE = "settings:update"
 
-    # Customers  ── NEW ──
+    # Customers
     CUSTOMER_READ = "customer:read"
     CUSTOMER_WRITE = "customer:write"
     CUSTOMER_DELETE = "customer:delete"
 
-    # Vehicles  ── NEW ──
+    # Vehicles
     VEHICLE_READ = "vehicle:read"
     VEHICLE_WRITE = "vehicle:write"
     VEHICLE_DELETE = "vehicle:delete"
 
-    # Inquiries  ── NEW ──
+    # Inquiries
     INQUIRY_READ = "inquiry:read"
     INQUIRY_CREATE = "inquiry:create"
     INQUIRY_UPDATE = "inquiry:update"
     INQUIRY_ASSIGN = "inquiry:assign"
-    INQUIRY_CLOSE = "inquiry:close" 
+    INQUIRY_CLOSE = "inquiry:close"
 
-    # Inventory  ── NEW (Phase 3) ──
+    # Inventory
     INVENTORY_READ = "inventory:read"
     INVENTORY_WRITE = "inventory:write"
     INVENTORY_TRANSACT = "inventory:transact"
     INVENTORY_ADJUST = "inventory:adjust"
     INVENTORY_PURCHASE = "inventory:purchase"
 
-    # Suppliers  ── NEW (Phase 3) ──
+    # Suppliers
     SUPPLIER_READ = "supplier:read"
     SUPPLIER_WRITE = "supplier:write"
 
-    # Projects (Phase 4)
+    # Projects
     PROJECT_READ = "project:read"
     PROJECT_CREATE = "project:create"
     PROJECT_UPDATE = "project:update"
-    PROJECT_COST = "project:cost"           # enter/change cost items
-    PROJECT_APPROVE = "project:approve"     # approve quote / advance status
+    PROJECT_COST = "project:cost"
+    PROJECT_APPROVE = "project:approve"
     PROJECT_DELETE = "project:delete"
 
-    # Employees (Phase 4)
+    # Employees
     EMPLOYEE_READ = "employee:read"
     EMPLOYEE_WRITE = "employee:write"
 
-    # Phase 5
+    # Pricing
     PRICING_READ = "pricing:read"
     PRICING_WRITE = "pricing:write"
 
-    # Finance (Phase 6)
+    # Finance
     FINANCE_READ = "finance:read"
     INVOICE_WRITE = "invoice:write"
     PAYMENT_WRITE = "payment:write"
     EXPENSE_WRITE = "expense:write"
     FINANCE_REPORTS = "finance:reports"
 
-    # Analytics (Phase 7)
+    # Analytics
     ANALYTICS_READ = "analytics:read"
 
 
@@ -98,39 +98,35 @@ class RoleName(StrEnum):
 
 
 class AuditAction(StrEnum):
+    # CRUD
     CREATE = "CREATE"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
     VIEW = "VIEW"
+
+    # Auth
     LOGIN = "LOGIN"
     LOGIN_FAILED = "LOGIN_FAILED"
     LOGOUT = "LOGOUT"
+
+    # System
     EXPORT = "EXPORT"
-    # Phase 2b — workflow actions
+
+    # Workflow
     ASSIGN = "ASSIGN"
     STATUS_CHANGE = "STATUS_CHANGE"
-    # Phase 3
+
+    # Inventory
     STOCK_IN = "STOCK_IN"
     STOCK_OUT = "STOCK_OUT"
     PRICE_CHANGE = "PRICE_CHANGE"
 
-    # Inventory
-    INVENTORY_READ = "inventory:read"
-    INVENTORY_WRITE = "inventory:write"          # create/edit materials, suppliers
-    INVENTORY_TRANSACT = "inventory:transact"    # record stock movements
-    INVENTORY_ADJUST = "inventory:adjust"        # adjustments + waste
-    INVENTORY_PURCHASE = "inventory:purchase"    # manage purchase orders
-
-    # Suppliers (separate for fine-grained control)
-    SUPPLIER_READ = "supplier:read"
-    SUPPLIER_WRITE = "supplier:write"
-
-    # Phase 4
+    # Projects
     COST_ENTRY = "COST_ENTRY"
     PROJECT_APPROVED = "PROJECT_APPROVED"
     PROJECT_COMPLETED = "PROJECT_COMPLETED"
 
-    # Phase 6
+    # Finance
     PAYMENT_RECEIVED = "PAYMENT_RECEIVED"
     PAYMENT_MADE = "PAYMENT_MADE"
     INVOICE_SENT = "INVOICE_SENT"

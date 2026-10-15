@@ -36,7 +36,9 @@ class JobQueue:
     async def _run(self) -> None:
         while not self._shutdown.is_set():
             try:
-                job, args, kwargs = await asyncio.wait_for(self._queue.get(), timeout=1.0)
+                job, args, kwargs = await asyncio.wait_for(
+                    self._queue.get(), timeout=0.25
+                )
             except TimeoutError:
                 continue
             try:

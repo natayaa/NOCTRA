@@ -5,76 +5,114 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Inquiries</h1>
-    <p class="page-subtitle">{{ page_meta.total }} total</p>
+    <p class="page-subtitle">
+      {{ page_meta.total }} total
+      {% if stats.open %}· <span class="text-neutral-400">{{ stats.open }} open</span>{% endif %}
+      {% if stats.overdue %}· <span class="text-red-400">{{ stats.overdue }} overdue</span>{% endif %}
+    </p>
   </div>
-  <div class="page-actions">
+  <div class="page-actions flex gap-2">
+    <a href="/admin/inquiries/export.csv{{ qs() }}"
+       class="btn btn-secondary btn-sm" title="Download filtered results">
+      Export CSV
+    </a>
     <a href="/admin/inquiries/new" class="btn btn-primary btn-sm">New Inquiry</a>
   </div>
 </div>
 
 {# Status quick-filter chips #}
-<div class="mb-4 flex flex-wrap gap-2">
-  <a href="/admin/inquiries{% if only_open %}?only_open=true{% endif %}"
-     class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+<div class="mb-4 flex flex-wrap gap-2 items-center">
+  <a href="/admin/inquiries{{ qs(status='', only_open='') }}"
+     class="badge {% if not status_filter and not only_open %}badge-accent{% else %}badge-neutral{% endif %}">
     All
   </a>
   {% for s in statuses %}
-    <a href="/admin/inquiries?status={{ s }}"
+    <a href="/admin/inquiries{{ qs(status=s, only_open='') }}"
        class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
       {{ s }}
+      {% if stats['status_' ~ s] %}<span class="opacity-70">· {{ stats['status_' ~ s] }}</span>{% endif %}
     </a>
   {% endfor %}
-  <a href="/admin/inquiries?only_open=true"
+  <a href="/admin/inquiries{{ qs(status='', only_open='true') }}"
      class="badge {% if only_open and not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
     Open only
   </a>
 </div>
 
-<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+<form method="get" class="panel mb-4">
+  {# Preserve active quick filters #}
   {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
   {% if only_open %}<input type="hidden" name="only_open" value="true" />{% endif %}
 
-  <div class="form-row !mb-0 flex-1 min-w-[220px]">
-    <label class="form-label" for="q">Search</label>
-    <input class="input" id="q" name="q" value="{{ q }}"
-           placeholder="Code, description, notes…" data-search-input />
-  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+    <div class="form-row !mb-0 lg:col-span-2">
+      <label class="form-label" for="q">Search</label>
+      <input class="input" id="q" name="q" value="{{ q }}"
+             placeholder="Code, description, notes…" data-search-input />
+    </div>
 
-  <div class="form-row !mb-0 min-w-[140px]">
-    <label class="form-label" for="assigned_to_id">Assignee</label>
-    <select class="select" id="assigned_to_id" name="assigned_to_id">
-      <option value="">Anyone</option>
-      {% for u in assignees %}
-        <option value="{{ u.id }}" {% if assigned_filter == u.id %}selected{% endif %}>
-          {{ u.full_name }}
-        </option>
-      {% endfor %}
-    </select>
-  </div>
+    <div class="form-row !mb-0">
+      <label class="form-label" for="assigned_to_id">Assignee</label>
+      <select class="select" id="assigned_to_id" name="assigned_to_id">
+        <option value="">Anyone</option>
+        {% for u in assignees %}
+          <option value="{{ u.id }}" {% if assigned_filter == u.id %}selected{% endif %}>
+            {{ u.full_name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
 
-  <div class="form-row !mb-0 min-w-[120px]">
-    <label class="form-label" for="source">Source</label>
-    <select class="select" id="source" name="source">
-      <option value="">Any</option>
-      {% for s in sources %}
-        <option value="{{ s }}" {% if source_filter == s %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-  </div>
+    <div class="form-row !mb-0">
+      <label class="form-label" for="source">Source</label>
+      <select class="select" id="source" name="source">
+        <option value="">Any</option>
+        {% for s in sources %}
+          <option value="{{ s }}" {% if source_filter == s %}selected{% endif %}>
+            {{ source_labels.get(s, s) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
 
-  <div class="form-row !mb-0 min-w-[120px]">
-    <label class="form-label" for="finish_preference">Finish</label>
-    <select class="select" id="finish_preference" name="finish_preference">
-      <option value="">Any</option>
-      {% for f in finishes %}
-        <option value="{{ f }}" {% if finish_filter == f %}selected{% endif %}>
-          {{ finish_labels.get(f, f) }}
-        </option>
-      {% endfor %}
-    </select>
-  </div>
+    <div class="form-row !mb-0">
+      <label class="form-label" for="color_family">Color family</label>
+      <select class="select" id="color_family" name="color_family">
+        <option value="">Any</option>
+        {% for c in color_families %}
+          <option value="{{ c }}" {% if color_filter == c %}selected{% endif %}>
+            {{ color_labels.get(c, c) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
 
-  <button class="btn btn-secondary">Filter</button>
+    <div class="form-row !mb-0">
+      <label class="form-label" for="finish_preference">Finish</label>
+      <select class="select" id="finish_preference" name="finish_preference">
+        <option value="">Any</option>
+        {% for f in finishes %}
+          <option value="{{ f }}" {% if finish_filter == f %}selected{% endif %}>
+            {{ finish_labels.get(f, f) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="sort">Sort</label>
+      <select class="select" id="sort" name="sort">
+        {% for key, label in sort_options.items() %}
+          <option value="{{ key }}" {% if sort == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="flex gap-2">
+      <button class="btn btn-secondary flex-1">Filter</button>
+      <a href="/admin/inquiries" class="btn btn-ghost" title="Reset">Reset</a>
+    </div>
+  </div>
 </form>
 
 {% if inquiries %}
@@ -87,13 +125,17 @@
         <th>Request</th>
         <th>Status</th>
         <th>Assignee</th>
+        <th>Follow-up</th>
         <th>Created</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       {% for i in inquiries %}
-      <tr>
+      {% set due = i.follow_up_date %}
+      {% set overdue = due and due < today and i.status not in ('CONVERTED', 'LOST') %}
+      {% set due_today = due and due == today and i.status not in ('CONVERTED', 'LOST') %}
+      <tr class="{% if overdue %}bg-red-500/5{% endif %}">
         <td class="mono text-xs">{{ i.code }}</td>
         <td>
           {% set c = customers_by_id.get(i.customer_id) if i.customer_id else None %}
@@ -104,15 +146,22 @@
             <div class="text-neutral-500 italic">Unassigned</div>
           {% endif %}
           {% if v %}
-            <div class="text-xs text-neutral-500">{{ v.brand }} {{ v.model }}{% if v.plate_number %} · {{ v.plate_number }}{% endif %}</div>
+            <div class="text-xs text-neutral-500">
+              {{ v.brand }} {{ v.model }}{% if v.plate_number %} · {{ v.plate_number }}{% endif %}
+            </div>
           {% endif %}
         </td>
         <td class="text-sm">
           {% if i.service_interest %}
             <div>{{ service_labels.get(i.service_interest, i.service_interest) }}</div>
           {% endif %}
-          <div class="text-xs text-neutral-500">
-            {% if i.color_preference %}{{ i.color_preference }}{% endif %}
+          <div class="text-xs text-neutral-500 flex items-center gap-1.5 flex-wrap">
+            {% if i.color_family %}
+              <span class="inline-block w-2.5 h-2.5 rounded-full border border-noctra-border"
+                    style="background: {{ color_swatch.get(i.color_family, '#64748b') }};"
+                    title="{{ color_labels.get(i.color_family, i.color_family) }}"></span>
+            {% endif %}
+            {% if i.color_preference %}<span>{{ i.color_preference }}</span>{% endif %}
             {% if i.finish_preference %} · {{ finish_labels.get(i.finish_preference, i.finish_preference) }}{% endif %}
           </div>
           {% if i.has_custom_graphics %}
@@ -120,20 +169,20 @@
           {% endif %}
         </td>
         <td>
-          {% set status_badge = {
-            'NEW': 'badge-info',
-            'CONTACTED': 'badge-neutral',
-            'QUOTED': 'badge-accent',
-            'NEGOTIATING': 'badge-warning',
-            'APPROVED': 'badge-success',
-            'CONVERTED': 'badge-success',
-            'LOST': 'badge-danger'
-          }.get(i.status, 'badge-neutral') %}
-          <span class="badge {{ status_badge }}">{{ i.status }}</span>
+          <span class="badge {{ status_tone.get(i.status, 'badge-neutral') }}">{{ i.status }}</span>
         </td>
         <td class="text-sm">
           {% set u = users_by_id.get(i.assigned_to_id) if i.assigned_to_id else None %}
           {% if u %}{{ u.full_name }}{% else %}<span class="text-neutral-500">—</span>{% endif %}
+        </td>
+        <td class="text-xs">
+          {% if due %}
+            <span class="{% if overdue %}text-red-400 font-medium{% elif due_today %}text-amber-400 font-medium{% else %}text-neutral-400{% endif %}">
+              {% if overdue %}⚠ {% endif %}{{ due.strftime('%d %b') }}
+            </span>
+          {% else %}
+            <span class="text-neutral-600">—</span>
+          {% endif %}
         </td>
         <td class="text-xs text-neutral-500">{{ i.created_at | dt_id('%d %b') }}</td>
         <td class="text-right">
@@ -149,8 +198,8 @@
 
 {% else %}
 {{ empty_state(
-  title='No inquiries yet',
-  message='Create the first inquiry to start building the pipeline.',
+  title='No inquiries match your filters',
+  message='Try adjusting filters or create a new inquiry to start building the pipeline.',
   action_url='/admin/inquiries/new',
   action_label='New Inquiry',
   icon='plus'

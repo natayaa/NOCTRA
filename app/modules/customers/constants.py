@@ -19,8 +19,8 @@ class CustomerSource(StrEnum):
     ADMIN = "ADMIN"
 
 
-CUSTOMER_STATUSES = [s.value for s in CustomerStatus]
-CUSTOMER_SOURCES = [s.value for s in CustomerSource]
+CUSTOMER_STATUSES: list[str] = [s.value for s in CustomerStatus]
+CUSTOMER_SOURCES: list[str] = [s.value for s in CustomerSource]
 
 CUSTOMER_STATUS_LABELS: dict[str, str] = {
     CustomerStatus.LEAD.value:     "Lead",
@@ -36,4 +36,27 @@ CUSTOMER_SOURCE_LABELS: dict[str, str] = {
     CustomerSource.SOCIAL_MEDIA.value: "Social media",
     CustomerSource.PHONE.value:        "Phone",
     CustomerSource.ADMIN.value:        "Admin",
+}
+
+# Single source of truth for status → badge tone in templates
+STATUS_TONE: dict[str, str] = {
+    CustomerStatus.LEAD.value:     "badge-info",
+    CustomerStatus.ACTIVE.value:   "badge-success",
+    CustomerStatus.INACTIVE.value: "badge-neutral",
+    CustomerStatus.BLOCKED.value:  "badge-danger",
+}
+
+# Active/pending statuses (used for filtering on list page)
+ACTIVE_STATUSES: frozenset[str] = frozenset({
+    CustomerStatus.LEAD.value,
+    CustomerStatus.ACTIVE.value,
+})
+
+# Sort keys exposed to the UI
+CUSTOMER_SORT_OPTIONS: dict[str, str] = {
+    "created_desc": "Newest first",
+    "created_asc":  "Oldest first",
+    "name_asc":     "Name (A→Z)",
+    "name_desc":    "Name (Z→A)",
+    "updated_desc": "Recently updated",
 }

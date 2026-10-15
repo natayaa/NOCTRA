@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.vehicles.models import Vehicle, VehicleBrand, VehicleModel
@@ -21,8 +21,10 @@ class VehicleRepository:
         customer_id: UUID | None = None,
         q: str | None = None,
         category: str | None = None,
+        brand: str | None = None,
+        sort: str = "created_desc",
     ) -> Select:
-        stmt = select(Vehicle).order_by(Vehicle.created_at.desc())
+        stmt = select(Vehicle)
         conds = []
         if customer_id:
             conds.append(Vehicle.customer_id == customer_id)
@@ -38,8 +40,23 @@ class VehicleRepository:
             )
         if category:
             conds.append(Vehicle.category == category)
+        if brand:
+            conds.append(Vehicle.brand == brand)
         if conds:
             stmt = stmt.where(and_(*conds))
+
+        # ── Sorting ──
+        if sort == "created_asc":
+            stmt = stmt.order_by(Vehicle.created_at.asc())
+        elif sort == "brand_asc":
+            stmt = stmt.order_by(Vehicle.brand.asc(), Vehicle.model.asc())
+        elif sort == "year_desc":
+            stmt = stmt.order_by(Vehicle.year.desc().nulls_last())
+        elif sort == "plate_asc":
+            stmt = stmt.order_by(Vehicle.plate_number.asc().nulls_last())
+        else:
+            stmt = stmt.order_by(Vehicle.created_at.desc())
+
         return stmt
 
     async def find_by_plate_for_customer(
@@ -50,11 +67,43 @@ class VehicleRepository:
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
+    async def stats(
+        self, *, customer_id: UUID | None = None
+    ) -> dict[str, int]:
+        base = select(Vehicle.category, func.count(Vehicle.id)).group_by(Vehicle.category)
+        if customer_id:
+            base = base.where(Vehicle.customer_id == customer_id)
+        rows = (await self.db.execute(base)).all()
+        by_cat = {(c or "UNCATEGORIZED"): n for c, n in rows}
+
+        total_stmt = select(func.count(Vehicle.id))
+        if customer_id:
+            total_stmt = total_stmt.where(Vehicle.customer_id == customer_id)
+        total = (await self.db.execute(total_stmt)).scalar_one()
+
+        return {
+            "total": total,
+            **{f"cat_{k}": v for k, v in by_cat.items()},
+        }
+
+    async def list_distinct_brands(
+        self, *, customer_id: UUID | None = None
+    ) -> list[str]:
+        stmt = select(Vehicle.brand).distinct().order_by(Vehicle.brand)
+        if customer_id:
+            stmt = stmt.where(Vehicle.customer_id == customer_id)
+        return [b for (b,) in (await self.db.execute(stmt)).all() if b]
+
     async def add(self, vehicle: Vehicle) -> Vehicle:
         self.db.add(vehicle)
         await self.db.flush()
         return vehicle
 
+    async def delete(self, vehicle: Vehicle) -> None:
+        await self.db.delete(vehicle)
+        await self.db.flush()
+
+    # ── Catalog ───────────────────────────────────────
     async def list_brands(self) -> list[VehicleBrand]:
         stmt = select(VehicleBrand).order_by(VehicleBrand.name)
         return list((await self.db.execute(stmt)).scalars().all())

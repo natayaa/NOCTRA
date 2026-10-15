@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
     Date,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -94,19 +93,16 @@ class Project(Base, UUIDMixin, TimestampMixin):
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # ── Pricing ────────────────────────────────────────
-    # Quoted price is what we offer the customer; approved_price is
-    # what they actually agreed to. Gross profit = approved - actual_hpp.
     quoted_price: Mapped[float | None] = mapped_column(Numeric(14, 2))
     approved_price: Mapped[float | None] = mapped_column(Numeric(14, 2))
 
-    # ── Denormalized costing totals (kept in sync by the service) ──
+    # ── Denormalized costing totals ────────────────────
     estimated_hpp: Mapped[float] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
     actual_hpp: Mapped[float] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
-    # Per-category breakdown (both estimated and actual)
     estimated_materials: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
     estimated_parts: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
     estimated_labor: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
@@ -139,7 +135,7 @@ class Project(Base, UUIDMixin, TimestampMixin):
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="ProjectItem.created_at",
-        lazy="selectin",   # ← add this
+        lazy="selectin",
     )
 
     # ── Derived properties ─────────────────────────────
@@ -172,9 +168,6 @@ class Project(Base, UUIDMixin, TimestampMixin):
 
 # ════════════════════════════════════════════════════════════════
 # PROJECT ITEMS
-#
-# Each row is a costing line: either a plan (estimated_*) or a
-# consumption (actual_*) — often both as work progresses.
 # ════════════════════════════════════════════════════════════════
 
 class ProjectItem(Base, UUIDMixin, TimestampMixin):
@@ -196,7 +189,7 @@ class ProjectItem(Base, UUIDMixin, TimestampMixin):
     category: Mapped[str] = mapped_column(String(16), nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
 
-    # Optional links (required for some categories — enforced by service)
+    # Optional links
     material_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("materials.id", ondelete="RESTRICT"),

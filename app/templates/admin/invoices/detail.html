@@ -153,8 +153,9 @@
         </div>
         <div class="form-row !mb-0">
           <label class="form-label" for="pay_amount">Amount</label>
-          <input class="input" type="number" step="1000" id="pay_amount" name="amount" value="{{ balance | int }}"
-            required />
+          <input class="input" type="number" step="1000" min="1"
+                id="pay_amount" name="amount"
+                value="{{ balance | int }}" required />
         </div>
         <div class="form-row !mb-0">
           <label class="form-label" for="pay_date">Date</label>

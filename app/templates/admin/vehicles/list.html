@@ -7,22 +7,70 @@
     <h1 class="page-title">
       Vehicles{% if owner %} — {{ owner.name }}{% endif %}
     </h1>
-    <p class="page-subtitle">{{ page_meta.total }} total</p>
+    <p class="page-subtitle">
+      {{ page_meta.total }} total
+      {% if stats.cat_SCOOTER %}· <span class="text-neutral-400">{{ stats.cat_SCOOTER }} scooter</span>{% endif %}
+      {% if stats.cat_BIG_BIKE %}· <span class="text-neutral-400">{{ stats.cat_BIG_BIKE }} big bike</span>{% endif %}
+    </p>
   </div>
-  <div class="page-actions">
+  <div class="page-actions flex gap-2">
+    <a href="/admin/vehicles/export.csv{{ qs() }}" class="btn btn-secondary btn-sm">Export CSV</a>
     <a href="/admin/vehicles/new{% if customer_id %}?customer_id={{ customer_id }}{% endif %}"
        class="btn btn-primary btn-sm">New Vehicle</a>
   </div>
 </div>
 
-<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+{# Category chips #}
+<div class="mb-4 flex flex-wrap gap-2 items-center">
+  <a href="/admin/vehicles{{ qs(category='') }}"
+     class="badge {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+    All
+  </a>
+  {% for c in categories %}
+    <a href="/admin/vehicles{{ qs(category=c) }}"
+       class="badge {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
+      {{ category_labels.get(c, c) }}
+      {% if stats['cat_' ~ c] %}<span class="opacity-70">· {{ stats['cat_' ~ c] }}</span>{% endif %}
+    </a>
+  {% endfor %}
+</div>
+
+<form method="get" class="panel mb-4">
   {% if customer_id %}<input type="hidden" name="customer_id" value="{{ customer_id }}" />{% endif %}
-  <div class="form-row !mb-0 flex-1 min-w-[240px]">
-    <label class="form-label" for="q">Search</label>
-    <input class="input" id="q" name="q" value="{{ q }}"
-           placeholder="Brand, model, plate, VIN…" data-search-input />
+  {% if category_filter %}<input type="hidden" name="category" value="{{ category_filter }}" />{% endif %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+    <div class="form-row !mb-0 lg:col-span-2">
+      <label class="form-label" for="q">Search</label>
+      <input class="input" id="q" name="q" value="{{ q }}"
+             placeholder="Brand, model, plate, VIN…" data-search-input />
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="brand">Brand</label>
+      <select class="select" id="brand" name="brand">
+        <option value="">Any</option>
+        {% for b in brands %}
+          <option value="{{ b }}" {% if brand_filter == b %}selected{% endif %}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="sort">Sort</label>
+      <select class="select" id="sort" name="sort">
+        {% for key, label in sort_options.items() %}
+          <option value="{{ key }}" {% if sort == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="flex gap-2 lg:col-span-4">
+      <button class="btn btn-secondary">Filter</button>
+      <a href="/admin/vehicles{% if customer_id %}?customer_id={{ customer_id }}{% endif %}"
+         class="btn btn-ghost">Reset</a>
+    </div>
   </div>
-  <button class="btn btn-secondary">Filter</button>
 </form>
 
 {% if vehicles %}
@@ -30,10 +78,13 @@
   <table class="table">
     <thead>
       <tr>
+        <th>-</th>
         <th>Plate</th>
         <th>Vehicle</th>
         <th>Year</th>
+        <th>Color</th>
         <th>Category</th>
+        {% if not customer_id %}<th>Owner</th>{% endif %}
         <th class="text-right"></th>
       </tr>
     </thead>
@@ -43,8 +94,27 @@
         <td class="mono text-xs">{{ v.plate_number or '—' }}</td>
         <td class="font-medium">{{ v.brand }} {{ v.model }}</td>
         <td class="text-neutral-400 text-sm">{{ v.year or '—' }}</td>
-        <td>{% if v.category %}<span class="badge badge-neutral">{{ v.category }}</span>{% else %}—{% endif %}</td>
-        <td class="text-right"><a href="/admin/vehicles/{{ v.id }}" class="btn btn-ghost btn-sm">View</a></td>
+        <td class="text-neutral-400 text-sm">{{ v.color or '—' }}</td>
+        <td>
+          {% if v.category %}
+            <span class="badge {{ category_tone.get(v.category, 'badge-neutral') }}">
+              {{ category_labels.get(v.category, v.category) }}
+            </span>
+          {% else %}—{% endif %}
+        </td>
+        {% if not customer_id %}
+        <td class="text-sm">
+          {% set o = owners_by_id.get(v.customer_id) %}
+          {% if o %}
+            <a href="/admin/customers/{{ o.id }}" class="hover:text-noctra-accent">{{ o.name }}</a>
+          {% else %}
+            <span class="text-neutral-500">—</span>
+          {% endif %}
+        </td>
+        {% endif %}
+        <td class="text-right">
+          <a href="/admin/vehicles/{{ v.id }}" class="btn btn-ghost btn-sm">View</a>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -55,8 +125,8 @@
 
 {% else %}
 {{ empty_state(
-  title='No vehicles yet',
-  message='Add a vehicle to get started.',
+  title='No vehicles match your filters',
+  message='Try adjusting filters or add a new vehicle.',
   action_url='/admin/vehicles/new',
   action_label='New Vehicle',
   icon='plus'

@@ -1,8 +1,9 @@
 {% if vehicles %}
   {% for v in vehicles %}
   <button type="button"
-          class="w-full text-left px-3 py-2 hover:bg-noctra-surface2 border-b border-noctra-border last:border-0"
-          onclick="selectVehicle('{{ v.id }}', '{{ v.brand|e }} {{ v.model|e }}{% if v.plate_number %} — {{ v.plate_number|e }}{% endif %}')">
+          class="js-vehicle-option w-full text-left px-3 py-2 hover:bg-noctra-surface2 border-b border-noctra-border last:border-0"
+          data-vehicle-id="{{ v.id }}"
+          data-vehicle-label="{{ v.brand }} {{ v.model }}{% if v.plate_number %} — {{ v.plate_number }}{% endif %}">
     <div class="font-medium text-sm">{{ v.brand }} {{ v.model }}</div>
     <div class="text-xs text-neutral-500">
       {% if v.plate_number %}{{ v.plate_number }}{% endif %}
@@ -11,7 +12,9 @@
   </button>
   {% endfor %}
 {% elif customer_id %}
-  <div class="px-3 py-3 text-xs text-neutral-500">No vehicles for this customer. Leave blank or add one later.</div>
+  <div class="px-3 py-3 text-xs text-neutral-500">
+    No vehicles for this customer. Leave blank or add one later.
+  </div>
 {% else %}
   <div class="px-3 py-3 text-xs text-neutral-500">Select a customer first.</div>
 {% endif %}

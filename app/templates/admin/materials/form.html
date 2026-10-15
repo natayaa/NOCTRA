@@ -3,41 +3,65 @@
 {% set fv = form_values or {} %}
 
 <div class="page-header">
-  <div><h1 class="page-title">{{ 'New Material' if mode == 'create' else 'Edit Material' }}</h1>
+  <div>
+    <h1 class="page-title">{{ 'New Material' if mode == 'create' else 'Edit Material' }}</h1>
     {% if material %}<p class="page-subtitle mono text-xs">{{ material.code }}</p>{% endif %}
   </div>
-  <div class="page-actions"><a href="/admin/materials" class="btn btn-secondary btn-sm">Back</a></div>
+  <div class="page-actions">
+    <a href="{{ '/admin/materials' if mode == 'create' else '/admin/materials/' ~ material.id }}"
+       class="btn btn-secondary btn-sm">Back</a>
+  </div>
 </div>
 
-{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
+  <div class="form-error">{{ error }}</div>
+</div>
+{% endif %}
 
-<form method="post" action="{{ '/admin/materials' if mode == 'create' else '/admin/materials/' ~ material.id }}"
+<form method="post"
+      action="{{ '/admin/materials' if mode == 'create' else '/admin/materials/' ~ material.id }}"
       class="max-w-3xl panel space-y-5" data-guard>
   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
 
   <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row"><label class="form-label" for="code">Code <span class="req">*</span></label>
+    <div class="form-row">
+      <label class="form-label" for="code">Code <span class="req">*</span></label>
       <input class="input mono" id="code" name="code" required maxlength="50"
              {% if mode == 'edit' %}disabled{% endif %}
-             value="{{ fv.get('code') or (material.code if material else '') }}" /></div>
-    <div class="form-row"><label class="form-label" for="sku">Supplier SKU</label>
+             value="{{ fv.get('code') or (material.code if material else '') }}" />
+      {% if mode == 'edit' %}
+      <div class="form-hint">Code cannot be changed after creation.</div>
+      {% endif %}
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="sku">Supplier SKU</label>
       <input class="input mono" id="sku" name="sku" maxlength="64"
-             value="{{ fv.get('sku') or (material.sku if material else '') }}" /></div>
+             value="{{ fv.get('sku') or (material.sku if material else '') }}" />
+    </div>
   </div>
 
   <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row"><label class="form-label" for="name">Name <span class="req">*</span></label>
+    <div class="form-row">
+      <label class="form-label" for="name">Name <span class="req">*</span></label>
       <input class="input" id="name" name="name" required maxlength="255"
-             value="{{ fv.get('name') or (material.name if material else '') }}" /></div>
-    <div class="form-row"><label class="form-label" for="brand">Brand</label>
+             value="{{ fv.get('name') or (material.name if material else '') }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="brand">Brand</label>
       <input class="input" id="brand" name="brand" maxlength="100"
-             value="{{ fv.get('brand') or (material.brand if material else '') }}" /></div>
+             value="{{ fv.get('brand') or (material.brand if material else '') }}" />
+    </div>
   </div>
 
-  <div class="form-row"><label class="form-label" for="category">Category <span class="req">*</span></label>
+  <div class="form-row">
+    <label class="form-label" for="category">Category <span class="req">*</span></label>
     <select class="select" id="category" name="category" required>
-      {% for c in categories %}{% set cur = fv.get('category') or (material.category if material else '') %}
-        <option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ category_labels.get(c, c) }}</option>
+      {% set cur_cat = fv.get('category') or (material.category if material else '') %}
+      {% for c in categories %}
+        <option value="{{ c }}" {% if cur_cat == c %}selected{% endif %}>
+          {{ category_labels.get(c, c) }}
+        </option>
       {% endfor %}
     </select>
   </div>
@@ -45,67 +69,107 @@
   <fieldset class="border border-noctra-border rounded-lg p-4">
     <legend class="text-xs uppercase tracking-wider text-neutral-500 px-2">Unit model</legend>
     <div class="grid md:grid-cols-3 gap-5">
-      <div class="form-row"><label class="form-label" for="purchase_unit">Purchase unit</label>
+      <div class="form-row">
+        <label class="form-label" for="purchase_unit">Purchase unit</label>
         <select class="select" id="purchase_unit" name="purchase_unit" required>
-          {% for u in units %}{% set cur = fv.get('purchase_unit') or (material.purchase_unit if material else '') %}
-            <option value="{{ u }}" {% if cur == u %}selected{% endif %}>{{ u }}</option>
+          {% set cur_pu = fv.get('purchase_unit') or (material.purchase_unit if material else '') %}
+          {% for u in units %}
+            <option value="{{ u }}" {% if cur_pu == u %}selected{% endif %}>{{ u }}</option>
           {% endfor %}
-        </select></div>
-      <div class="form-row"><label class="form-label" for="stock_unit">Stock unit</label>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="stock_unit">Stock unit</label>
         <select class="select" id="stock_unit" name="stock_unit" required>
-          {% for u in units %}{% set cur = fv.get('stock_unit') or (material.stock_unit if material else '') %}
-            <option value="{{ u }}" {% if cur == u %}selected{% endif %}>{{ u }}</option>
+          {% set cur_su = fv.get('stock_unit') or (material.stock_unit if material else '') %}
+          {% for u in units %}
+            <option value="{{ u }}" {% if cur_su == u %}selected{% endif %}>{{ u }}</option>
           {% endfor %}
-        </select></div>
-      <div class="form-row"><label class="form-label" for="stock_units_per_purchase">Stock units per purchase</label>
-        <input class="input" type="number" step="0.0001" id="stock_units_per_purchase" name="stock_units_per_purchase" required
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="stock_units_per_purchase">Stock units per purchase</label>
+        <input class="input" type="number" step="0.0001" min="0.0001"
+               id="stock_units_per_purchase" name="stock_units_per_purchase" required
                value="{{ fv.get('stock_units_per_purchase') or (material.stock_units_per_purchase if material else '') }}" />
-        <div class="form-hint">e.g. 1000 for a 1L bottle tracked in ml</div></div>
+        <div class="form-hint">e.g. 1000 for a 1L bottle tracked in ml</div>
+      </div>
     </div>
   </fieldset>
 
   {% if mode == 'create' %}
-  <div class="form-row"><label class="form-label" for="current_purchase_price">Current purchase price (IDR per purchase unit)</label>
-    <input class="input" type="number" step="0.01" id="current_purchase_price" name="current_purchase_price"
-           value="{{ fv.get('current_purchase_price') or '0' }}" /></div>
+  <div class="form-row">
+    <label class="form-label" for="current_purchase_price">
+      Current purchase price (IDR per purchase unit)
+    </label>
+    <input class="input" type="number" step="0.01" min="0"
+           id="current_purchase_price" name="current_purchase_price"
+           value="{{ fv.get('current_purchase_price') or '0' }}" />
+    <div class="form-hint">You can change this later on the material page.</div>
+  </div>
   {% else %}
-  <p class="text-xs text-neutral-500">Price is changed separately via the material detail page (keeps historical costs intact).</p>
+  <div class="panel" style="border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.05);">
+    <p class="text-xs text-amber-200">
+      💡 Purchase price is edited separately on the
+      <a href="/admin/materials/{{ material.id }}" class="text-noctra-accent hover:underline">material page</a>
+      — this keeps historical transaction costs intact.
+    </p>
+  </div>
   {% endif %}
 
   <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row"><label class="form-label" for="reorder_point">Reorder point</label>
-      <input class="input" type="number" step="0.0001" id="reorder_point" name="reorder_point"
-             value="{{ fv.get('reorder_point') or (material.reorder_point if material else '0') }}" /></div>
-    <div class="form-row"><label class="form-label" for="min_stock">Minimum stock</label>
-      <input class="input" type="number" step="0.0001" id="min_stock" name="min_stock"
-             value="{{ fv.get('min_stock') or (material.min_stock if material else '0') }}" /></div>
+    <div class="form-row">
+      <label class="form-label" for="reorder_point">Reorder point</label>
+      <input class="input" type="number" step="0.0001" min="0"
+             id="reorder_point" name="reorder_point"
+             value="{{ fv.get('reorder_point') or (material.reorder_point if material else '0') }}" />
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="min_stock">Minimum stock</label>
+      <input class="input" type="number" step="0.0001" min="0"
+             id="min_stock" name="min_stock"
+             value="{{ fv.get('min_stock') or (material.min_stock if material else '0') }}" />
+    </div>
   </div>
 
   <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row"><label class="form-label" for="preferred_supplier_id">Preferred supplier</label>
+    <div class="form-row">
+      <label class="form-label" for="preferred_supplier_id">Preferred supplier</label>
       <select class="select" id="preferred_supplier_id" name="preferred_supplier_id">
         <option value="">—</option>
-        {% for s in suppliers %}{% set cur = fv.get('preferred_supplier_id') or (material.preferred_supplier_id|string if material and material.preferred_supplier_id else '') %}
-          <option value="{{ s.id }}" {% if cur == s.id|string %}selected{% endif %}>{{ s.name }}</option>
+        {% set cur_sup = fv.get('preferred_supplier_id') or (material.preferred_supplier_id|string if material and material.preferred_supplier_id else '') %}
+        {% for s in suppliers %}
+          <option value="{{ s.id }}" {% if cur_sup == s.id | string %}selected{% endif %}>
+            {{ s.name }}
+          </option>
         {% endfor %}
-      </select></div>
-    <div class="form-row"><label class="form-label" for="location">Storage location</label>
+      </select>
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="location">Storage location</label>
       <input class="input" id="location" name="location" maxlength="64" placeholder="Rack A3"
-             value="{{ fv.get('location') or (material.location if material else '') }}" /></div>
+             value="{{ fv.get('location') or (material.location if material else '') }}" />
+    </div>
   </div>
 
-  <div class="form-row"><label class="form-label" for="notes">Notes</label>
-    <textarea class="textarea" id="notes" name="notes">{{ fv.get('notes') or (material.notes if material else '') }}</textarea></div>
+  <div class="form-row">
+    <label class="form-label" for="notes">Notes</label>
+    <textarea class="textarea" id="notes" name="notes"
+              maxlength="5000">{{ fv.get('notes') or (material.notes if material else '') }}</textarea>
+  </div>
 
   {% if mode == 'edit' %}
+  {% set cur_active = fv.get('is_active') == 'true' if 'is_active' in fv else (material.is_active if material else True) %}
   <label class="flex items-center gap-2 text-sm">
-    <input type="checkbox" name="is_active" value="true" {% if material.is_active %}checked{% endif %} /> Active
+    <input type="checkbox" name="is_active" value="true" {% if cur_active %}checked{% endif %} />
+    Active
   </label>
   {% endif %}
 
   <div class="flex gap-2 pt-2">
     <button class="btn btn-primary">{{ 'Create' if mode == 'create' else 'Save changes' }}</button>
-    <a href="/admin/materials" class="btn btn-secondary">Cancel</a>
+    <a href="{{ '/admin/materials' if mode == 'create' else '/admin/materials/' ~ material.id }}"
+       class="btn btn-secondary">Cancel</a>
   </div>
 </form>
 {% endblock %}

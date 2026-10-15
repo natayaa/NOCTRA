@@ -5,65 +5,141 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Inventory Ledger</h1>
-    <p class="page-subtitle">Every stock movement, in order</p>
+    <p class="page-subtitle">
+      {{ page_meta.total }} movements
+      {% if material_filter or type_filter or ref_filter %}· <span class="text-neutral-400">filtered</span>{% endif %}
+    </p>
   </div>
-  <div class="page-actions">
+  <div class="page-actions flex gap-2">
+    <a href="/admin/inventory/transactions/export.csv{{ qs() }}" class="btn btn-secondary btn-sm">Export CSV</a>
     <a href="/admin/inventory" class="btn btn-secondary btn-sm">Overview</a>
   </div>
 </div>
 
-<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
-  <div class="form-row !mb-0 min-w-[220px]">
-    <label class="form-label" for="material_id">Material</label>
-    <select class="select" id="material_id" name="material_id">
-      <option value="">All materials</option>
-      {% for m in all_materials %}
-        <option value="{{ m.id }}" {% if material_filter == m.id %}selected{% endif %}>{{ m.code }} — {{ m.name }}</option>
-      {% endfor %}
-    </select>
+{# Type chips #}
+<div class="mb-4 flex flex-wrap gap-2 items-center">
+  <a href="/admin/inventory/transactions{{ qs(transaction_type='') }}"
+     class="badge {% if not type_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+    All types
+  </a>
+  {% for t in transaction_types %}
+    <a href="/admin/inventory/transactions{{ qs(transaction_type=t) }}"
+       class="badge {% if type_filter == t %}badge-accent{% else %}badge-neutral{% endif %}">
+      {{ transaction_type_labels.get(t, t) }}
+    </a>
+  {% endfor %}
+</div>
+
+<form method="get" class="panel mb-4">
+  {% if type_filter %}<input type="hidden" name="transaction_type" value="{{ type_filter }}" />{% endif %}
+  {% if ref_filter %}<input type="hidden" name="reference_type" value="{{ ref_filter }}" />{% endif %}
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+    <div class="form-row !mb-0">
+      <label class="form-label" for="material_id">Material</label>
+      <select class="select" id="material_id" name="material_id">
+        <option value="">All materials</option>
+        {% for m in all_materials %}
+          <option value="{{ m.id }}" {% if material_filter == m.id %}selected{% endif %}>
+            {{ m.code }} — {{ m.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="reference_type">Reference</label>
+      <select class="select" id="reference_type" name="reference_type">
+        <option value="">Any</option>
+        <option value="PURCHASE_ORDER" {% if ref_filter == 'PURCHASE_ORDER' %}selected{% endif %}>Purchase order</option>
+        <option value="PROJECT" {% if ref_filter == 'PROJECT' %}selected{% endif %}>Project</option>
+        <option value="MANUAL" {% if ref_filter == 'MANUAL' %}selected{% endif %}>Manual</option>
+      </select>
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="sort">Sort</label>
+      <select class="select" id="sort" name="sort">
+        {% for key, label in transaction_sort_options.items() %}
+          <option value="{{ key }}" {% if sort == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="flex gap-2 md:col-span-3">
+      <button class="btn btn-secondary">Filter</button>
+      <a href="/admin/inventory/transactions" class="btn btn-ghost">Reset</a>
+    </div>
   </div>
-  <div class="form-row !mb-0">
-    <label class="form-label" for="transaction_type">Type</label>
-    <select class="select" id="transaction_type" name="transaction_type">
-      <option value="">Any</option>
-      {% for t in transaction_types %}
-        <option value="{{ t }}" {% if type_filter == t %}selected{% endif %}>{{ transaction_type_labels.get(t, t) }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <button class="btn btn-secondary">Filter</button>
 </form>
 
 {% if transactions %}
 <div class="table-wrap">
   <table class="table">
     <thead>
-      <tr><th>When</th><th>Material</th><th>Type</th><th class="text-right">Quantity</th><th class="text-right">Cost/unit</th><th>Reference</th></tr>
+      <tr>
+        <th>When</th>
+        <th>Material</th>
+        <th>Type</th>
+        <th class="text-right">Signed qty</th>
+        <th class="text-right">Cost/unit</th>
+        <th>Reference</th>
+      </tr>
     </thead>
     <tbody>
       {% for tx in transactions %}
       {% set m = materials_by_id.get(tx.material_id) %}
+      {% set sq = signed_quantity(tx.transaction_type, tx.quantity) %}
       <tr>
-        <td class="text-xs text-neutral-500">{{ tx.created_at | dt_id('%d %b %H:%M') }}</td>
-        <td>
-          {% if m %}<a href="/admin/materials/{{ m.id }}" class="hover:text-noctra-accent font-medium text-sm">{{ m.name }}</a>
-          {% else %}<span class="text-neutral-500">—</span>{% endif %}
+        <td class="text-xs text-neutral-500 whitespace-nowrap">
+          {{ tx.created_at | dt_id('%d %b %H:%M') }}
         </td>
         <td>
-          <span class="badge {% if tx.transaction_type in ('PURCHASE','ADJUSTMENT_IN','OPENING') %}badge-success{% elif tx.transaction_type in ('WASTE','ADJUSTMENT_OUT') %}badge-warning{% else %}badge-neutral{% endif %}">
-            {{ tx.transaction_type }}
+          {% if m %}
+            <a href="/admin/materials/{{ m.id }}" class="hover:text-noctra-accent font-medium text-sm">
+              {{ m.name }}
+            </a>
+            <div class="mono text-xs text-neutral-500">{{ m.code }}</div>
+          {% else %}
+            <span class="text-neutral-500 italic">— deleted material —</span>
+          {% endif %}
+        </td>
+        <td>
+          <span class="badge {{ transaction_type_tone.get(tx.transaction_type, 'badge-neutral') }}">
+            {{ transaction_type_labels.get(tx.transaction_type, tx.transaction_type) }}
           </span>
         </td>
-        <td class="text-right font-mono text-sm">{{ '%.4f'|format(tx.quantity) }} <span class="text-xs text-neutral-500">{{ m.stock_unit if m else '' }}</span></td>
-        <td class="text-right font-mono text-xs">{{ tx.unit_cost | rupiah if tx.unit_cost else '—' }}</td>
-        <td class="text-xs text-neutral-500">{{ tx.reference_note or '—' }}</td>
+        <td class="text-right font-mono text-sm whitespace-nowrap
+          {% if sq > 0 %}text-noctra-success{% else %}text-noctra-warning{% endif %}">
+          {{ '+' if sq > 0 else '' }}{{ '%.4g'|format(sq) }}
+          <span class="text-xs text-neutral-500">{{ m.stock_unit if m else '' }}</span>
+        </td>
+        <td class="text-right font-mono text-xs">
+          {{ tx.unit_cost | rupiah if tx.unit_cost is not none else '—' }}
+        </td>
+        <td class="text-xs text-neutral-500">
+          {% if tx.reference_note %}
+            {{ tx.reference_note }}
+          {% elif tx.reference_type %}
+            <span class="badge badge-neutral text-[10px]">{{ tx.reference_type }}</span>
+          {% else %}
+            —
+          {% endif %}
+          {% if tx.notes %}
+            <div class="text-[10px] text-neutral-600 mt-0.5">{{ tx.notes }}</div>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
 {% include "components/pagination.html" %}
 {% else %}
-{{ empty_state('No transactions yet', 'Stock movements will appear here.') }}
+{{ empty_state(
+  'No transactions match your filters',
+  'Stock movements will appear here.'
+) }}
 {% endif %}
 {% endblock %}

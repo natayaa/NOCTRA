@@ -1,8 +1,4 @@
-"""Business rules for the projects module.
-
-The CostingService is the core: it knows how to turn activities
-(materials used, labor hours, outsourcing, overhead) into money.
-"""
+"""Business rules for the projects module."""
 
 from __future__ import annotations
 
@@ -11,8 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import log
@@ -36,7 +31,7 @@ from app.modules.projects.constants import (
     CostCategory,
     INVENTORY_CATEGORIES,
     LABOR_CATEGORIES,
-    PROJECT_STATUSES,   # ← add
+    PROJECT_STATUSES,
     ProjectStatus,
     SETTING_MONTHLY_LABOR_HOURS,
     SETTING_MONTHLY_OVERHEAD,
@@ -104,6 +99,7 @@ class EmployeeService:
             raise NotFoundError("Employee not found")
         return emp
 
+
 # ════════════════════════════════════════════════════════════════
 # COSTING ENGINE
 # ════════════════════════════════════════════════════════════════
@@ -133,7 +129,7 @@ class CostingService:
         self.materials = MaterialRepository(db)
         self.employees = EmployeeRepository(db)
         self.settings = SettingsService(db)
-        self.audit = AuditService(db) 
+        self.audit = AuditService(db)
 
     async def overhead_rate_per_hour(self) -> float:
         overhead = await self.settings.get_value(SETTING_MONTHLY_OVERHEAD, "0")
@@ -198,7 +194,6 @@ class CostingService:
         if project.status in TERMINAL_PROJECT_STATUSES:
             raise ConflictError(f"Cannot add items to a {project.status} project")
 
-        # Resolve unit cost from the category
         est_unit_cost = await self.resolve_unit_cost(
             category=payload.category,
             material_id=payload.material_id,
@@ -311,7 +306,7 @@ class CostingService:
 
         await self.projects.delete_item(item)
         await self.recalc_project_totals(project_id)
-        
+
     # ── Internal helpers ───────────────────────────────
 
     async def _sync_actual_cost(
@@ -319,15 +314,10 @@ class CostingService:
         item: ProjectItem,
         previous_actual_qty: float | None = None,
     ) -> None:
-        """
-        Compute actual_cost from actual_quantity and actual_unit_cost.
-        If the item is a material, sync the inventory ledger with the delta.
-        """
         actual_unit_cost = float(item.actual_unit_cost or item.estimated_unit_cost or 0)
         item.actual_unit_cost = actual_unit_cost
         item.actual_cost = float(item.actual_quantity or 0) * actual_unit_cost
 
-        # Sync inventory if the material is tracked
         if item.material_id:
             old_qty = previous_actual_qty if previous_actual_qty is not None else 0.0
             new_qty = float(item.actual_quantity or 0)
@@ -352,12 +342,6 @@ class CostingService:
         reason: str,
         actor: User | None,
     ) -> None:
-        """
-        Create an inventory transaction.
-
-        Positive `quantity` means more was consumed → CONSUMPTION.
-        Negative `quantity` means reversing → ADJUSTMENT_IN.
-        """
         if quantity > 0:
             tx_type = TransactionType.CONSUMPTION.value
             qty = quantity
@@ -381,13 +365,9 @@ class CostingService:
         await self.db.flush()
 
     async def recalc_project_totals(self, project_id: UUID) -> Project:
-        """
-        Recompute every denormalized total on the Project row from its items.
-        """
         project = await self._get_project_or_404(project_id)
         items = await self.projects.list_items(project_id)
 
-        # Reset
         totals = {
             "estimated_materials": 0.0, "estimated_parts": 0.0,
             "estimated_labor": 0.0, "estimated_outsource": 0.0,
@@ -460,7 +440,6 @@ class ProjectService:
     async def create(
         self, payload: ProjectCreate, *, actor: User
     ) -> Project:
-        # Validate references
         from app.modules.customers.repository import CustomerRepository
         from app.modules.vehicles.repository import VehicleRepository
 
@@ -564,9 +543,6 @@ class ProjectService:
             new_data={"status": new_status, "note": note},
         )
 
-        # ── Pricing snapshots ────────────────────────
-        # When a project is APPROVED, freeze the pricing decision.
-        # When DELIVERED, update with actual margin.
         if new_status == ProjectStatus.APPROVED.value:
             await self._record_approval_snapshot(project, actor=actor)
 
@@ -575,19 +551,15 @@ class ProjectService:
 
         return project
 
-    # ── Snapshot helpers ────────────────────────────
-
     async def _record_approval_snapshot(self, project, *, actor: User) -> None:
-        """Record a pricing snapshot when the project is approved."""
         from app.modules.inquiries.repository import InquiryRepository
         from app.modules.pricing.schemas import PricingSnapshotCreate
         from app.modules.pricing.service import PricingService
 
         hpp = float(project.actual_hpp or project.estimated_hpp or 0)
         if hpp <= 0:
-            return  # nothing meaningful to snapshot
+            return
 
-        # Get service + category for rule matching
         service_interest = None
         vehicle_category = None
         if project.inquiry_id:
@@ -618,14 +590,9 @@ class ProjectService:
         )
 
     async def _update_delivery_snapshot(self, project, *, actor: User) -> None:
-        """
-        On delivery, update the most recent snapshot with the final HPP.
-        Actual HPP may have changed since approval.
-        """
         from sqlalchemy import select
         from app.modules.pricing.models import PricingSnapshot
 
-        # Find the most recent snapshot for this project
         stmt = (
             select(PricingSnapshot)
             .where(PricingSnapshot.project_id == project.id)
@@ -636,7 +603,6 @@ class ProjectService:
         if not snap:
             return
 
-        # Refresh with final numbers
         final_hpp = float(project.actual_hpp or snap.hpp_estimate)
         final_price = (
             float(project.approved_price)
@@ -664,22 +630,14 @@ class ProjectService:
         start_date: Any | None = None,
         target_end_date: Any | None = None,
     ) -> Project:
-        """
-        Create a project from an approved inquiry.
-
-        Copies the customer, vehicle, and description. Raises if the
-        inquiry already has a project, or if the inquiry isn't ready.
-        """
         from app.modules.inquiries.constants import InquiryStatus
         from app.modules.inquiries.models import Inquiry
         from app.modules.vehicles.models import Vehicle
 
-        # Load the inquiry
         inquiry = await self.db.get(Inquiry, inquiry_id)
         if not inquiry:
             raise NotFoundError("Inquiry not found")
 
-        # Idempotency — refuse if a project already exists
         existing = (
             await self.db.execute(
                 select(Project).where(Project.inquiry_id == inquiry_id)
@@ -690,7 +648,6 @@ class ProjectService:
                 f"A project already exists for this inquiry: {existing.code}"
             )
 
-        # Only APPROVED or CONVERTED inquiries can become projects
         if inquiry.status not in (
             InquiryStatus.APPROVED.value,
             InquiryStatus.CONVERTED.value,
@@ -700,13 +657,11 @@ class ProjectService:
                 f"Only APPROVED inquiries can be converted."
             )
 
-        # A project requires a customer
         if not inquiry.customer_id:
             raise ConflictError(
                 "This inquiry has no customer linked — cannot create a project."
             )
 
-        # Build a sensible default title from the inquiry
         if not title:
             parts: list[str] = []
             if inquiry.service_interest:

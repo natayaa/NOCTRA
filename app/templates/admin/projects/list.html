@@ -3,26 +3,76 @@
 
 {% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">Projects</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
-  <div class="page-actions"><a href="/admin/projects/new" class="btn btn-primary btn-sm">New Project</a></div>
-</div>
-
-<div class="mb-4 flex flex-wrap gap-2">
-  <a href="/admin/projects{% if only_open %}?only_open=true{% endif %}"
-     class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
-  {% for s in statuses %}
-    <a href="/admin/projects?status={{ s }}"
-       class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">{{ status_labels.get(s, s) }}</a>
-  {% endfor %}
-</div>
-
-<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
-  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
-  <div class="form-row !mb-0 flex-1 min-w-[240px]">
-    <label class="form-label" for="q">Search</label>
-    <input class="input" id="q" name="q" value="{{ q }}" placeholder="Code, title…" data-search-input />
+  <div>
+    <h1 class="page-title">Projects</h1>
+    <p class="page-subtitle">
+      {{ page_meta.total }} total
+      {% if stats.open %}· <span class="text-neutral-400">{{ stats.open }} open</span>{% endif %}
+      {% if stats.approved_price_total %}· <span class="text-neutral-400">Rp {{ (stats.approved_price_total / 1000000) | round(1) }}M booked</span>{% endif %}
+    </p>
   </div>
-  <button class="btn btn-secondary">Filter</button>
+  <div class="page-actions flex gap-2">
+    <a href="/admin/projects/export.csv{{ qs() }}" class="btn btn-secondary btn-sm">Export CSV</a>
+    <a href="/admin/projects/new" class="btn btn-primary btn-sm">New Project</a>
+  </div>
+</div>
+
+{# Status chips #}
+<div class="mb-4 flex flex-wrap gap-2 items-center">
+  <a href="/admin/projects{{ qs(status='', only_open='') }}"
+     class="badge {% if not status_filter and not only_open %}badge-accent{% else %}badge-neutral{% endif %}">
+    All
+  </a>
+  {% for s in statuses %}
+    <a href="/admin/projects{{ qs(status=s, only_open='') }}"
+       class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
+      {{ status_labels.get(s, s) }}
+      {% if stats['status_' ~ s] %}<span class="opacity-70">· {{ stats['status_' ~ s] }}</span>{% endif %}
+    </a>
+  {% endfor %}
+  <a href="/admin/projects{{ qs(status='', only_open='true') }}"
+     class="badge {% if only_open and not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+    Open only
+  </a>
+</div>
+
+<form method="get" class="panel mb-4">
+  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+  {% if only_open %}<input type="hidden" name="only_open" value="true" />{% endif %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+    <div class="form-row !mb-0 lg:col-span-2">
+      <label class="form-label" for="q">Search</label>
+      <input class="input" id="q" name="q" value="{{ q }}"
+             placeholder="Code, title, description…" data-search-input />
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="assigned_lead_id">Lead</label>
+      <select class="select" id="assigned_lead_id" name="assigned_lead_id">
+        <option value="">Anyone</option>
+        {% for u in assignees %}
+          <option value="{{ u.id }}" {% if assigned_filter == u.id %}selected{% endif %}>
+            {{ u.full_name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="sort">Sort</label>
+      <select class="select" id="sort" name="sort">
+        {% for key, label in sort_options.items() %}
+          <option value="{{ key }}" {% if sort == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="flex gap-2 lg:col-span-4">
+      <button class="btn btn-secondary">Filter</button>
+      <a href="/admin/projects" class="btn btn-ghost">Reset</a>
+    </div>
+  </div>
 </form>
 
 {% if projects %}
@@ -30,8 +80,9 @@
   <table class="table">
     <thead>
       <tr>
+        <th class="w-12 text-right">#</th>
         <th>Code</th>
-        <th>Customer</th>
+        <th>Customer / Title</th>
         <th>Status</th>
         <th class="text-right">Selling price</th>
         <th class="text-right">Est. HPP</th>
@@ -41,17 +92,24 @@
       </tr>
     </thead>
     <tbody>
+      {% set offset = (page_meta.page - 1) * page_meta.size %}
       {% for p in projects %}
       {% set c = customers_by_id.get(p.customer_id) %}
       <tr>
+        <!--td class="text-right text-xs text-neutral-500 tabular-nums">{{ offset + loop.index }}</td-->
         <td class="mono text-xs">{{ p.code }}</td>
         <td>
-          {% if c %}<div class="font-medium">{{ c.name }}</div>{% else %}<span class="text-neutral-500">—</span>{% endif %}
+          {% if c %}
+            <div class="font-medium">{{ c.name }}</div>
+          {% else %}
+            <span class="text-neutral-500 italic">—</span>
+          {% endif %}
           {% if p.title %}<div class="text-xs text-neutral-500">{{ p.title[:60] }}</div>{% endif %}
         </td>
         <td>
-          {% set sbadge = {'DRAFT':'badge-neutral','ESTIMATING':'badge-info','WAITING_APPROVAL':'badge-warning','APPROVED':'badge-accent','IN_PROGRESS':'badge-accent','PAINTING':'badge-accent','ASSEMBLY':'badge-accent','QC':'badge-warning','COMPLETED':'badge-success','DELIVERED':'badge-success','CANCELLED':'badge-danger'}.get(p.status, 'badge-neutral') %}
-          <span class="badge {{ sbadge }}">{{ status_labels.get(p.status, p.status) }}</span>
+          <span class="badge {{ status_tone.get(p.status, 'badge-neutral') }}">
+            {{ status_labels.get(p.status, p.status) }}
+          </span>
         </td>
         <td class="text-right font-mono text-sm">{{ (p.approved_price or p.quoted_price or 0) | rupiah }}</td>
         <td class="text-right font-mono text-xs text-neutral-500">{{ p.estimated_hpp | rupiah }}</td>
@@ -62,7 +120,9 @@
           {% else %}text-noctra-danger{% endif %}">
           {{ '%.1f'|format(p.actual_gross_margin_pct) }}%
         </td>
-        <td class="text-right"><a href="/admin/projects/{{ p.id }}" class="btn btn-ghost btn-sm">Open</a></td>
+        <td class="text-right">
+          <a href="/admin/projects/{{ p.id }}" class="btn btn-ghost btn-sm">Open</a>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -70,6 +130,12 @@
 </div>
 {% include "components/pagination.html" %}
 {% else %}
-{{ empty_state('No projects yet', 'Create a project to start tracking costs.', '/admin/projects/new', 'New Project', 'plus') }}
+{{ empty_state(
+  'No projects match your filters',
+  'Try adjusting filters or create a new project.',
+  '/admin/projects/new',
+  'New Project',
+  'plus'
+) }}
 {% endif %}
 {% endblock %}

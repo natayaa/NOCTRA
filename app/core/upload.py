@@ -11,6 +11,8 @@ import os
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from PIL import Image
+from io import BytesIO
 
 from fastapi import UploadFile
 
@@ -28,6 +30,19 @@ MAX_FILES_PER_UPLOAD = 5
 def ensure_dirs() -> None:
     INQUIRY_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def _strip_exif(data: bytes) -> bytes:
+    try:
+        img = Image.open(BytesIO(data))
+        # Re-encode without EXIF
+        out = BytesIO()
+        fmt = img.format or "JPEG"
+        # PIL akan strip EXIF kalau tidak di-pass sebagai parameter
+        img.save(out, format=fmt, quality=88, optimize=True)
+        return out.getvalue()
+    except Exception:
+        # Kalau gagal re-encode, tolak file
+        raise ValidationError("Could not process image (corrupted EXIF?)")
 
 def _safe_extension(file: UploadFile) -> str:
     ext = os.path.splitext(file.filename or "")[1].lower()
@@ -92,6 +107,7 @@ async def save_inquiry_photo(file: UploadFile) -> str:
     sub_dir.mkdir(parents=True, exist_ok=True)
 
     filename = f"{uuid.uuid4().hex}{ext}"
+    _strip_exif(contents)
     full_path = sub_dir / filename
     full_path.write_bytes(contents)
 

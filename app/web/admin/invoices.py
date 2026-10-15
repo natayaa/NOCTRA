@@ -210,8 +210,10 @@ async def detail_view(
         .order_by(InvoiceItem.created_at)
     )).scalars().all()
 
+    # FIX: payments_for returns both IN and OUT. Use paid_amount() to get
+    # the NET total (IN − OUT), which correctly accounts for reversals.
     payments = await repo.payments_for(invoice_id)
-    paid = sum(float(p.amount) for p in payments)
+    paid = await repo.paid_amount(invoice_id)
     balance = float(inv.total) - paid
 
     accounts = (await db.execute(AccountRepository(db).query())).scalars().all()
@@ -232,6 +234,7 @@ async def detail_view(
             "payment_methods": PAYMENT_METHODS,
             "payment_method_labels": PAYMENT_METHOD_LABELS,
             "status_labels": INVOICE_STATUS_LABELS,
+            "today": datetime.now(UTC).date(),    # FIX: pass today for the inline form
         },
     )
 

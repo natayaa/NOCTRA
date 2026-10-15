@@ -57,7 +57,6 @@ from app.modules.inventory.service import (
     SupplierService,
 )
 
-
 suppliers_router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 materials_router = APIRouter(prefix="/materials", tags=["materials"])
 inventory_router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -172,11 +171,12 @@ async def get_material(
     db: DbSession,
     _=Depends(require_permission(PermissionCode.INVENTORY_READ)),
 ) -> MaterialWithStock:
-    material = await MaterialRepository(db).get(material_id)
+    repo = MaterialRepository(db)
+    material = await repo.get(material_id)
     if not material:
         raise NotFoundError("Material not found")
 
-    stock = await MaterialRepository(db).current_stock(material_id)
+    stock = await repo.current_stock(material_id)
     detail = MaterialWithStock.model_validate(material)
     detail.current_stock = stock
     detail.cost_per_stock_unit = material.cost_per_stock_unit

@@ -32,17 +32,24 @@ def register_error_handlers(app: FastAPI) -> None:
             path=request.url.path,
             context=exc.context,
         )
-        return JSONResponse(status_code=exc.status_code, content=_payload(exc.code, exc.message))
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=_payload(exc.code, exc.message),
+        )
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    async def _validation_error(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=422,
             content=_payload("validation_error", "Invalid input", details=exc.errors()),
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    async def _http_error(
+        request: Request, exc: StarletteHTTPException
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
             content=_payload(f"http_{exc.status_code}", str(exc.detail)),
@@ -51,7 +58,17 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> Response:
-        log.exception(...)
+        log.exception(
+            "unhandled_exception",
+            path=request.url.path,
+            method=request.method,
+            error_type=type(exc).__name__,
+            error_message=str(exc),
+        )
         if settings.APP_DEBUG:
+            # Re-raise so the debug traceback shows up in the response.
             raise exc
-        return JSONResponse(...)
+        return JSONResponse(
+            status_code=500,
+            content=_payload("internal_error", "Internal server error"),
+        )

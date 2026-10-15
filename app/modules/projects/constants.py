@@ -10,17 +10,17 @@ from enum import StrEnum
 # ════════════════════════════════════════════════════════════════
 
 class ProjectStatus(StrEnum):
-    DRAFT = "DRAFT"                    # created, not yet quoted
-    ESTIMATING = "ESTIMATING"          # costs being worked out
+    DRAFT = "DRAFT"                        # created, not yet quoted
+    ESTIMATING = "ESTIMATING"              # costs being worked out
     WAITING_APPROVAL = "WAITING_APPROVAL"  # quoted, waiting for customer
-    APPROVED = "APPROVED"              # customer accepted
-    IN_PROGRESS = "IN_PROGRESS"        # work started
-    PAINTING = "PAINTING"              # in paint booth
-    ASSEMBLY = "ASSEMBLY"              # reassembling after paint
-    QC = "QC"                          # quality check
-    COMPLETED = "COMPLETED"            # work done, awaiting pickup
-    DELIVERED = "DELIVERED"            # picked up
-    CANCELLED = "CANCELLED"            # terminated
+    APPROVED = "APPROVED"                  # customer accepted
+    IN_PROGRESS = "IN_PROGRESS"            # work started
+    PAINTING = "PAINTING"                  # in paint booth
+    ASSEMBLY = "ASSEMBLY"                  # reassembling after paint
+    QC = "QC"                              # quality check
+    COMPLETED = "COMPLETED"                # work done, awaiting pickup
+    DELIVERED = "DELIVERED"                # picked up
+    CANCELLED = "CANCELLED"                # terminated
 
 
 PROJECT_STATUSES: list[str] = [s.value for s in ProjectStatus]
@@ -39,13 +39,26 @@ PROJECT_STATUS_LABELS: dict[str, str] = {
     ProjectStatus.CANCELLED.value:        "Cancelled",
 }
 
-# Which statuses are "terminal" (no further work expected)
+# Badge tone per status — single source of truth for templates
+PROJECT_STATUS_TONE: dict[str, str] = {
+    ProjectStatus.DRAFT.value:            "badge-neutral",
+    ProjectStatus.ESTIMATING.value:       "badge-info",
+    ProjectStatus.WAITING_APPROVAL.value: "badge-warning",
+    ProjectStatus.APPROVED.value:         "badge-accent",
+    ProjectStatus.IN_PROGRESS.value:      "badge-accent",
+    ProjectStatus.PAINTING.value:         "badge-accent",
+    ProjectStatus.ASSEMBLY.value:         "badge-accent",
+    ProjectStatus.QC.value:               "badge-warning",
+    ProjectStatus.COMPLETED.value:        "badge-success",
+    ProjectStatus.DELIVERED.value:        "badge-success",
+    ProjectStatus.CANCELLED.value:        "badge-danger",
+}
+
 TERMINAL_PROJECT_STATUSES: frozenset[str] = frozenset({
     ProjectStatus.DELIVERED.value,
     ProjectStatus.CANCELLED.value,
 })
 
-# Allowed status transitions
 ALLOWED_PROJECT_TRANSITIONS: dict[str, frozenset[str]] = {
     ProjectStatus.DRAFT.value: frozenset({
         ProjectStatus.ESTIMATING.value,
@@ -91,6 +104,19 @@ ALLOWED_PROJECT_TRANSITIONS: dict[str, frozenset[str]] = {
 
 
 # ════════════════════════════════════════════════════════════════
+# SORTING
+# ════════════════════════════════════════════════════════════════
+
+PROJECT_SORT_OPTIONS: dict[str, str] = {
+    "created_desc":  "Newest first",
+    "created_asc":   "Oldest first",
+    "updated_desc":  "Recently updated",
+    "target_asc":    "Target date (soonest)",
+    "priority_desc": "Priority (high→low)",
+}
+
+
+# ════════════════════════════════════════════════════════════════
 # COST CATEGORIES
 # ════════════════════════════════════════════════════════════════
 
@@ -114,20 +140,18 @@ COST_CATEGORY_LABELS: dict[str, str] = {
     CostCategory.MISC.value:      "Miscellaneous",
 }
 
-# Categories that require a material_id (from inventory)
 INVENTORY_CATEGORIES: frozenset[str] = frozenset({
     CostCategory.MATERIAL.value,
     CostCategory.PART.value,
 })
 
-# Categories that require an employee_id
 LABOR_CATEGORIES: frozenset[str] = frozenset({
     CostCategory.LABOR.value,
 })
 
 
 # ════════════════════════════════════════════════════════════════
-# ITEM STATE (for tracking progress at line level)
+# PROJECT ITEM STATE
 # ════════════════════════════════════════════════════════════════
 
 class ProjectItemStatus(StrEnum):
@@ -138,9 +162,21 @@ class ProjectItemStatus(StrEnum):
 
 PROJECT_ITEM_STATUSES: list[str] = [s.value for s in ProjectItemStatus]
 
+PROJECT_ITEM_STATUS_LABELS: dict[str, str] = {
+    ProjectItemStatus.PLANNED.value:     "Planned",
+    ProjectItemStatus.IN_PROGRESS.value: "In progress",
+    ProjectItemStatus.COMPLETED.value:   "Completed",
+}
+
+PROJECT_ITEM_STATUS_TONE: dict[str, str] = {
+    ProjectItemStatus.PLANNED.value:     "badge-neutral",
+    ProjectItemStatus.IN_PROGRESS.value: "badge-accent",
+    ProjectItemStatus.COMPLETED.value:   "badge-success",
+}
+
 
 # ════════════════════════════════════════════════════════════════
-# SETTINGS KEYS (already seeded in Phase 1)
+# SETTINGS KEYS
 # ════════════════════════════════════════════════════════════════
 
 SETTING_MONTHLY_OVERHEAD = "costing.overhead_monthly"

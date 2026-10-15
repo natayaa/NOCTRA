@@ -1,9 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict, NoDecode
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Absolute path so .env is found regardless of CWD
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "lamberfuck123445"
+    # No hardcoded default password — MUST come from .env.
+    POSTGRES_PASSWORD: str = Field(..., min_length=1)
     POSTGRES_DB: str = "NOCTRADB"
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
@@ -64,7 +65,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Annotated[list[str], NoDecode] = []
     CORS_ALLOW_CREDENTIALS: bool = False
     TRUSTED_HOSTS: Annotated[list[str], NoDecode] = [
-        "localhost", "127.0.0.1", "*.noctra.local"
+        "localhost", "127.0.0.1", "*.noctra.local",
     ]
 
     MEDIA_ROOT: str = "media"
@@ -79,11 +80,11 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USERNAME: str | None = None
     SMTP_PASSWORD: str | None = None
-    SMTP_USE_STARTTLS: bool = True       # STARTTLS on port 587
-    SMTP_USE_SSL: bool = False           # Implicit TLS on port 465
+    SMTP_USE_STARTTLS: bool = True
+    SMTP_USE_SSL: bool = False
     SMTP_TIMEOUT_SECONDS: int = 30
 
-    # ── Public contact info (shown in emails) ───────────
+    # ── Public contact info ─────────────────────────────
     PUBLIC_PHONE: str = "+62 812 3456 7890"
     PUBLIC_EMAIL: str = "hello@noctra.local"
     PUBLIC_ADDRESS: str = "Jl. Contoh No. 123, Jakarta"
@@ -108,7 +109,7 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
 
-    # ── Validators (INSIDE the class) ───────────────────
+    # ── Validators ──────────────────────────────────────
     @field_validator("APP_SECRET_KEY")
     @classmethod
     def _validate_secret(cls, v: str) -> str:
@@ -122,6 +123,17 @@ class Settings(BaseSettings):
     def _split_csv(cls, v):
         if isinstance(v, str):
             return [item.strip() for item in v.split(",") if item.strip()]
+        return v
+
+    @field_validator("POSTGRES_PASSWORD")
+    @classmethod
+    def _validate_db_password(cls, v: str) -> str:
+        # Reject obviously insecure passwords even if supplied via .env.
+        bad = {"password", "postgres", "admin", "root", "1234"}
+        if v.lower() in bad:
+            raise ValueError(
+                "POSTGRES_PASSWORD is too weak — use a strong random value"
+            )
         return v
 
 

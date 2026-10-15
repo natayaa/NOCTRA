@@ -8,12 +8,10 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from app.modules.customers.constants import CUSTOMER_SOURCES, CUSTOMER_STATUSES
 
 PHONE_PATTERN = r"^[0-9+\-\s()]{6,32}$"
-
 _EMPTY_VALUES = {"", "none", "null", "undefined", "nil"}
 
 
 def _normalize_optional_str(v):
-    """Convert null-ish inputs to real None. Return everything else."""
     if v is None:
         return None
     s = str(v).strip()
@@ -28,12 +26,12 @@ class CustomerContactIn(BaseModel):
     role: str | None = Field(None, max_length=64)
     phone: str | None = Field(None, pattern=PHONE_PATTERN)
     email: EmailStr | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=2000)
 
-    @field_validator("email", mode="before")
+    @field_validator("email", "phone", "role", "notes", mode="before")
     @classmethod
-    def _blank_email_to_none(cls, v):
-        return v or None
+    def _clean_optional(cls, v):
+        return _normalize_optional_str(v)
 
 
 class CustomerContactOut(BaseModel):
@@ -62,10 +60,12 @@ class CustomerCreate(BaseModel):
     country: str = Field("Indonesia", max_length=64)
 
     tax_id: str | None = Field(None, max_length=64)
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
     source: str | None = Field(None, max_length=32)
 
-    @field_validator("email", "phone", "alt_phone", "tax_id", mode="before")
+    @field_validator("email", "phone", "alt_phone", "tax_id",
+                     "address_line1", "address_line2", "city", "province",
+                     "postal_code", "notes", mode="before")
     @classmethod
     def _clean_optional(cls, v):
         return _normalize_optional_str(v)
@@ -96,7 +96,9 @@ class CustomerUpdate(BaseModel):
     status: str | None = None
     is_active: bool | None = None
 
-    @field_validator("email", "phone", "alt_phone", "tax_id", mode="before")
+    @field_validator("email", "phone", "alt_phone", "tax_id",
+                     "address_line1", "address_line2", "city", "province",
+                     "postal_code", "notes", mode="before")
     @classmethod
     def _clean_optional(cls, v):
         return _normalize_optional_str(v)

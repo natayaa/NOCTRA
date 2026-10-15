@@ -11,11 +11,9 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
-    Integer,
     Numeric,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -30,6 +28,9 @@ from app.modules.inventory.constants import PurchaseOrderStatus
 
 class Supplier(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "suppliers"
+    __table_args__ = (
+        Index("ix_suppliers_active_name", "is_active", "name"),
+    )
 
     code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -38,9 +39,12 @@ class Supplier(Base, UUIDMixin, TimestampMixin):
     phone: Mapped[str | None] = mapped_column(String(32))
     address: Mapped[str | None] = mapped_column(Text)
     tax_id: Mapped[str | None] = mapped_column(String(64))
-    payment_terms: Mapped[str | None] = mapped_column(String(64))  # "NET 14", "COD"
+    payment_terms: Mapped[str | None] = mapped_column(String(64))
     notes: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<Supplier {self.code} {self.name}>"
 
 
 # ════════════════════════════════════════════════════════════════
@@ -51,19 +55,18 @@ class Material(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "materials"
     __table_args__ = (
         Index("ix_materials_category_name", "category", "name"),
+        Index("ix_materials_active_category", "is_active", "category"),
         Index("ix_materials_sku", "sku"),
     )
 
     code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    sku: Mapped[str | None] = mapped_column(String(64))  # supplier's SKU if different
+    sku: Mapped[str | None] = mapped_column(String(64))
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     brand: Mapped[str | None] = mapped_column(String(100))
     category: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 
     # ── Unit model ──────────────────────────────────────
-    # Purchased in one unit (bottle, box), tracked in another (ml, gr).
-    # `stock_units_per_purchase` bridges them.
     purchase_unit: Mapped[str] = mapped_column(String(16), nullable=False)
     stock_unit: Mapped[str] = mapped_column(String(16), nullable=False)
     stock_units_per_purchase: Mapped[float] = mapped_column(
@@ -71,7 +74,6 @@ class Material(Base, UUIDMixin, TimestampMixin):
     )
 
     # ── Pricing ────────────────────────────────────────
-    # Current purchase price (IDR per purchase unit). Updated when we buy.
     current_purchase_price: Mapped[float] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
@@ -92,7 +94,7 @@ class Material(Base, UUIDMixin, TimestampMixin):
 
     # ── Metadata ───────────────────────────────────────
     notes: Mapped[str | None] = mapped_column(Text)
-    location: Mapped[str | None] = mapped_column(String(64))  # "Rack A3"
+    location: Mapped[str | None] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     supplier: Mapped[Supplier | None] = relationship(
@@ -111,10 +113,7 @@ class Material(Base, UUIDMixin, TimestampMixin):
 
 
 # ════════════════════════════════════════════════════════════════
-# INVENTORY TRANSACTIONS
-#
-# Append-only ledger. Current stock = SUM over this table.
-# Never UPDATE or DELETE a row here. Corrections are new rows.
+# INVENTORY TRANSACTIONS (append-only ledger)
 # ════════════════════════════════════════════════════════════════
 
 class InventoryTransaction(Base, UUIDMixin, TimestampMixin):
@@ -133,22 +132,16 @@ class InventoryTransaction(Base, UUIDMixin, TimestampMixin):
     )
     transaction_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 
-    # Quantity in stock units. Always positive — direction is determined by
-    # transaction_type (see INBOUND_TYPES / OUTBOUND_TYPES).
     quantity: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
 
-    # Cost per stock unit at the time of the transaction.
-    # Preserves historical cost even when the material's price changes.
     unit_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
 
-    # Free-text reference: what is this transaction *for*?
     reference_type: Mapped[str | None] = mapped_column(String(32))
     reference_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
     reference_note: Mapped[str | None] = mapped_column(String(255))
 
     notes: Mapped[str | None] = mapped_column(Text)
 
-    # Who created this transaction
     created_by_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -191,8 +184,6 @@ class PurchaseOrder(Base, UUIDMixin, TimestampMixin):
     expected_date: Mapped[date | None] = mapped_column(Date)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    # Total in IDR — denormalized from line items for display, updated
-    # by the service when lines change.
     total_amount: Mapped[float] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
@@ -233,10 +224,9 @@ class PurchaseOrderItem(Base, UUIDMixin, TimestampMixin):
         nullable=False,
     )
 
-    quantity: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)  # in purchase units
-    unit_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)  # IDR per purchase unit
+    quantity: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    unit_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
 
-    # Filled in when the line is received
     quantity_received: Mapped[float] = mapped_column(
         Numeric(14, 4), default=0, nullable=False, server_default="0",
     )

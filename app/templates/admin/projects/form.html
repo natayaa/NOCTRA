@@ -9,17 +9,22 @@
   </div>
   <div class="page-actions">
     <a href="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
-      class="btn btn-secondary btn-sm">Back</a>
+       class="btn btn-secondary btn-sm">Back</a>
   </div>
 </div>
 
-{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
   <div class="form-error">{{ error }}</div>
-</div>{% endif %}
+</div>
+{% endif %}
 
-<form method="post" action="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
-  class="max-w-3xl panel space-y-6" data-guard>
+<form method="post"
+      action="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
+      class="max-w-3xl panel space-y-6" data-guard>
+
   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
   {% if preselected_inquiry_id %}
   <input type="hidden" name="inquiry_id" value="{{ preselected_inquiry_id }}" />
   {% endif %}
@@ -33,14 +38,17 @@
       {% if preselected_customer %}
       <div class="form-row">
         <label class="form-label">Customer</label>
-        <input class="input" disabled value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
-        <input type="hidden" name="customer_id" id="customer_id_input" value="{{ preselected_customer.id }}" />
+        <input class="input" disabled
+               value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
+        <input type="hidden" name="customer_id" id="customer_id_input"
+               value="{{ preselected_customer.id }}" />
       </div>
       {% else %}
       <div class="form-row">
         <label class="form-label" for="customer_search">Customer <span class="req">*</span></label>
 
-        <input type="hidden" name="customer_id" id="customer_id_input" required />
+        <input type="hidden" name="customer_id" id="customer_id_input"
+               value="{{ fv.get('customer_id') or '' }}" required />
 
         <div id="customer_display" class="hidden panel mb-2 flex items-center justify-between">
           <div>
@@ -51,13 +59,14 @@
         </div>
 
         <div id="customer_picker">
-          <input class="input" id="customer_search" name="q" placeholder="Type name, phone, or code…" autocomplete="off"
-            hx-get="/admin/projects/api/search-customers" hx-trigger="input changed delay:200ms, focus"
-            hx-target="#customer_options" hx-swap="innerHTML"
-            hx-on::before-request="document.getElementById('customer_options').classList.remove('hidden')" />
+          <input class="input" id="customer_search" name="q"
+                 placeholder="Type name, phone, or code…" autocomplete="off"
+                 hx-get="/admin/projects/api/search-customers"
+                 hx-trigger="input changed delay:200ms, focus"
+                 hx-target="#customer_options" hx-swap="innerHTML"
+                 hx-on::before-request="document.getElementById('customer_options').classList.remove('hidden')" />
 
-          <div id="customer_options" class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden">
-          </div>
+          <div id="customer_options" class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden"></div>
         </div>
       </div>
       {% endif %}
@@ -69,14 +78,15 @@
       <div class="form-row">
         <label class="form-label">Vehicle</label>
         <input class="input" disabled
-          value="{{ preselected_vehicle.brand }} {{ preselected_vehicle.model }}{% if preselected_vehicle.plate_number %} — {{ preselected_vehicle.plate_number }}{% endif %}" />
+               value="{{ preselected_vehicle.brand }} {{ preselected_vehicle.model }}{% if preselected_vehicle.plate_number %} — {{ preselected_vehicle.plate_number }}{% endif %}" />
         <input type="hidden" name="vehicle_id" value="{{ preselected_vehicle.id }}" />
       </div>
       {% else %}
       <div class="form-row">
         <label class="form-label" for="vehicle_search">Vehicle</label>
 
-        <input type="hidden" name="vehicle_id" id="vehicle_id_input" />
+        <input type="hidden" name="vehicle_id" id="vehicle_id_input"
+               value="{{ fv.get('vehicle_id') or '' }}" />
 
         <div id="vehicle_display" class="hidden panel mb-2 flex items-center justify-between">
           <div>
@@ -86,11 +96,13 @@
         </div>
 
         <div id="vehicle_picker">
-          <input class="input" id="vehicle_search" name="q" placeholder="Type brand, model, or plate…"
-            autocomplete="off" hx-get="/admin/projects/api/search-vehicles"
-            hx-trigger="input changed delay:200ms, focus" hx-target="#vehicle_options" hx-swap="innerHTML"
-            hx-include="#customer_id_input"
-            hx-on::before-request="document.getElementById('vehicle_options').classList.remove('hidden')" />
+          <input class="input" id="vehicle_search" name="q"
+                 placeholder="Type brand, model, or plate…" autocomplete="off"
+                 hx-get="/admin/projects/api/search-vehicles"
+                 hx-trigger="input changed delay:200ms, focus"
+                 hx-target="#vehicle_options" hx-swap="innerHTML"
+                 hx-include="#customer_id_input"
+                 hx-on::before-request="document.getElementById('vehicle_options').classList.remove('hidden')" />
 
           <div id="vehicle_options" class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden">
             <div class="px-3 py-3 text-xs text-neutral-500">Select a customer first.</div>
@@ -101,54 +113,6 @@
       {% endif %}
     </div>
   </section>
-
-  <script>
-    function selectCustomer(id, name, code) {
-      document.getElementById('customer_id_input').value = id;
-      document.getElementById('customer_name_display').textContent = name;
-      document.getElementById('customer_code_display').textContent = code;
-      document.getElementById('customer_display').classList.remove('hidden');
-      document.getElementById('customer_picker').classList.add('hidden');
-      document.getElementById('customer_options').classList.add('hidden');
-
-      // Clear any previously selected vehicle
-      clearVehicle();
-    }
-
-    function clearCustomer() {
-      document.getElementById('customer_id_input').value = '';
-      document.getElementById('customer_display').classList.add('hidden');
-      document.getElementById('customer_picker').classList.remove('hidden');
-      document.getElementById('customer_search').value = '';
-      document.getElementById('customer_search').focus();
-    }
-
-    function selectVehicle(id, label) {
-      document.getElementById('vehicle_id_input').value = id;
-      document.getElementById('vehicle_label_display').textContent = label;
-      document.getElementById('vehicle_display').classList.remove('hidden');
-      document.getElementById('vehicle_picker').classList.add('hidden');
-      document.getElementById('vehicle_options').classList.add('hidden');
-    }
-
-    function clearVehicle() {
-      document.getElementById('vehicle_id_input').value = '';
-      document.getElementById('vehicle_display').classList.add('hidden');
-      document.getElementById('vehicle_picker').classList.remove('hidden');
-      var vs = document.getElementById('vehicle_search');
-      if (vs) vs.value = '';
-    }
-
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', (e) => {
-      const co = document.getElementById('customer_options');
-      const vo = document.getElementById('vehicle_options');
-      const cs = document.getElementById('customer_search');
-      const vs = document.getElementById('vehicle_search');
-      if (co && !co.contains(e.target) && e.target !== cs) co.classList.add('hidden');
-      if (vo && !vo.contains(e.target) && e.target !== vs) vo.classList.add('hidden');
-    });
-  </script>
   {% endif %}
 
   <section>
@@ -156,14 +120,15 @@
 
     <div class="form-row mt-3">
       <label class="form-label" for="title">Title</label>
-      <input class="input" id="title" name="title" maxlength="255" placeholder="e.g. Full body repaint — Mio Sporty"
-        value="{{ fv.get('title') or (project.title if project else '') }}" />
+      <input class="input" id="title" name="title" maxlength="255"
+             placeholder="e.g. Full body repaint — Mio Sporty"
+             value="{{ fv.get('title') or (project.title if project else '') }}" />
     </div>
 
     <div class="form-row">
       <label class="form-label" for="description">Description</label>
       <textarea class="textarea" id="description" name="description"
-        rows="3">{{ fv.get('description') or (project.description if project else '') }}</textarea>
+                rows="3">{{ fv.get('description') or (project.description if project else '') }}</textarea>
     </div>
   </section>
 
@@ -173,12 +138,12 @@
       <div class="form-row">
         <label class="form-label" for="quoted_price">Quoted price (IDR)</label>
         <input class="input" type="number" step="1000" id="quoted_price" name="quoted_price"
-          value="{{ fv.get('quoted_price') or (project.quoted_price if project else '') or '' }}" />
+               value="{{ fv.get('quoted_price') or (project.quoted_price if project else '') or '' }}" />
       </div>
       <div class="form-row">
         <label class="form-label" for="approved_price">Approved price (IDR)</label>
         <input class="input" type="number" step="1000" id="approved_price" name="approved_price"
-          value="{{ fv.get('approved_price') or (project.approved_price if project else '') or '' }}" />
+               value="{{ fv.get('approved_price') or (project.approved_price if project else '') or '' }}" />
         <div class="form-hint">Set automatically when status moves to APPROVED.</div>
       </div>
     </div>
@@ -190,17 +155,17 @@
       <div class="form-row">
         <label class="form-label" for="start_date">Start date</label>
         <input class="input" type="date" id="start_date" name="start_date"
-          value="{{ fv.get('start_date') or (project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '') }}" />
+               value="{{ fv.get('start_date') or (project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '') }}" />
       </div>
       <div class="form-row">
         <label class="form-label" for="target_end_date">Target end date</label>
         <input class="input" type="date" id="target_end_date" name="target_end_date"
-          value="{{ fv.get('target_end_date') or (project.target_end_date.strftime('%Y-%m-%d') if project and project.target_end_date else '') }}" />
+               value="{{ fv.get('target_end_date') or (project.target_end_date.strftime('%Y-%m-%d') if project and project.target_end_date else '') }}" />
       </div>
       <div class="form-row">
         <label class="form-label" for="priority">Priority</label>
         <input class="input" type="number" id="priority" name="priority" min="0" max="10"
-          value="{{ fv.get('priority') or (project.priority if project else 0) }}" />
+               value="{{ fv.get('priority') or (project.priority if project else 0) }}" />
       </div>
     </div>
 
@@ -209,8 +174,9 @@
       <select class="select" id="assigned_lead_id" name="assigned_lead_id">
         <option value="">—</option>
         {% for u in assignees %}
-        <option value="{{ u.id }}" {% if (project and project.assigned_lead_id==u.id) or
-          fv.get('assigned_lead_id')==u.id|string %}selected{% endif %}>
+        <option value="{{ u.id }}"
+          {% if (project and project.assigned_lead_id == u.id)
+                or fv.get('assigned_lead_id') == u.id | string %}selected{% endif %}>
           {{ u.full_name }}
         </option>
         {% endfor %}
@@ -218,19 +184,104 @@
     </div>
   </section>
 
+  {% if mode == 'edit' %}
+  <section>
+    <h2 class="panel-title">Completion</h2>
+    <div class="form-row mt-3">
+      <label class="form-label" for="actual_end_date">Actual end date</label>
+      <input class="input" type="date" id="actual_end_date" name="actual_end_date"
+             value="{{ fv.get('actual_end_date') or (project.actual_end_date.strftime('%Y-%m-%d') if project and project.actual_end_date else '') }}" />
+      <div class="form-hint">Set automatically when project is DELIVERED.</div>
+    </div>
+  </section>
+  {% endif %}
+
   <section>
     <h2 class="panel-title">Notes</h2>
     <div class="form-row mt-3">
       <label class="form-label" for="internal_notes">Internal notes</label>
       <textarea class="textarea" id="internal_notes" name="internal_notes"
-        rows="2">{{ fv.get('internal_notes') or (project.internal_notes if project else '') }}</textarea>
+                rows="2">{{ fv.get('internal_notes') or (project.internal_notes if project else '') }}</textarea>
     </div>
   </section>
 
   <div class="flex gap-2 pt-2">
-    <button class="btn btn-primary">{{ 'Create Project' if mode == 'create' else 'Save changes' }}</button>
+    <button class="btn btn-primary">
+      {{ 'Create Project' if mode == 'create' else 'Save changes' }}
+    </button>
     <a href="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
-      class="btn btn-secondary">Cancel</a>
+       class="btn btn-secondary">Cancel</a>
   </div>
 </form>
+
+{% if mode == 'create' %}
+<script>
+  function selectCustomer(id, name, code) {
+    const input = document.getElementById('customer_id_input');
+    if (!input) return;
+    input.value = id;
+    document.getElementById('customer_name_display').textContent = name;
+    document.getElementById('customer_code_display').textContent = code;
+    document.getElementById('customer_display').classList.remove('hidden');
+    document.getElementById('customer_picker').classList.add('hidden');
+    document.getElementById('customer_options').classList.add('hidden');
+    clearVehicle();
+  }
+
+  function clearCustomer() {
+    const input = document.getElementById('customer_id_input');
+    if (!input) return;
+    input.value = '';
+    document.getElementById('customer_display').classList.add('hidden');
+    document.getElementById('customer_picker').classList.remove('hidden');
+    document.getElementById('customer_search').value = '';
+    document.getElementById('customer_search').focus();
+  }
+
+  function selectVehicle(id, label) {
+    const input = document.getElementById('vehicle_id_input');
+    if (!input) return;
+    input.value = id;
+    document.getElementById('vehicle_label_display').textContent = label;
+    document.getElementById('vehicle_display').classList.remove('hidden');
+    document.getElementById('vehicle_picker').classList.add('hidden');
+    document.getElementById('vehicle_options').classList.add('hidden');
+  }
+
+  function clearVehicle() {
+    const input = document.getElementById('vehicle_id_input');
+    if (!input) return;
+    input.value = '';
+    document.getElementById('vehicle_display').classList.add('hidden');
+    document.getElementById('vehicle_picker').classList.remove('hidden');
+    const vs = document.getElementById('vehicle_search');
+    if (vs) vs.value = '';
+  }
+
+  // Event delegation — works with dynamically-swapped HTMX content
+  document.addEventListener('click', (e) => {
+    const custOpt = e.target.closest('.js-customer-option');
+    if (custOpt) {
+      selectCustomer(
+        custOpt.dataset.customerId,
+        custOpt.dataset.customerName,
+        custOpt.dataset.customerCode
+      );
+      return;
+    }
+    const vehOpt = e.target.closest('.js-vehicle-option');
+    if (vehOpt) {
+      selectVehicle(vehOpt.dataset.vehicleId, vehOpt.dataset.vehicleLabel);
+      return;
+    }
+    // Close dropdowns on outside click
+    const co = document.getElementById('customer_options');
+    const vo = document.getElementById('vehicle_options');
+    const cs = document.getElementById('customer_search');
+    const vs = document.getElementById('vehicle_search');
+    if (co && !co.contains(e.target) && e.target !== cs) co.classList.add('hidden');
+    if (vo && !vo.contains(e.target) && e.target !== vs) vo.classList.add('hidden');
+  });
+</script>
+{% endif %}
 {% endblock %}

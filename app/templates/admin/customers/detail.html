@@ -4,23 +4,47 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">{{ customer.name }}</h1>
-    <p class="page-subtitle mono text-xs">{{ customer.code }}</p>
+    <p class="page-subtitle flex items-center gap-2">
+      <span class="mono text-xs">{{ customer.code }}</span>
+      <span class="badge {{ status_tone.get(customer.status, 'badge-neutral') }}">
+        {{ status_labels.get(customer.status, customer.status) }}
+      </span>
+      {% if not customer.is_active %}<span class="badge badge-neutral">Disabled</span>{% endif %}
+    </p>
   </div>
-  <div class="page-actions">
-    <a href="/admin/vehicles/new?customer_id={{ customer.id }}" class="btn btn-secondary btn-sm">Add Vehicle</a>
-    <a href="/admin/customers/{{ customer.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+  <div class="page-actions flex gap-2">
+    <a href="/admin/inquiries/new?customer_id={{ customer.id }}"
+       class="btn btn-secondary btn-sm">New Inquiry</a>
+    <a href="/admin/vehicles/new?customer_id={{ customer.id }}"
+       class="btn btn-secondary btn-sm">Add Vehicle</a>
+    <a href="/admin/customers/{{ customer.id }}/edit"
+       class="btn btn-primary btn-sm">Edit</a>
   </div>
 </div>
 
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
+  <div class="form-error">{{ error }}</div>
+</div>
+{% endif %}
+
 <div class="grid lg:grid-cols-3 gap-6">
   <div class="lg:col-span-2 space-y-6">
+
+    {# Contact info #}
     <div class="panel">
       <div class="panel-title">Contact</div>
       <dl class="grid grid-cols-2 gap-4 mt-4 text-sm">
         <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Phone</dt><dd>{{ customer.phone or '—' }}</dd></div>
         <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Alt phone</dt><dd>{{ customer.alt_phone or '—' }}</dd></div>
         <div class="col-span-2"><dt class="text-neutral-500 text-xs uppercase tracking-wider">Email</dt><dd>{{ customer.email or '—' }}</dd></div>
-        <div class="col-span-2"><dt class="text-neutral-500 text-xs uppercase tracking-wider">Address</dt><dd>{{ customer.address_line1 or '—' }}{% if customer.address_line2 %}<br/>{{ customer.address_line2 }}{% endif %}</dd></div>
+        <div class="col-span-2">
+          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Address</dt>
+          <dd>
+            {{ customer.address_line1 or '—' }}
+            {% if customer.address_line2 %}<br/>{{ customer.address_line2 }}{% endif %}
+          </dd>
+        </div>
         <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">City</dt><dd>{{ customer.city or '—' }}</dd></div>
         <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Province</dt><dd>{{ customer.province or '—' }}</dd></div>
         <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Country</dt><dd>{{ customer.country }}</dd></div>
@@ -35,8 +59,49 @@
     </div>
     {% endif %}
 
+    {# Related inquiries #}
     <div class="panel">
-      <div class="panel-title">Vehicles</div>
+      <div class="flex items-center justify-between">
+        <div class="panel-title">Inquiries</div>
+        {% if open_inq_count %}
+          <span class="text-xs text-neutral-400">{{ open_inq_count }} open</span>
+        {% endif %}
+      </div>
+      {% if inquiries %}
+      <div class="table-wrap mt-3" style="border:0;">
+        <table class="table">
+          <thead>
+            <tr><th>Code</th><th>Service</th><th>Status</th><th>Created</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for i in inquiries %}
+            <tr>
+              <td class="mono text-xs">{{ i.code }}</td>
+              <td class="text-sm">{{ service_labels.get(i.service_interest, i.service_interest or '—') }}</td>
+              <td>
+                <span class="badge {{ inq_status_tone.get(i.status, 'badge-neutral') }}">{{ i.status }}</span>
+              </td>
+              <td class="text-xs text-neutral-500">{{ i.created_at | dt_id('%d %b') }}</td>
+              <td class="text-right"><a href="/admin/inquiries/{{ i.id }}" class="btn btn-ghost btn-sm">View</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-neutral-500 text-sm mt-2">
+        No inquiries yet.
+        <a href="/admin/inquiries/new?customer_id={{ customer.id }}" class="text-noctra-accent hover:underline">Create one →</a>
+      </p>
+      {% endif %}
+    </div>
+
+    {# Vehicles #}
+    <div class="panel">
+      <div class="flex items-center justify-between">
+        <div class="panel-title">Vehicles</div>
+        {% if vehicles %}<span class="text-xs text-neutral-500">{{ vehicles|length }} registered</span>{% endif %}
+      </div>
       {% if vehicles %}
       <div class="table-wrap mt-3" style="border:0;">
         <table class="table">
@@ -57,22 +122,27 @@
         </table>
       </div>
       {% else %}
-      <p class="text-neutral-500 text-sm mt-2">No vehicles yet.</p>
+      <p class="text-neutral-500 text-sm mt-2">
+        No vehicles yet.
+        <a href="/admin/vehicles/new?customer_id={{ customer.id }}" class="text-noctra-accent hover:underline">Add one →</a>
+      </p>
       {% endif %}
     </div>
 
+    {# Additional contacts #}
     <div class="panel">
       <div class="panel-title">Additional Contacts</div>
       {% if contacts %}
       <ul class="divide-y divide-noctra-border mt-3">
         {% for c in contacts %}
-        <li class="py-3 flex items-start justify-between gap-4">
-          <div>
-            <div class="font-medium">{{ c.name }}</div>
-            <div class="text-xs text-neutral-500">
-              {{ c.role or '' }}{% if c.phone %} · {{ c.phone }}{% endif %}{% if c.email %} · {{ c.email }}{% endif %}
-            </div>
+        <li class="py-3">
+          <div class="font-medium">{{ c.name }}</div>
+          <div class="text-xs text-neutral-500">
+            {% if c.role %}{{ c.role }}{% endif %}
+            {% if c.phone %}{% if c.role %} · {% endif %}{{ c.phone }}{% endif %}
+            {% if c.email %}{% if c.role or c.phone %} · {% endif %}{{ c.email }}{% endif %}
           </div>
+          {% if c.notes %}<div class="text-xs text-neutral-500 mt-1">{{ c.notes }}</div>{% endif %}
         </li>
         {% endfor %}
       </ul>
@@ -82,10 +152,9 @@
 
       <form method="post" action="/admin/customers/{{ customer.id }}/contacts"
             class="mt-4 grid md:grid-cols-4 gap-3 items-end" data-guard>
-            <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-            
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
         <div class="form-row !mb-0">
-          <label class="form-label" for="contact_name">Name</label>
+          <label class="form-label" for="contact_name">Name <span class="req">*</span></label>
           <input class="input" id="contact_name" name="contact_name" required maxlength="255" />
         </div>
         <div class="form-row !mb-0">
@@ -99,37 +168,49 @@
         <button class="btn btn-secondary btn-sm">Add contact</button>
       </form>
     </div>
+
   </div>
 
   <aside class="space-y-6">
+
+    {# Status card #}
     <div class="panel">
-      <div class="panel-title">Status</div>
-      <div class="mt-3">
-        {% if customer.status == 'LEAD' %}<span class="badge badge-info">Lead</span>
-        {% elif customer.status == 'ACTIVE' %}<span class="badge badge-success">Active</span>
-        {% elif customer.status == 'INACTIVE' %}<span class="badge badge-neutral">Inactive</span>
-        {% elif customer.status == 'BLOCKED' %}<span class="badge badge-danger">Blocked</span>
-        {% endif %}
-        {% if not customer.is_active %}<span class="badge badge-neutral ml-1">Disabled</span>{% endif %}
-      </div>
-      <div class="mt-4 text-xs text-neutral-500 space-y-1">
+      <div class="panel-title">Record</div>
+      <div class="mt-3 text-xs text-neutral-500 space-y-1">
         <div>Created {{ customer.created_at | dt_id }}</div>
         <div>Updated {{ customer.updated_at | dt_id }}</div>
-        {% if customer.source %}<div>Source: {{ customer.source }}</div>{% endif %}
+        {% if customer.source %}
+        <div>Source: {{ source_labels.get(customer.source, customer.source) }}</div>
+        {% endif %}
       </div>
     </div>
 
+    {# Danger / status actions #}
     {% if customer.is_active %}
     <div class="panel">
       <div class="panel-title">Danger Zone</div>
-      <p class="text-neutral-500 text-xs mt-2 mb-3">Deactivating hides the customer from active lists. Data is retained.</p>
+      <p class="text-neutral-500 text-xs mt-2 mb-3">
+        Deactivating hides the customer from active lists. Data is retained.
+      </p>
       <form method="post" action="/admin/customers/{{ customer.id }}/deactivate"
             data-confirm="Deactivate this customer?">
-            <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
         <button class="btn btn-danger btn-sm">Deactivate</button>
       </form>
     </div>
+    {% else %}
+    <div class="panel">
+      <div class="panel-title">Reactivate</div>
+      <p class="text-neutral-500 text-xs mt-2 mb-3">
+        This customer is currently disabled. Reactivate to restore them to active lists.
+      </p>
+      <form method="post" action="/admin/customers/{{ customer.id }}/reactivate">
+        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+        <button class="btn btn-primary btn-sm">Reactivate</button>
+      </form>
+    </div>
     {% endif %}
+
   </aside>
 </div>
 {% endblock %}

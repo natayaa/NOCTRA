@@ -72,14 +72,12 @@ class CustomerService:
             },
         )
 
-        # ── Load relationships that Pydantic will read ──
         # `lazy="selectin"` only fires on objects loaded from a query,
         # not on freshly created+flushed objects. Force the load here.
         await self.db.refresh(customer, ["contacts"])
-
         return customer
 
-    # ── Find-or-create (used by Phase 2c public intake) ─
+    # ── Find-or-create (used by public intake) ─────────
     async def find_or_create(
         self,
         *,
@@ -111,8 +109,7 @@ class CustomerService:
             new_data={"code": customer.code, "name": customer.name, "source": source},
         )
 
-        await self.db.refresh(customer, ["contacts"])     # ← add
-
+        await self.db.refresh(customer, ["contacts"])
         return customer, True
 
     # ── Update ────────────────────────────────────────
@@ -150,14 +147,16 @@ class CustomerService:
 
         await self.db.flush()
 
-        await self.audit.log(
-            action=AuditAction.UPDATE,
-            table_name="customers",
-            record_id=customer.id,
-            user_id=actor.id,
-            old_data=before,
-            new_data=self._snapshot(customer),
-        )
+        after = self._snapshot(customer)
+        if before != after:
+            await self.audit.log(
+                action=AuditAction.UPDATE,
+                table_name="customers",
+                record_id=customer.id,
+                user_id=actor.id,
+                old_data=before,
+                new_data=after,
+            )
         return customer
 
     # ── Contacts ──────────────────────────────────────
@@ -201,6 +200,19 @@ class CustomerService:
             new_data={"is_active": False},
         )
 
+    async def reactivate(self, customer_id: UUID, *, actor: User) -> None:
+        customer = await self._get_or_404(customer_id)
+        customer.is_active = True
+        await self.db.flush()
+        await self.audit.log(
+            action=AuditAction.UPDATE,
+            table_name="customers",
+            record_id=customer.id,
+            user_id=actor.id,
+            old_data={"is_active": False},
+            new_data={"is_active": True},
+        )
+
     # ── Helpers ───────────────────────────────────────
     async def _get_or_404(self, customer_id: UUID) -> Customer:
         customer = await self.repo.get(customer_id)
@@ -214,6 +226,11 @@ class CustomerService:
             "name": c.name,
             "email": c.email,
             "phone": c.phone,
+            "alt_phone": c.alt_phone,
+            "city": c.city,
+            "province": c.province,
             "status": c.status,
+            "source": c.source,
+            "tax_id": c.tax_id,
             "is_active": c.is_active,
         }

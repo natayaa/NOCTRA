@@ -34,12 +34,6 @@ class CsrfTokenMiddleware(BaseHTTPMiddleware):
         request.state.csrf_token = token
 
         response = await call_next(request)
-        request.state.csrf_token = token
-        """print(
-            f"[CsrfToken] path={request.url.path} "
-            f"cookie={cookie_token!r} state_token={token!r}",
-            flush=True,
-        )"""
 
         # Only set the cookie if the client didn't already have a valid one.
         if not cookie_token:

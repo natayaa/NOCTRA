@@ -37,7 +37,7 @@
           {% elif r.supplier %}{{ r.supplier.name }}
           {% else %}<span class="text-neutral-500">—</span>{% endif %}
         </td>
-        <td class="text-xs">{{ p.method }}</td>
+        <td class="text-xs">{{ payment_method_labels.get(p.method, p.method) }}</td>
         <td class="text-xs text-neutral-500">{{ p.reference_number or '—' }}</td>
         <td class="text-right font-mono text-sm {% if p.direction == 'IN' %}text-noctra-success{% else %}text-noctra-danger{% endif %}">
           {{ p.amount | rupiah }}

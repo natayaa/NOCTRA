@@ -90,7 +90,6 @@ async def overhead_rate(
     )
 
 
-
 # ════════════════════════════════════════════════════════════════
 # PROJECTS
 # ════════════════════════════════════════════════════════════════
@@ -139,7 +138,6 @@ async def get_project(
     if not project:
         raise NotFoundError("Project not found")
 
-    # Project.items has lazy="selectin" so it's already loaded.
     detail = ProjectDetail.model_validate(project)
     detail.items = [_item_out(i) for i in project.items]
 

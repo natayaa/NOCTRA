@@ -1,10 +1,14 @@
 {% if customers %}
   {% for c in customers %}
   <button type="button"
-          class="w-full text-left px-3 py-2 hover:bg-noctra-surface2 border-b border-noctra-border last:border-0"
-          onclick="selectCustomer('{{ c.id }}', '{{ c.name|e }}', '{{ c.code }}')">
+          class="js-customer-option w-full text-left px-3 py-2 hover:bg-noctra-surface2 border-b border-noctra-border last:border-0"
+          data-customer-id="{{ c.id }}"
+          data-customer-name="{{ c.name }}"
+          data-customer-code="{{ c.code }}">
     <div class="font-medium text-sm">{{ c.name }}</div>
-    <div class="text-xs text-neutral-500">{{ c.code }}{% if c.phone %} · {{ c.phone }}{% endif %}</div>
+    <div class="text-xs text-neutral-500">
+      {{ c.code }}{% if c.phone %} · {{ c.phone }}{% endif %}
+    </div>
   </button>
   {% endfor %}
 {% elif q %}

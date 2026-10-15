@@ -3,31 +3,46 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{{ inquiry.code }}</h1>
+    <div class="flex items-center gap-3">
+      <h1 class="page-title">{{ inquiry.code }}</h1>
+      <span class="badge {{ status_tone.get(inquiry.status, 'badge-neutral') }}">{{ inquiry.status }}</span>
+    </div>
     <p class="page-subtitle">
-      <span
-        class="badge {% if inquiry.status == 'NEW' %}badge-info{% elif inquiry.status in ('APPROVED', 'CONVERTED') %}badge-success{% elif inquiry.status == 'LOST' %}badge-danger{% else %}badge-accent{% endif %}">
-        {{ inquiry.status }}
-      </span>
-      <span class="ml-2">· {{ inquiry.source }}</span>
+      <span>{{ source_labels.get(inquiry.source, inquiry.source) }}</span>
+      <span class="ml-2 text-neutral-500">· {{ inquiry.created_at | dt_id('%d %b %Y') }}</span>
     </p>
   </div>
-  <div class="page-actions">
+  <div class="page-actions flex gap-2">
     {% if customer %}
-    <a href="/admin/customers/{{ inquiry.customer_id }}" class="btn btn-secondary btn-sm">Customer</a>
+      <a href="/admin/customers/{{ inquiry.customer_id }}" class="btn btn-secondary btn-sm">Customer</a>
     {% endif %}
     {% if inquiry.status not in ('CONVERTED', 'LOST') %}
-    <a href="/admin/inquiries/{{ inquiry.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+      <a href="/admin/inquiries/{{ inquiry.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
     {% endif %}
   </div>
 </div>
 
-{# Flash for redirect-error param #}
-{% set err = request.query_params.get('error') %}
-{% if err %}
+{% if error %}
 <div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">Action failed: {{ err }}</div>
+  <div class="form-error">Action failed: {{ error }}</div>
 </div>
+{% endif %}
+
+{# Overdue / due-today warning #}
+{% if inquiry.follow_up_date and inquiry.status not in ('CONVERTED', 'LOST') %}
+  {% if inquiry.follow_up_date < today %}
+  <div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05);">
+    <div class="text-sm text-red-300">
+      ⚠ Follow-up overdue since <strong>{{ inquiry.follow_up_date.strftime('%d %b %Y') }}</strong>.
+    </div>
+  </div>
+  {% elif inquiry.follow_up_date == today %}
+  <div class="panel mb-4" style="border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.05);">
+    <div class="text-sm text-amber-300">
+      ⏰ Follow-up is due <strong>today</strong>.
+    </div>
+  </div>
+  {% endif %}
 {% endif %}
 
 <div class="grid lg:grid-cols-3 gap-6">
@@ -37,12 +52,18 @@
     <div class="panel">
       <div class="panel-title">Request</div>
 
-      {% if inquiry.service_interest %}
-      <div class="mt-3 text-sm">
-        <div class="text-neutral-500 text-xs uppercase tracking-wider">Service</div>
-        <div>{{ service_labels.get(inquiry.service_interest, inquiry.service_interest) }}</div>
+      <div class="grid sm:grid-cols-2 gap-4 mt-3">
+        {% if inquiry.service_interest %}
+        <div class="text-sm">
+          <div class="text-neutral-500 text-xs uppercase tracking-wider">Service</div>
+          <div>{{ service_labels.get(inquiry.service_interest, inquiry.service_interest) }}</div>
+        </div>
+        {% endif %}
+        <div class="text-sm">
+          <div class="text-neutral-500 text-xs uppercase tracking-wider">Custom graphics</div>
+          <div>{% if inquiry.has_custom_graphics %}Yes{% else %}No{% endif %}</div>
+        </div>
       </div>
-      {% endif %}
 
       <div class="mt-4 text-sm">
         <div class="text-neutral-500 text-xs uppercase tracking-wider">Description</div>
@@ -52,19 +73,26 @@
       <div class="grid sm:grid-cols-3 gap-4 mt-5">
         <div class="text-sm">
           <div class="text-neutral-500 text-xs uppercase tracking-wider">Color</div>
-          <div>{{ inquiry.color_preference or '—' }}</div>
+          <div class="flex items-center gap-2 mt-0.5">
+            {% if inquiry.color_family %}
+              <span class="inline-block w-4 h-4 rounded-full border border-noctra-border"
+                    style="background: {{ color_swatch.get(inquiry.color_family, '#64748b') }};"></span>
+            {% endif %}
+            <span>{{ inquiry.color_preference or '—' }}</span>
+          </div>
           {% if inquiry.color_family %}
-          <div class="text-xs text-neutral-500">{{ color_labels.get(inquiry.color_family, inquiry.color_family) }}</div>
+            <div class="text-xs text-neutral-500 mt-0.5">
+              {{ color_labels.get(inquiry.color_family, inquiry.color_family) }}
+            </div>
           {% endif %}
         </div>
         <div class="text-sm">
           <div class="text-neutral-500 text-xs uppercase tracking-wider">Finish</div>
-          <div>{{ finish_labels.get(inquiry.finish_preference, inquiry.finish_preference) if inquiry.finish_preference
-            else '—' }}</div>
+          <div>{{ finish_labels.get(inquiry.finish_preference, inquiry.finish_preference) if inquiry.finish_preference else '—' }}</div>
         </div>
         <div class="text-sm">
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Custom graphics</div>
-          <div>{% if inquiry.has_custom_graphics %}Yes{% else %}No{% endif %}</div>
+          <div class="text-neutral-500 text-xs uppercase tracking-wider">Budget</div>
+          <div>{{ budget_labels.get(inquiry.budget_range, inquiry.budget_range) if inquiry.budget_range else '—' }}</div>
         </div>
       </div>
 
@@ -93,16 +121,14 @@
       <div class="panel-title">Logistics</div>
       <dl class="grid grid-cols-2 gap-4 mt-3 text-sm">
         <div>
-          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Budget</dt>
-          <dd>{{ budget_labels.get(inquiry.budget_range, inquiry.budget_range) if inquiry.budget_range else '—' }}</dd>
-        </div>
-        <div>
           <dt class="text-neutral-500 text-xs uppercase tracking-wider">Desired date</dt>
           <dd>{{ inquiry.desired_date.strftime('%d %b %Y') if inquiry.desired_date else '—' }}</dd>
         </div>
         <div>
           <dt class="text-neutral-500 text-xs uppercase tracking-wider">Follow-up</dt>
-          <dd>{{ inquiry.follow_up_date.strftime('%d %b %Y') if inquiry.follow_up_date else '—' }}</dd>
+          <dd class="{% if inquiry.follow_up_date and inquiry.follow_up_date < today and inquiry.status not in ('CONVERTED','LOST') %}text-red-400 font-medium{% endif %}">
+            {{ inquiry.follow_up_date.strftime('%d %b %Y') if inquiry.follow_up_date else '—' }}
+          </dd>
         </div>
         <div>
           <dt class="text-neutral-500 text-xs uppercase tracking-wider">Last contacted</dt>
@@ -113,12 +139,36 @@
 
     {# Photos #}
     <div class="panel">
-      <div class="panel-title">Photos</div>
+      <div class="flex items-center justify-between">
+        <div class="panel-title">Photos</div>
+        {% if photos %}<span class="text-xs text-neutral-500">{{ photos|length }} attached</span>{% endif %}
+      </div>
       {% if photos %}
-      <div class="grid grid-cols-3 gap-3 mt-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
         {% for p in photos %}
-        <div class="aspect-square rounded-md border border-noctra-border overflow-hidden bg-noctra-surface2">
-          <img src="{{ p.file_path }}" alt="{{ p.caption or 'Inquiry photo' }}" class="w-full h-full object-cover" />
+        <div class="group relative aspect-square rounded-md border border-noctra-border overflow-hidden bg-noctra-surface2">
+          <a href="{{ p.file_path }}" target="_blank" rel="noopener" class="block w-full h-full">
+            <img src="{{ p.file_path }}" alt="{{ p.caption or 'Inquiry photo' }}"
+                 class="w-full h-full object-cover transition group-hover:scale-[1.02]" />
+          </a>
+          {% if p.is_primary %}
+            <span class="absolute top-1.5 left-1.5 badge badge-accent text-[10px]">Primary</span>
+          {% endif %}
+          {% if p.caption %}
+            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1 text-[11px] text-neutral-100 truncate">
+              {{ p.caption }}
+            </div>
+          {% endif %}
+          {% if inquiry.status not in ('CONVERTED', 'LOST') %}
+          <form method="post" action="/admin/inquiries/{{ inquiry.id }}/photos/{{ p.id }}/delete"
+                class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition"
+                data-guard onsubmit="return confirm('Delete this photo?');">
+            <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+            <button class="btn btn-sm"
+                    style="background: rgba(0,0,0,0.6); color: white; padding: 2px 8px;"
+                    title="Delete photo">×</button>
+          </form>
+          {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -126,30 +176,29 @@
       <p class="text-neutral-500 text-sm mt-2">No photos attached yet.</p>
       {% endif %}
 
+      {% if inquiry.status not in ('CONVERTED', 'LOST') %}
       <form method="post" action="/admin/inquiries/{{ inquiry.id }}/photos"
-        class="mt-4 grid md:grid-cols-4 gap-3 items-end" data-guard>
+            class="mt-4 grid md:grid-cols-4 gap-3 items-end" data-guard>
         <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-        <div class="form-row !mb-0">
+        <div class="form-row !mb-0 md:col-span-2">
           <label class="form-label" for="photo_file_path">Image URL</label>
-          <input class="input" id="photo_file_path" name="file_path" required maxlength="500" />
-        </div>
-        <div class="form-row !mb-0">
-          <label class="form-label" for="photo_file_name">Filename</label>
-          <input class="input" id="photo_file_name" name="file_name" maxlength="255" />
+          <input class="input" id="photo_file_path" name="file_path" required maxlength="500"
+                 placeholder="https://…" />
         </div>
         <div class="form-row !mb-0">
           <label class="form-label" for="photo_caption">Caption</label>
-          <input class="input" id="photo_caption" name="caption" />
+          <input class="input" id="photo_caption" name="caption" maxlength="500" />
         </div>
         <button class="btn btn-secondary btn-sm">Add photo</button>
       </form>
       <p class="text-xs text-neutral-500 mt-2">File uploads arrive in Phase 2c. For now, paste a hosted image URL.</p>
+      {% endif %}
     </div>
 
     {# Notes #}
     {% if inquiry.notes %}
     <div class="panel">
-      <div class="panel-title">Notes</div>
+      <div class="panel-title">Staff notes</div>
       <p class="text-neutral-300 mt-2 whitespace-pre-line text-sm">{{ inquiry.notes }}</p>
     </div>
     {% endif %}
@@ -161,49 +210,70 @@
     </div>
     {% endif %}
 
+    {# Timeline #}
+    {% if timeline %}
+    <div class="panel">
+      <div class="panel-title">Activity</div>
+      <ol class="mt-3 space-y-3">
+        {% for ev in timeline %}
+        <li class="flex gap-3 text-sm">
+          <span class="mt-1.5 inline-block w-1.5 h-1.5 rounded-full bg-noctra-accent flex-shrink-0"></span>
+          <div class="flex-1">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-neutral-300 font-medium">{{ ev.action }}</span>
+              <span class="text-xs text-neutral-500">{{ ev.created_at | dt_id if ev.created_at else '' }}</span>
+            </div>
+            {% if ev.new_data and ev.new_data.status %}
+              <div class="text-xs text-neutral-500">
+                status → <span class="text-neutral-300">{{ ev.new_data.status }}</span>
+              </div>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% endif %}
+
   </div>
 
   {# Sidebar #}
   <aside class="space-y-6">
 
-    {# ── Convert to Project — only when APPROVED ── #}
+    {# Convert to Project #}
     {% if inquiry.status == 'APPROVED' %}
     <div class="panel panel-accent">
       <div class="panel-title">Ready to start?</div>
       <p class="text-xs text-neutral-500 mt-1">
         This inquiry is approved. Convert it into a project to begin costing and execution.
       </p>
-      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/convert" class="mt-3 space-y-3" data-guard>
+      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/convert"
+            class="mt-3 space-y-3" data-guard
+            onsubmit="return confirm('Convert this inquiry into a project?');">
         <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
         <div class="form-row !mb-0">
           <label class="form-label" for="convert_price">Selling price (IDR)</label>
-          <input class="input" type="number" step="1000" min="0" id="convert_price" name="quoted_price"
-            placeholder="e.g. 1800000" />
+          <input class="input" type="number" step="1000" min="0" id="convert_price"
+                 name="quoted_price" placeholder="e.g. 1800000" />
           <div class="form-hint">Optional — you can also set it on the project page.</div>
         </div>
-        <button class="btn btn-primary btn-sm btn-block">
-          Convert to Project →
-        </button>
+        <button class="btn btn-primary btn-sm btn-block">Convert to Project →</button>
       </form>
     </div>
     {% endif %}
 
-    {# ── View linked project — only when CONVERTED ── #}
+    {# Linked project #}
     {% if inquiry.status == 'CONVERTED' %}
     <div class="panel" style="border-color: rgba(34,197,94,0.35);">
       <div class="panel-title">Project</div>
       {% if project %}
-      <p class="text-xs text-neutral-500 mt-1">
-        This inquiry has been converted into a project.
-      </p>
+      <p class="text-xs text-neutral-500 mt-1">This inquiry has been converted into a project.</p>
       <a href="/admin/projects/{{ project.id }}" class="btn btn-primary btn-sm btn-block mt-3">
         Open {{ project.code }} →
       </a>
       <div class="text-xs text-neutral-500 mt-2">
         Status: {{ project.status }}
-        {% if project.quoted_price %}
-        · {{ project.quoted_price | rupiah }}
-        {% endif %}
+        {% if project.quoted_price %} · {{ project.quoted_price | rupiah }}{% endif %}
       </div>
       {% else %}
       <p class="text-xs text-neutral-500 mt-1">
@@ -214,7 +284,7 @@
     </div>
     {% endif %}
 
-    {# Customer + Vehicle #}
+    {# Customer #}
     <div class="panel">
       <div class="panel-title">Customer</div>
       {% if customer %}
@@ -229,6 +299,7 @@
       {% endif %}
     </div>
 
+    {# Vehicle #}
     <div class="panel">
       <div class="panel-title">Vehicle</div>
       {% if vehicle %}
@@ -248,12 +319,13 @@
     <div class="panel">
       <div class="panel-title">Assignment</div>
       {% if inquiry.status not in ('CONVERTED', 'LOST') %}
-      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/assign" class="mt-3 space-y-3" data-guard>
+      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/assign"
+            class="mt-3 space-y-3" data-guard>
         <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
         <select class="select" name="assigned_to_id">
           <option value="">Unassigned</option>
           {% for u in assignees %}
-          <option value="{{ u.id }}" {% if inquiry.assigned_to_id==u.id %}selected{% endif %}>
+          <option value="{{ u.id }}" {% if inquiry.assigned_to_id == u.id %}selected{% endif %}>
             {{ u.full_name }}
           </option>
           {% endfor %}
@@ -275,10 +347,10 @@
       <p class="text-xs text-neutral-500 mt-1">
         From <strong>{{ inquiry.status }}</strong>, allowed next:
       </p>
-      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/status" class="mt-3 space-y-3" data-guard>
+      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/status"
+            class="mt-3 space-y-3" data-guard x-data="{ target: '' }">
         <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-        <select class="select" name="status" id="status-select"
-          onchange="document.getElementById('closing-wrap').style.display = this.value === 'LOST' ? 'block' : 'none'">
+        <select class="select" name="status" x-model="target">
           {% for s in next_statuses %}
             {% if s != 'CONVERTED' %}
               <option value="{{ s }}">{{ s }}</option>
@@ -286,10 +358,10 @@
           {% endfor %}
         </select>
 
-        <div id="closing-wrap" style="display: none;">
+        <div x-show="target === 'LOST'" x-cloak>
           <label class="form-label" for="closing_note">Closing note (required for LOST)</label>
           <textarea class="textarea" id="closing_note" name="closing_note" rows="2"
-            placeholder="Why was this inquiry lost?"></textarea>
+                    placeholder="Why was this inquiry lost?"></textarea>
         </div>
 
         <button class="btn btn-primary btn-sm btn-block">Apply</button>

@@ -24,10 +24,10 @@ class SupplierCreate(BaseModel):
     contact_person: str | None = Field(None, max_length=255)
     email: str | None = Field(None, max_length=255)
     phone: str | None = Field(None, max_length=32)
-    address: str | None = None
+    address: str | None = Field(None, max_length=2000)
     tax_id: str | None = Field(None, max_length=64)
     payment_terms: str | None = Field(None, max_length=64)
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
 
 
 class SupplierUpdate(BaseModel):
@@ -82,7 +82,7 @@ class MaterialCreate(BaseModel):
     min_stock: float = Field(0, ge=0)
 
     preferred_supplier_id: UUID | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
     location: str | None = Field(None, max_length=64)
 
     @field_validator("category")
@@ -164,7 +164,7 @@ class MaterialWithStock(MaterialDetail):
 class MaterialUpdatePrice(BaseModel):
     """Record a price change; also updates the material's current price."""
     new_purchase_price: float = Field(..., ge=0)
-    note: str | None = None
+    note: str | None = Field(None, max_length=500)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -176,10 +176,10 @@ class InventoryTransactionCreate(BaseModel):
     transaction_type: str
     quantity: float = Field(..., gt=0)
     unit_cost: float | None = Field(None, ge=0)
-    reference_type: str | None = None
+    reference_type: str | None = Field(None, max_length=32)
     reference_id: UUID | None = None
     reference_note: str | None = Field(None, max_length=255)
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=2000)
 
     @field_validator("transaction_type")
     @classmethod
@@ -212,7 +212,7 @@ class PurchaseOrderItemCreate(BaseModel):
     material_id: UUID
     quantity: float = Field(..., gt=0)
     unit_price: float = Field(..., ge=0)
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=500)
 
 
 class PurchaseOrderItemUpdate(BaseModel):
@@ -236,7 +236,7 @@ class PurchaseOrderCreate(BaseModel):
     supplier_id: UUID
     order_date: date
     expected_date: date | None = None
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
 
 
 class PurchaseOrderUpdate(BaseModel):
@@ -271,11 +271,11 @@ class PurchaseOrderReceiveItem(BaseModel):
 class PurchaseOrderReceive(BaseModel):
     """Receive a PO, optionally with per-item quantities."""
     received_items: list[PurchaseOrderReceiveItem] = Field(default_factory=list)
-    note: str | None = None
+    note: str | None = Field(None, max_length=2000)
 
 
 # ════════════════════════════════════════════════════════════════
-# CATALOG — dropdown options for the UI
+# CATALOG
 # ════════════════════════════════════════════════════════════════
 
 class InventoryCatalog(BaseModel):

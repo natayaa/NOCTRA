@@ -7,6 +7,15 @@ from app.core.config import settings
 from app.core.request_id import get_request_id
 
 
+SENSITIVE_KEYS = {"password", "token", "secret", "api_key", "csrf", "authorization"}
+
+def _redact_sensitive(_, __, event_dict: dict) -> dict:
+    for k in list(event_dict.keys()):
+        if any(s in k.lower() for s in SENSITIVE_KEYS):
+            event_dict[k] = "***"
+    return event_dict
+
+
 def _add_request_id(_, __, event_dict: dict) -> dict:
     rid = get_request_id()
     if rid:

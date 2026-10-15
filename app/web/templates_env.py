@@ -6,6 +6,8 @@ from typing import Any
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
+from datetime import date
+
 from app.core.config import settings
 from app.web.filters import register_filters
 
@@ -36,6 +38,7 @@ class NoctraTemplates(Jinja2Templates):
 
 
 templates = NoctraTemplates(directory=str(TEMPLATES_DIR))
+templates.env.globals["today"] = lambda: date.today()
 register_filters(templates)
 
 templates.env.globals.update(

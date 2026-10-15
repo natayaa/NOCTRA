@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.inventory.constants import (
     INBOUND_TYPES,
+    MATERIAL_SORT_OPTIONS,
     OUTBOUND_TYPES,
+    PO_SORT_OPTIONS,
+    TRANSACTION_SORT_OPTIONS,
 )
 from app.modules.inventory.models import (
     InventoryTransaction,
@@ -20,6 +23,10 @@ from app.modules.inventory.models import (
     Supplier,
 )
 
+
+# ════════════════════════════════════════════════════════════════
+# SUPPLIERS
+# ════════════════════════════════════════════════════════════════
 
 class SupplierRepository:
     def __init__(self, db: AsyncSession) -> None:
@@ -38,16 +45,23 @@ class SupplierRepository:
         q: str | None = None,
         is_active: bool | None = None,
     ) -> Select:
-        stmt = select(Supplier).order_by(Supplier.name)
+        stmt = select(Supplier)
         conds = []
         if q:
             like = f"%{q.strip()}%"
-            conds.append(or_(Supplier.name.ilike(like), Supplier.code.ilike(like)))
+            conds.append(
+                or_(
+                    Supplier.name.ilike(like),
+                    Supplier.code.ilike(like),
+                    Supplier.phone.ilike(like),
+                    Supplier.email.ilike(like),
+                )
+            )
         if is_active is not None:
             conds.append(Supplier.is_active == is_active)
         if conds:
             stmt = stmt.where(and_(*conds))
-        return stmt
+        return stmt.order_by(Supplier.name)
 
     async def next_code(self) -> str:
         year = datetime.now(UTC).year
@@ -68,6 +82,10 @@ class SupplierRepository:
         return supplier
 
 
+# ════════════════════════════════════════════════════════════════
+# MATERIALS
+# ════════════════════════════════════════════════════════════════
+
 class MaterialRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -85,8 +103,9 @@ class MaterialRepository:
         q: str | None = None,
         category: str | None = None,
         is_active: bool | None = None,
+        sort: str = "category_name",
     ) -> Select:
-        stmt = select(Material).order_by(Material.category, Material.name)
+        stmt = select(Material)
         conds = []
         if q:
             like = f"%{q.strip()}%"
@@ -95,6 +114,7 @@ class MaterialRepository:
                     Material.name.ilike(like),
                     Material.code.ilike(like),
                     Material.brand.ilike(like),
+                    Material.sku.ilike(like),
                 )
             )
         if category:
@@ -103,6 +123,19 @@ class MaterialRepository:
             conds.append(Material.is_active == is_active)
         if conds:
             stmt = stmt.where(and_(*conds))
+
+        # ── Sorting ──
+        if sort == "name_asc":
+            stmt = stmt.order_by(Material.name.asc())
+        elif sort == "name_desc":
+            stmt = stmt.order_by(Material.name.desc())
+        elif sort == "code_asc":
+            stmt = stmt.order_by(Material.code.asc())
+        elif sort == "created_desc":
+            stmt = stmt.order_by(Material.created_at.desc())
+        else:  # category_name (default)
+            stmt = stmt.order_by(Material.category.asc(), Material.name.asc())
+
         return stmt
 
     async def add(self, material: Material) -> Material:
@@ -130,6 +163,52 @@ class MaterialRepository:
         result = (await self.db.execute(stmt)).scalar_one()
         return float(result or 0)
 
+    async def current_stock_for_update(self, material_id: UUID) -> float:
+        """
+        Return current stock while holding a row-level lock on the material.
+        Use inside `with db.begin_nested()` or during a long transaction to
+        prevent concurrent consumption from racing past the stock check.
+        """
+        # Lock the material row
+        await self.db.execute(
+            select(Material.id).where(Material.id == material_id).with_for_update()
+        )
+        return await self.current_stock(material_id)
+
+    async def distinct_categories(self) -> list[str]:
+        stmt = (
+            select(Material.category)
+            .where(Material.category.is_not(None))
+            .distinct()
+            .order_by(Material.category)
+        )
+        return [c for (c,) in (await self.db.execute(stmt)).all() if c]
+
+    async def stats(self) -> dict[str, int]:
+        """Aggregate counts for overview header."""
+        total_stmt = select(func.count(Material.id))
+        active_stmt = select(func.count(Material.id)).where(Material.is_active.is_(True))
+
+        total = (await self.db.execute(total_stmt)).scalar_one()
+        active = (await self.db.execute(active_stmt)).scalar_one()
+
+        cat_stmt = (
+            select(Material.category, func.count(Material.id))
+            .where(Material.is_active.is_(True))
+            .group_by(Material.category)
+        )
+        by_cat = {c: n for c, n in (await self.db.execute(cat_stmt)).all() if c}
+
+        return {
+            "total": total,
+            "active": active,
+            **{f"cat_{k}": v for k, v in by_cat.items()},
+        }
+
+
+# ════════════════════════════════════════════════════════════════
+# INVENTORY TRANSACTIONS
+# ════════════════════════════════════════════════════════════════
 
 class InventoryTransactionRepository:
     def __init__(self, db: AsyncSession) -> None:
@@ -146,10 +225,9 @@ class InventoryTransactionRepository:
         reference_type: str | None = None,
         reference_id: UUID | None = None,
         since: datetime | None = None,
+        sort: str = "created_desc",
     ) -> Select:
-        stmt = select(InventoryTransaction).order_by(
-            InventoryTransaction.created_at.desc()
-        )
+        stmt = select(InventoryTransaction)
         conds = []
         if material_id:
             conds.append(InventoryTransaction.material_id == material_id)
@@ -163,6 +241,11 @@ class InventoryTransactionRepository:
             conds.append(InventoryTransaction.created_at >= since)
         if conds:
             stmt = stmt.where(and_(*conds))
+
+        if sort == "created_asc":
+            stmt = stmt.order_by(InventoryTransaction.created_at.asc())
+        else:
+            stmt = stmt.order_by(InventoryTransaction.created_at.desc())
         return stmt
 
     async def add(self, tx: InventoryTransaction) -> InventoryTransaction:
@@ -194,6 +277,21 @@ class InventoryTransactionRepository:
         rows = (await self.db.execute(stmt)).all()
         return {row.material_id: float(row.stock) for row in rows}
 
+    async def stats(self, *, material_id: UUID | None = None) -> dict[str, int]:
+        """Counts per transaction type, optionally scoped to a material."""
+        stmt = (
+            select(InventoryTransaction.transaction_type, func.count(InventoryTransaction.id))
+            .group_by(InventoryTransaction.transaction_type)
+        )
+        if material_id:
+            stmt = stmt.where(InventoryTransaction.material_id == material_id)
+        rows = (await self.db.execute(stmt)).all()
+        return {"total": sum(n for _, n in rows), **{t: n for t, n in rows}}
+
+
+# ════════════════════════════════════════════════════════════════
+# PURCHASE ORDERS
+# ════════════════════════════════════════════════════════════════
 
 class PurchaseOrderRepository:
     def __init__(self, db: AsyncSession) -> None:
@@ -211,15 +309,35 @@ class PurchaseOrderRepository:
         *,
         status: str | None = None,
         supplier_id: UUID | None = None,
+        q: str | None = None,
+        sort: str = "created_desc",
     ) -> Select:
-        stmt = select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())
+        stmt = select(PurchaseOrder)
         conds = []
         if status:
             conds.append(PurchaseOrder.status == status)
         if supplier_id:
             conds.append(PurchaseOrder.supplier_id == supplier_id)
+        if q:
+            like = f"%{q.strip()}%"
+            conds.append(
+                or_(
+                    PurchaseOrder.code.ilike(like),
+                    PurchaseOrder.notes.ilike(like),
+                )
+            )
         if conds:
             stmt = stmt.where(and_(*conds))
+
+        # ── Sorting ──
+        if sort == "created_asc":
+            stmt = stmt.order_by(PurchaseOrder.created_at.asc())
+        elif sort == "order_desc":
+            stmt = stmt.order_by(PurchaseOrder.order_date.desc())
+        elif sort == "expected_asc":
+            stmt = stmt.order_by(PurchaseOrder.expected_date.asc().nulls_last())
+        else:
+            stmt = stmt.order_by(PurchaseOrder.created_at.desc())
         return stmt
 
     async def next_code(self) -> str:

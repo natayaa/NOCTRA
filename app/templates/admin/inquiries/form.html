@@ -23,7 +23,8 @@
 <form method="post"
       action="{{ '/admin/inquiries' if mode == 'create' else '/admin/inquiries/' ~ inquiry.id }}"
       class="max-w-4xl panel space-y-6"
-      data-guard>
+      data-guard
+      x-data="{ desc: '{{ (fv.get('description') or (inquiry.description if inquiry else ''))|e }}' }">
 
   {# ── Who ─────────────────────────────────────── #}
   <section>
@@ -37,7 +38,6 @@
         {% else %}
           <select class="select" id="customer_id" name="customer_id">
             <option value="">—</option>
-            {# Customer dropdown populated by an HTMX search in 2c; free-text lookup for now #}
           </select>
           <div class="form-hint">Leave blank for anonymous walk-in.</div>
         {% endif %}
@@ -45,7 +45,8 @@
       <div class="form-row">
         <label class="form-label" for="vehicle_id">Vehicle</label>
         {% if preselected_vehicle %}
-          <input class="input" disabled value="{{ preselected_vehicle.brand }} {{ preselected_vehicle.model }}{% if preselected_vehicle.plate_number %} — {{ preselected_vehicle.plate_number }}{% endif %}" />
+          <input class="input" disabled
+                 value="{{ preselected_vehicle.brand }} {{ preselected_vehicle.model }}{% if preselected_vehicle.plate_number %} — {{ preselected_vehicle.plate_number }}{% endif %}" />
           <input type="hidden" name="vehicle_id" value="{{ preselected_vehicle.id }}" />
         {% else %}
           <input class="input" disabled value="—" />
@@ -73,11 +74,17 @@
     </div>
 
     <div class="form-row">
-      <label class="form-label" for="description">Description <span class="req">*</span></label>
+      <label class="form-label" for="description">
+        Description <span class="req">*</span>
+      </label>
       <textarea class="textarea" id="description" name="description" required
                 minlength="20" maxlength="5000"
+                x-model="desc"
                 placeholder="What does the customer want? Include any detail they gave you.">{{ fv.get('description') or (inquiry.description if inquiry else '') }}</textarea>
-      <div class="form-hint">Minimum 20 characters.</div>
+      <div class="form-hint flex justify-between">
+        <span>Minimum 20 characters.</span>
+        <span class="tabular-nums" x-text="desc.length + ' / 5000'"></span>
+      </div>
     </div>
 
     <div class="grid md:grid-cols-3 gap-5">
@@ -180,11 +187,13 @@
       <div class="form-row">
         <label class="form-label" for="desired_date">Desired date</label>
         <input class="input" type="date" id="desired_date" name="desired_date"
+               min="{{ today.isoformat() }}"
                value="{{ fv.get('desired_date') or (inquiry.desired_date.strftime('%Y-%m-%d') if inquiry and inquiry.desired_date else '') }}" />
       </div>
       <div class="form-row">
         <label class="form-label" for="follow_up_date">Follow-up date</label>
         <input class="input" type="date" id="follow_up_date" name="follow_up_date"
+               min="{{ today.isoformat() }}"
                value="{{ fv.get('follow_up_date') or (inquiry.follow_up_date.strftime('%Y-%m-%d') if inquiry and inquiry.follow_up_date else '') }}" />
       </div>
     </div>
@@ -194,7 +203,9 @@
       <label class="form-label" for="source">Source</label>
       <select class="select" id="source" name="source" required>
         {% for s in sources %}
-          <option value="{{ s }}" {% if s == 'ADMIN' %}selected{% endif %}>{{ s }}</option>
+          <option value="{{ s }}" {% if s == 'ADMIN' %}selected{% endif %}>
+            {{ source_labels.get(s, s) }}
+          </option>
         {% endfor %}
       </select>
     </div>
@@ -215,6 +226,5 @@
     <a href="{{ '/admin/inquiries' if mode == 'create' else '/admin/inquiries/' ~ inquiry.id }}"
        class="btn btn-secondary">Cancel</a>
   </div>
-  
 </form>
 {% endblock %}

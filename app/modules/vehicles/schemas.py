@@ -7,11 +7,32 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.vehicles.constants import VEHICLE_CATEGORIES
 
+_EMPTY_VALUES = {"", "none", "null", "undefined", "nil"}
+
+
+def _normalize_optional_str(v):
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s or s.lower() in _EMPTY_VALUES:
+        return None
+    return s
+
 
 def _check_category(v: str | None) -> str | None:
     if v is not None and v not in VEHICLE_CATEGORIES:
         raise ValueError(f"category must be one of {VEHICLE_CATEGORIES}")
     return v
+
+
+def _normalize_plate(v: str | None) -> str | None:
+    """Uppercase + strip whitespace internal."""
+    if v is None:
+        return None
+    s = v.strip().upper()
+    # collapse multiple spaces
+    s = " ".join(s.split())
+    return s or None
 
 
 class VehicleCreate(BaseModel):
@@ -23,9 +44,24 @@ class VehicleCreate(BaseModel):
     category: str | None = None
     vin: str | None = Field(None, max_length=64)
     engine_number: str | None = Field(None, max_length=64)
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
     brand_id: UUID | None = None
     model_id: UUID | None = None
+
+    @field_validator("plate_number", mode="before")
+    @classmethod
+    def _clean_plate(cls, v):
+        return _normalize_plate(v)
+
+    @field_validator("brand", "model", mode="before")
+    @classmethod
+    def _strip_required(cls, v):
+        return str(v).strip() if v else v
+
+    @field_validator("color", "vin", "engine_number", "notes", mode="before")
+    @classmethod
+    def _clean_optional(cls, v):
+        return _normalize_optional_str(v)
 
     @field_validator("category")
     @classmethod
@@ -42,9 +78,24 @@ class VehicleUpdate(BaseModel):
     category: str | None = None
     vin: str | None = Field(None, max_length=64)
     engine_number: str | None = Field(None, max_length=64)
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=5000)
     brand_id: UUID | None = None
     model_id: UUID | None = None
+
+    @field_validator("plate_number", mode="before")
+    @classmethod
+    def _clean_plate(cls, v):
+        return _normalize_plate(v)
+
+    @field_validator("brand", "model", mode="before")
+    @classmethod
+    def _strip_optional(cls, v):
+        return _normalize_optional_str(v)
+
+    @field_validator("color", "vin", "engine_number", "notes", mode="before")
+    @classmethod
+    def _clean_optional(cls, v):
+        return _normalize_optional_str(v)
 
     @field_validator("category")
     @classmethod

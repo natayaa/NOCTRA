@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.projects.constants import TERMINAL_PROJECT_STATUSES
 from app.modules.projects.models import Employee, Project, ProjectItem
 
 
@@ -82,10 +83,9 @@ class ProjectRepository:
         vehicle_id: UUID | None = None,
         assigned_lead_id: UUID | None = None,
         only_open: bool = False,
+        sort: str = "created_desc",
     ) -> Select:
-        from app.modules.projects.constants import TERMINAL_PROJECT_STATUSES
-
-        stmt = select(Project).order_by(Project.created_at.desc())
+        stmt = select(Project)
         conds = []
         if q:
             like = f"%{q.strip()}%"
@@ -108,7 +108,53 @@ class ProjectRepository:
             conds.append(Project.status.not_in(TERMINAL_PROJECT_STATUSES))
         if conds:
             stmt = stmt.where(and_(*conds))
+
+        # ── Sorting ──
+        if sort == "created_asc":
+            stmt = stmt.order_by(Project.created_at.asc())
+        elif sort == "updated_desc":
+            stmt = stmt.order_by(Project.updated_at.desc())
+        elif sort == "target_asc":
+            stmt = stmt.order_by(Project.target_end_date.asc().nulls_last())
+        elif sort == "priority_desc":
+            stmt = stmt.order_by(Project.priority.desc(), Project.created_at.desc())
+        else:
+            stmt = stmt.order_by(Project.created_at.desc())
+
         return stmt
+
+    async def stats(self, *, customer_id: UUID | None = None) -> dict[str, int | float]:
+        """Aggregate counts per status + open/total financials."""
+        base = select(Project.status, func.count(Project.id)).group_by(Project.status)
+        if customer_id:
+            base = base.where(Project.customer_id == customer_id)
+        rows = (await self.db.execute(base)).all()
+        by_status = {s: c for s, c in rows}
+
+        open_stmt = select(func.count(Project.id)).where(
+            Project.status.not_in(TERMINAL_PROJECT_STATUSES)
+        )
+        if customer_id:
+            open_stmt = open_stmt.where(Project.customer_id == customer_id)
+        open_count = (await self.db.execute(open_stmt)).scalar_one()
+
+        totals_stmt = select(
+            func.coalesce(func.sum(Project.estimated_hpp), 0),
+            func.coalesce(func.sum(Project.actual_hpp), 0),
+            func.coalesce(func.sum(Project.approved_price), 0),
+        )
+        if customer_id:
+            totals_stmt = totals_stmt.where(Project.customer_id == customer_id)
+        est, act, approved = (await self.db.execute(totals_stmt)).one()
+
+        return {
+            "total": sum(by_status.values()),
+            "open": open_count,
+            "estimated_hpp_total": float(est),
+            "actual_hpp_total": float(act),
+            "approved_price_total": float(approved),
+            **{f"status_{k}": v for k, v in by_status.items()},
+        }
 
     async def next_code(self) -> str:
         year = datetime.now(UTC).year
