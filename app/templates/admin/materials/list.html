@@ -1,13 +1,16 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
 
+{% set has_filters = q or category_filter or is_active_filter is not none %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
+
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Materials</h1>
     <p class="page-subtitle">
       {{ page_meta.total }} total
-      {% if stats.active %}· <span class="text-neutral-400">{{ stats.active }} active</span>{% endif %}
+      {% if stats.get('active') %}· <span class="text-noctra-muted">{{ stats.get('active') }} active</span>{% endif %}
     </p>
   </div>
   <div class="page-actions flex gap-2">
@@ -16,30 +19,34 @@
   </div>
 </div>
 
-{# Category chips #}
-<div class="mb-4 flex flex-wrap gap-2 items-center">
-  <a href="/admin/materials{{ qs(category='') }}"
-     class="badge {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-    All
-  </a>
-  {% for c in all_categories %}
-    <a href="/admin/materials{{ qs(category=c) }}"
-       class="badge {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
-      {{ category_labels.get(c, c) }}
-      {% if stats['cat_' ~ c] %}<span class="opacity-70">· {{ stats['cat_' ~ c] }}</span>{% endif %}
+{# ── Category chips ─────────────────────────────────── #}
+<div class="mb-4 overflow-x-auto pb-1">
+  <div class="flex gap-2 items-center w-max">
+    <a href="/admin/materials{{ qs(category='') }}"
+       class="badge whitespace-nowrap {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+      All
     </a>
-  {% endfor %}
-  <a href="/admin/materials{{ qs(is_active='false') }}"
-     class="badge {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
-    Disabled only
-  </a>
+    {% for c in all_categories %}
+      <a href="/admin/materials{{ qs(category=c) }}"
+         class="badge whitespace-nowrap {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
+        {{ category_labels.get(c, c) }}
+        {% if stats.get('cat_' ~ c) %}<span class="opacity-70">· {{ stats.get('cat_' ~ c) }}</span>{% endif %}
+      </a>
+    {% endfor %}
+    <a href="/admin/materials{{ qs(is_active='false') }}"
+       class="badge whitespace-nowrap {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
+      Disabled only
+    </a>
+  </div>
 </div>
 
+{# ── Filter form ────────────────────────────────────── #}
 <form method="get" class="panel mb-4">
   {% if category_filter %}<input type="hidden" name="category" value="{{ category_filter }}" />{% endif %}
   {% if is_active_filter is not none %}
     <input type="hidden" name="is_active" value="{{ 'true' if is_active_filter else 'false' }}" />
   {% endif %}
+  <input type="hidden" name="per_page" value="{{ current_per_page }}" />
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
     <div class="form-row !mb-0 md:col-span-2">
@@ -64,75 +71,160 @@
   </div>
 </form>
 
+{# ── Toolbar ──────────────────────────────────────── #}
 {% if materials %}
-<div class="table-wrap">
-  <table class="table">
-    <thead>
-      <tr>
-        <th class="w-12 text-right">#</th>
-        <th>Code</th>
-        <th>Name</th>
-        <th>Category</th>
-        <th class="text-right">Stock</th>
-        <th class="text-right">Cost / unit</th>
-        <th class="text-right">Stock value</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% set offset = (page_meta.page - 1) * page_meta.size %}
-      {% for m in materials %}
-      {% set stock = stock_map.get(m.id, 0.0) %}
-      {% set cost = m.cost_per_stock_unit %}
-      {% set below_reorder = stock <= (m.reorder_point | float) %}
-      {% set below_min = stock <= (m.min_stock | float) %}
-      <tr class="{% if not m.is_active %}opacity-60{% endif %}
-                 {% if below_min %}bg-red-500/5{% elif below_reorder %}bg-amber-500/5{% endif %}">
-        <!--td class="text-right text-xs text-neutral-500 tabular-nums">{{ offset + loop.index }}</td-->
-        <td class="mono text-xs">{{ m.code }}</td>
-        <td>
-          <div class="font-medium">
-            {{ m.name }}
-            {% if not m.is_active %}
-              <span class="badge badge-neutral ml-1 text-[10px]">Disabled</span>
-            {% endif %}
-          </div>
-          {% if m.brand %}<div class="text-xs text-neutral-500">{{ m.brand }}</div>{% endif %}
-          {% if m.location %}<div class="text-xs text-neutral-600">{{ m.location }}</div>{% endif %}
-        </td>
-        <td>
-          <span class="badge {{ category_tone.get(m.category, 'badge-neutral') }}">
-            {{ category_labels.get(m.category, m.category) }}
-          </span>
-        </td>
-        <td class="text-right font-mono text-sm
-          {% if below_min %}text-noctra-danger font-medium
-          {% elif below_reorder %}text-noctra-warning{% endif %}">
-          {{ '%.2f'|format(stock) }}
-          <span class="text-xs text-neutral-500">{{ m.stock_unit }}</span>
-        </td>
-        <td class="text-right font-mono text-xs">
-          {{ cost | rupiah }}<span class="text-neutral-500">/{{ m.stock_unit }}</span>
-        </td>
-        <td class="text-right font-mono text-sm">{{ (stock * cost) | rupiah }}</td>
-        <td class="text-right">
-          <a href="/admin/materials/{{ m.id }}" class="btn btn-ghost btn-sm">View</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+    {% if has_filters %}· <span class="text-noctra-muted">filtered</span>{% endif %}
+  </div>
+
+  <form method="get" class="per-page-form">
+    {% for k, v in request.query_params.items() %}
+      {% if k not in ('per_page', 'page') and v %}
+        <input type="hidden" name="{{ k }}" value="{{ v }}" />
+      {% endif %}
+    {% endfor %}
+    <label for="per_page_mat">Show</label>
+    <select id="per_page_mat" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
+</div>
+{% endif %}
+
+{% if materials %}
+
+{# ── Desktop Table ──────────────────────────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table w-full">
+      <thead>
+        <tr>
+          <!-- 🐛 FIX: <th>#</th> dihapus -->
+          <th class="text-left w-24">Code</th>
+          <th class="text-left">Name</th>
+          <th class="text-left w-32">Category</th>
+          <th class="text-right w-28">Stock</th>
+          <th class="text-right w-32">Cost / unit</th>
+          <th class="text-right w-32">Stock value</th>
+          <th class="text-right w-16"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in materials %}
+        {% set stock = stock_map.get(m.id, 0.0) %}
+        {% set cost = m.cost_per_stock_unit %}
+        {% set below_reorder = stock <= (m.reorder_point | float) %}
+        {% set below_min = stock <= (m.min_stock | float) %}
+        <tr class="{% if not m.is_active %}opacity-60{% endif %}
+                   {% if below_min %}bg-red-500/5{% elif below_reorder %}bg-amber-500/5{% endif %}">
+          <td class="mono text-xs text-left">{{ m.code }}</td>
+          <td class="text-left">
+            <div class="font-medium">
+              {{ m.name }}
+              {% if not m.is_active %}
+                <span class="badge badge-neutral ml-1 text-[10px]">Disabled</span>
+              {% endif %}
+            </div>
+            {% if m.brand %}<div class="text-xs text-noctra-dim">{{ m.brand }}</div>{% endif %}
+            {% if m.location %}<div class="text-xs text-noctra-faint">{{ m.location }}</div>{% endif %}
+          </td>
+          <td class="text-left">
+            <span class="badge {{ category_tone.get(m.category, 'badge-neutral') }}">
+              {{ category_labels.get(m.category, m.category) }}
+            </span>
+          </td>
+          <td class="text-right">
+            <div class="font-mono text-sm
+              {% if below_min %}text-red-400 font-medium
+              {% elif below_reorder %}text-amber-400{% endif %}">
+              {{ '%.2f'|format(stock) }}
+              <span class="text-xs text-noctra-dim">{{ m.stock_unit }}</span>
+            </div>
+          </td>
+          <td class="text-right font-mono text-xs">
+            {{ cost | rupiah }}<span class="text-noctra-dim">/{{ m.stock_unit }}</span>
+          </td>
+          <td class="text-right font-mono text-sm">{{ (stock * cost) | rupiah }}</td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/materials/{{ m.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Mobile Cards ───────────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for m in materials %}
+  {% set stock = stock_map.get(m.id, 0.0) %}
+  {% set cost = m.cost_per_stock_unit %}
+  {% set below_reorder = stock <= (m.reorder_point | float) %}
+  {% set below_min = stock <= (m.min_stock | float) %}
+  <a href="/admin/materials/{{ m.id }}"
+     class="block panel !p-4 active:scale-[0.995] transition
+            {% if not m.is_active %}opacity-60{% endif %}
+            {% if below_min %}!border-l-2 !border-l-red-500
+            {% elif below_reorder %}!border-l-2 !border-l-amber-500{% endif %}">
+    <div class="flex items-start justify-between gap-2 mb-1">
+      <div class="min-w-0">
+        <div class="font-medium text-sm truncate">{{ m.name }}</div>
+        <div class="mono text-xs text-noctra-dim mt-0.5">{{ m.code }}{% if m.brand %} · {{ m.brand }}{% endif %}</div>
+      </div>
+      <span class="badge {{ category_tone.get(m.category, 'badge-neutral') }} shrink-0">
+        {{ category_labels.get(m.category, m.category) }}
+      </span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 mt-3 text-sm">
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-noctra-dim">Stock</div>
+        <div class="font-mono
+          {% if below_min %}text-red-400 font-medium
+          {% elif below_reorder %}text-amber-400
+          {% else %}text-noctra-text{% endif %}">
+          {{ '%.2f'|format(stock) }} <span class="text-xs text-noctra-dim">{{ m.stock_unit }}</span>
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="text-[10px] uppercase tracking-wider text-noctra-dim">Value</div>
+        <div class="font-mono">{{ (stock * cost) | rupiah }}</div>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
 </div>
 
 {% include "components/pagination.html" %}
 
 {% else %}
-{{ empty_state(
-  'No materials match your filters',
-  'Try adjusting filters or add a new material.',
-  '/admin/materials/new',
-  'New Material',
-  'plus'
-) }}
+
+{% if has_filters %}
+  {{ empty_state(
+    title='No materials match your filters',
+    message='Try adjusting filters or clear them to see all materials.',
+    action_url='/admin/materials',
+    action_label='Clear filters',
+    icon='search'
+  ) }}
+{% else %}
+  {{ empty_state(
+    title='No materials yet',
+    message='Add your first material to start tracking inventory.',
+    action_url='/admin/materials/new',
+    action_label='New Material',
+    icon='plus'
+  ) }}
+{% endif %}
+
 {% endif %}
 {% endblock %}

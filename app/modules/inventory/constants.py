@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from enum import StrEnum
+from zoneinfo import ZoneInfo
+
+from app.core.config import settings
+
+
+def today_local() -> date:
+    """Today's date in the app's configured timezone (not UTC)."""
+    return datetime.now(ZoneInfo(settings.APP_TIMEZONE)).date()
 
 
 # ════════════════════════════════════════════════════════════════
@@ -33,6 +42,7 @@ MATERIAL_CATEGORY_LABELS: dict[str, str] = {
     MaterialCategory.OTHER.value:      "Other",
 }
 
+# Single definition — do NOT redefine below (previous duplication fixed).
 MATERIAL_CATEGORY_TONE: dict[str, str] = {
     MaterialCategory.PRIMER.value:     "badge-info",
     MaterialCategory.BASECOAT.value:   "badge-info",
@@ -45,11 +55,11 @@ MATERIAL_CATEGORY_TONE: dict[str, str] = {
 }
 
 MATERIAL_SORT_OPTIONS: dict[str, str] = {
-    "category_name":  "Category, then name",
-    "name_asc":       "Name (A→Z)",
-    "name_desc":      "Name (Z→A)",
-    "code_asc":       "Code (A→Z)",
-    "created_desc":   "Newest first",
+    "category_name": "Category, then name",
+    "name_asc":      "Name (A→Z)",
+    "name_desc":     "Name (Z→A)",
+    "code_asc":      "Code (A→Z)",
+    "created_desc":  "Newest first",
 }
 
 
@@ -79,15 +89,15 @@ UNITS: list[str] = [u.value for u in Unit]
 # ════════════════════════════════════════════════════════════════
 
 class TransactionType(StrEnum):
-    OPENING = "OPENING"                    # initial stock when system went live
-    PURCHASE = "PURCHASE"                  # + received from supplier
-    CONSUMPTION = "CONSUMPTION"            # - used on a project
-    WASTE = "WASTE"                        # - spilled, dried, contaminated
-    ADJUSTMENT_IN = "ADJUSTMENT_IN"        # + correction (found stock)
-    ADJUSTMENT_OUT = "ADJUSTMENT_OUT"      # - correction (miscount)
-    RETURN = "RETURN"                      # - returned to supplier
-    TRANSFER_IN = "TRANSFER_IN"            # + from another location
-    TRANSFER_OUT = "TRANSFER_OUT"          # - to another location
+    OPENING = "OPENING"
+    PURCHASE = "PURCHASE"
+    CONSUMPTION = "CONSUMPTION"
+    WASTE = "WASTE"
+    ADJUSTMENT_IN = "ADJUSTMENT_IN"
+    ADJUSTMENT_OUT = "ADJUSTMENT_OUT"
+    RETURN = "RETURN"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
 
 
 TRANSACTION_TYPES: list[str] = [t.value for t in TransactionType]
@@ -135,6 +145,20 @@ OUTBOUND_TYPES: frozenset[str] = frozenset({
     TransactionType.RETURN.value,
     TransactionType.TRANSFER_OUT.value,
 })
+
+# Transaction types that end users may record via the API directly.
+# PURCHASE and RETURN are reserved for the PO workflow — the API rejects
+# them unless the request originates from the PO service.
+MANUAL_TRANSACTION_TYPES: list[str] = [
+    TransactionType.CONSUMPTION.value,
+    TransactionType.WASTE.value,
+    TransactionType.ADJUSTMENT_IN.value,
+    TransactionType.ADJUSTMENT_OUT.value,
+    TransactionType.OPENING.value,
+    TransactionType.TRANSFER_IN.value,
+    TransactionType.TRANSFER_OUT.value,
+]
+MANUAL_TRANSACTION_TYPES_SET: frozenset[str] = frozenset(MANUAL_TRANSACTION_TYPES)
 
 
 def signed_quantity(transaction_type: str, quantity: float) -> float:
@@ -195,38 +219,4 @@ class ReferenceType(StrEnum):
     MANUAL = "MANUAL"
 
 
-# ════════════════════════════════════════════════════════════════
-# UI HELPERS
-# ════════════════════════════════════════════════════════════════
-
-MATERIAL_CATEGORY_TONE: dict[str, str] = {
-    MaterialCategory.PRIMER.value:     "badge-info",
-    MaterialCategory.BASECOAT.value:   "badge-info",
-    MaterialCategory.CLEARCOAT.value:  "badge-accent",
-    MaterialCategory.THINNER.value:    "badge-neutral",
-    MaterialCategory.CHEMICAL.value:   "badge-warning",
-    MaterialCategory.CONSUMABLE.value: "badge-neutral",
-    MaterialCategory.PART.value:       "badge-accent",
-    MaterialCategory.OTHER.value:      "badge-neutral",
-}
-
-MATERIAL_SORT_OPTIONS: dict[str, str] = {
-    "category_name": "Category, then name",
-    "name_asc":      "Name (A→Z)",
-    "name_desc":     "Name (Z→A)",
-    "code_asc":      "Code (A→Z)",
-    "created_desc":  "Newest first",
-}
-
-# Material forms can only use a subset of transaction types
-# (PURCHASE and RETURN are reserved for the PO workflow).
-MANUAL_TRANSACTION_TYPES: list[str] = [
-    TransactionType.CONSUMPTION.value,
-    TransactionType.WASTE.value,
-    TransactionType.ADJUSTMENT_IN.value,
-    TransactionType.ADJUSTMENT_OUT.value,
-    TransactionType.OPENING.value,
-    TransactionType.TRANSFER_IN.value,
-    TransactionType.TRANSFER_OUT.value,
-]
-
+REFERENCE_TYPES: list[str] = [r.value for r in ReferenceType]

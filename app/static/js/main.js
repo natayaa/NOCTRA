@@ -4,27 +4,33 @@
 (function () {
   'use strict';
 
+  /* ── Sidebar drawer (mobile) ──────────────────── */
   function initSidebarToggle() {
-    const toggle = document.querySelector('[data-sidebar-toggle]');
+    const toggle  = document.querySelector('[data-sidebar-toggle]');
     const sidebar = document.querySelector('.admin-sidebar');
-    const scrim = document.querySelector('[data-sidebar-scrim]');
+    const scrim   = document.querySelector('[data-sidebar-scrim]');
     if (!toggle || !sidebar) return;
 
+    function syncAria(open) {
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
     function open() {
       sidebar.classList.add('open');
       if (scrim) scrim.classList.add('open');
       document.body.style.overflow = 'hidden';
+      syncAria(true);
     }
     function close() {
       sidebar.classList.remove('open');
       if (scrim) scrim.classList.remove('open');
       document.body.style.overflow = '';
+      syncAria(false);
     }
     function isOpen() { return sidebar.classList.contains('open'); }
 
     toggle.addEventListener('click', (e) => {
       e.preventDefault();
-      if (isOpen()) close(); else open();
+      isOpen() ? close() : open();
     });
 
     if (scrim) scrim.addEventListener('click', close);
@@ -40,6 +46,7 @@
     });
   }
 
+  /* ── Active sidebar link ──────────────────────── */
   function normalize(p) {
     if (!p) return '';
     let s = String(p).split('?')[0].split('#')[0];
@@ -79,15 +86,18 @@
     }
   }
 
+  /* ── Flash binding ────────────────────────────── */
   function bindFlash(el) {
     if (!el || el.__noctraFlashBound) return;
     el.__noctraFlashBound = true;
 
     const closeBtn = el.querySelector('.flash-close');
-    closeBtn && closeBtn.addEventListener('click', () => {
-      if (window.__noctraFlashDismiss) window.__noctraFlashDismiss(el);
-      else el.remove();
-    });
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        if (window.__noctraFlashDismiss) window.__noctraFlashDismiss(el);
+        else el.remove();
+      });
+    }
 
     const delay = parseInt(el.getAttribute('data-auto-dismiss') || '0', 10);
     if (delay > 0) {
@@ -119,6 +129,7 @@
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
+  /* ── Rupiah formatter (global) ────────────────── */
   function formatRupiah(n) {
     if (n == null || isNaN(n)) return 'Rp 0';
     const s = Math.round(Number(n)).toString();
@@ -126,23 +137,51 @@
   }
   window.formatRupiah = formatRupiah;
 
-  function initSlashSearch() {
+  /* ── Search shortcuts + dropdown dismiss ──────── */
+  function initSearchShortcuts() {
+    if (window.__noctraSearchShortcut) return;
+    window.__noctraSearchShortcut = true;
+
+    function focusSearch() {
+      const input = document.querySelector('[data-search-input]');
+      if (!input) return false;
+      input.focus();
+      if (input.select) input.select();
+      return true;
+    }
+
     document.addEventListener('keydown', (e) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
-      const active = document.activeElement;
-      const tag = (active && active.tagName || '').toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-      if (active && active.isContentEditable) return;
-      const search = document.querySelector('[data-search-input]');
-      if (search) {
-        e.preventDefault();
-        search.focus();
-        if (search.select) search.select();
+      // ⌘K / Ctrl+K
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        if (focusSearch()) e.preventDefault();
+        return;
       }
+      // "/" — hanya kalau tidak sedang mengetik di input/textarea/select
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const a = document.activeElement;
+        const tag = (a && a.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        if (a && a.isContentEditable) return;
+        if (focusSearch()) e.preventDefault();
+      }
+    });
+
+    // Escape menutup semua <details> dropdown
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      document.querySelectorAll('details[open]').forEach((d) => (d.open = false));
+    });
+
+    // Klik di luar menutup dropdown user
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('details.user-menu[open]').forEach((d) => {
+        if (!d.contains(e.target)) d.open = false;
+      });
     });
   }
 
-    function initFormGuards() {
+  /* ── Form guards (prevent double-submit) ──────── */
+  function initFormGuards() {
     document.querySelectorAll('form[data-guard]').forEach((form) => {
       if (form.__noctraGuardBound) return;
       form.__noctraGuardBound = true;
@@ -189,12 +228,13 @@
     if (form) resetGuard(form);
   });
 
+  /* ── Boot ─────────────────────────────────────── */
   function initAll() {
     initSidebarToggle();
     initActiveNav();
     initFlash();
     watchFlashMutations();
-    initSlashSearch();
+    initSearchShortcuts();
     initFormGuards();
   }
 

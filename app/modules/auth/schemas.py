@@ -5,8 +5,16 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8, max_length=128)
+    # Login must NOT enforce password strength — registration does that.
+    # A legacy user with a 6-char password would otherwise be locked out
+    # with a 422 before the service ever runs.
+    username: str = Field(..., min_length=1, max_length=50)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class RefreshRequest(BaseModel):
+    # Optional: browser clients send the refresh token via HttpOnly cookie.
+    refresh_token: str | None = None
 
 
 class TokenPair(BaseModel):
@@ -14,6 +22,7 @@ class TokenPair(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+    refresh_expires_in: int
 
 
 class UserBrief(BaseModel):
@@ -33,10 +42,13 @@ class MeResponse(BaseModel):
     is_superuser: bool
     last_login_at: datetime | None
     roles: list[str] = []
+    permissions: list[str] = []
 
     @field_validator("roles", mode="before")
     @classmethod
     def _roles_to_names(cls, v):
-        if v and hasattr(v[0], "name"):
+        if not v:
+            return []
+        if hasattr(v[0], "name"):
             return [r.name for r in v]
         return v

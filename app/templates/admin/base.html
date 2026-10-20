@@ -8,13 +8,13 @@
 {% endblock %}
 
 {% block body %}
-  {% include "components/flash.html" %}
+  {# Flash sudah di-include oleh base.html — jangan duplikasi. #}
 
   <div class="admin-shell">
     {% include "components/sidebar.html" %}
     <div class="sidebar-scrim" data-sidebar-scrim></div>
     {% include "components/topbar.html" %}
-    <main class="admin-main">
+    <main class="admin-main" id="main-content">
       {% block content %}{% endblock %}
     </main>
   </div>

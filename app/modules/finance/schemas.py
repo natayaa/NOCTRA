@@ -8,7 +8,6 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.finance.constants import (
-    ACCOUNT_TYPES,
     EXPENSE_CATEGORIES,
     INVOICE_STATUSES,
     PAYMENT_DIRECTIONS,
@@ -27,6 +26,12 @@ def _clean_optional(v):
     if not s or s.lower() in _EMPTY:
         return None
     return s
+
+
+def _reject_null(v):
+    if v is None:
+        raise ValueError("field cannot be null")
+    return v
 
 
 # ════════════════════════════════════════════════════════════════
@@ -78,7 +83,6 @@ class InvoiceCreate(BaseModel):
 
 
 class InvoiceFromProject(BaseModel):
-    """Auto-generate an invoice from an approved project."""
     project_id: UUID
     issue_date: date | None = None
     due_date: date | None = None
@@ -92,6 +96,13 @@ class InvoiceUpdate(BaseModel):
     tax_rate_pct: float | None = Field(None, ge=0, lt=100)
     notes: str | None = None
     terms: str | None = None
+
+    # issue_date / discount_amount / tax_rate_pct are NON-nullable in the DB.
+    # Reject explicit null so it becomes 422, not a 500 constraint error.
+    @field_validator("issue_date", "discount_amount", "tax_rate_pct")
+    @classmethod
+    def _non_nullable(cls, v):
+        return _reject_null(v)
 
 
 class InvoiceListItem(BaseModel):
@@ -231,6 +242,29 @@ class ExpenseUpdate(BaseModel):
     account_id: UUID | None = None
     reference_number: str | None = None
     notes: str | None = None
+
+    # Non-nullable in DB — reject explicit null with 422.
+    @field_validator("category", "description", "amount", "expense_date")
+    @classmethod
+    def _non_nullable(cls, v):
+        return _reject_null(v)
+
+    @field_validator("category")
+    @classmethod
+    def _validate_category(cls, v):
+        if v is not None and v not in EXPENSE_CATEGORIES:
+            raise ValueError(f"category must be one of {EXPENSE_CATEGORIES}")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def _validate_description(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("description cannot be blank")
+        return v
 
 
 class ExpenseOut(BaseModel):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date, datetime
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
@@ -44,6 +45,7 @@ from app.modules.projects.schemas import (
 )
 from app.modules.projects.service import CostingService, ProjectService
 from app.modules.vehicles.repository import VehicleRepository
+from app.web.admin._perms import read, write
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin/projects", tags=["admin-projects"])
@@ -76,10 +78,14 @@ async def _load_assignees(db) -> list[User]:
     )
 
 
+def _form_error(exc: Exception) -> str:
+    return (getattr(exc, "message", None) or str(exc) or "Invalid input").strip()
+
+
 def _redirect_with_error(project_id: UUID, exc: Exception) -> RedirectResponse:
-    msg = getattr(exc, "message", str(exc)) or "Invalid input"
     return RedirectResponse(
-        url=f"/admin/projects/{project_id}?error={quote(msg, safe='')}",
+        url=f"/admin/projects/{project_id}?error="
+            f"{quote(_form_error(exc), safe='')}",
         status_code=303,
     )
 
@@ -133,7 +139,7 @@ def _safe_uuid(raw) -> UUID | None:
 
 
 # ════════════════════════════════════════════════════════════════
-# LIST
+# LIST + EXPORT
 # ════════════════════════════════════════════════════════════════
 
 @router.get("", response_class=HTMLResponse)
@@ -147,6 +153,7 @@ async def list_view(
     assigned_lead_id: UUID | None = Query(None),
     only_open: bool = Query(False),
     sort: str = Query("created_desc"),
+    _=read(PermissionCode.PROJECT_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from app.modules.customers.models import Customer
@@ -162,13 +169,14 @@ async def list_view(
     customer_ids = {r.customer_id for r in rows if r.customer_id}
     customers: dict = {}
     if customer_ids:
-        c_rows = await db.execute(select(Customer).where(Customer.id.in_(customer_ids)))
-        customers = {c.id: c for c in c_rows.scalars().all()}
+        c_rows = await db.execute(
+            select(Customer.id, Customer.name).where(Customer.id.in_(customer_ids))
+        )
+        customers = {cid: name for cid, name in c_rows.all()}
 
     stats = await repo.stats(customer_id=customer_id)
 
     def _qs(**overrides) -> str:
-        from urllib.parse import urlencode
         base = {
             "q": q or "", "status": status_ or "",
             "customer_id": str(customer_id) if customer_id else "",
@@ -201,10 +209,6 @@ async def list_view(
     )
 
 
-# ════════════════════════════════════════════════════════════════
-# EXPORT CSV
-# ════════════════════════════════════════════════════════════════
-
 @router.get("/export.csv")
 async def export_csv(
     db: DbSession,
@@ -213,6 +217,7 @@ async def export_csv(
     customer_id: UUID | None = Query(None),
     assigned_lead_id: UUID | None = Query(None),
     only_open: bool = Query(False),
+    _=read(PermissionCode.PROJECT_READ),
     current=Depends(get_current_user),
 ):
     from app.modules.customers.models import Customer
@@ -226,21 +231,26 @@ async def export_csv(
     cust_ids = {r.customer_id for r in rows if r.customer_id}
     customers: dict = {}
     if cust_ids:
-        c_rows = await db.execute(select(Customer).where(Customer.id.in_(cust_ids)))
-        customers = {c.id: c for c in c_rows.scalars().all()}
+        c_rows = await db.execute(
+            select(Customer.id, Customer.name, Customer.code).where(
+                Customer.id.in_(cust_ids)
+            )
+        )
+        customers = {cid: (name, code) for cid, name, code in c_rows.all()}
 
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
         "code", "status", "title", "customer_name", "customer_code",
         "quoted_price", "approved_price", "estimated_hpp", "actual_hpp",
-        "margin_pct", "start_date", "target_end_date", "actual_end_date", "created_at",
+        "margin_pct", "start_date", "target_end_date", "actual_end_date",
+        "created_at",
     ])
     for p in rows:
         c = customers.get(p.customer_id)
         writer.writerow([
             p.code, p.status, p.title or "",
-            c.name if c else "", c.code if c else "",
+            c[0] if c else "", c[1] if c else "",
             p.quoted_price or "", p.approved_price or "",
             p.estimated_hpp or 0, p.actual_hpp or 0,
             f"{p.actual_gross_margin_pct:.1f}",
@@ -270,6 +280,7 @@ async def new_view(
     customer_id: UUID | None = Query(None),
     vehicle_id: UUID | None = Query(None),
     inquiry_id: UUID | None = Query(None),
+    _=write(PermissionCode.PROJECT_CREATE),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     preselected_customer = None
@@ -280,7 +291,9 @@ async def new_view(
     if vehicle_id:
         preselected_vehicle = await VehicleRepository(db).get(vehicle_id)
         if preselected_vehicle and not preselected_customer:
-            preselected_customer = await CustomerRepository(db).get(preselected_vehicle.customer_id)
+            preselected_customer = await CustomerRepository(db).get(
+                preselected_vehicle.customer_id
+            )
 
     return templates.render(
         request,
@@ -299,7 +312,12 @@ async def new_view(
 
 
 @router.post("")
-async def create_submit(request: Request, db: DbSession, current=Depends(get_current_user)):
+async def create_submit(
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PROJECT_CREATE),
+    current=Depends(get_current_user),
+):
     form = await request.form()
 
     async def _render_error(msg: str, status_code: int = 400):
@@ -346,14 +364,13 @@ async def create_submit(request: Request, db: DbSession, current=Depends(get_cur
             internal_notes=(form.get("internal_notes") or "").strip() or None,
         )
         project = await ProjectService(db).create(payload, actor=current)
+        await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
         return await _render_error(
-            getattr(exc, "message", str(exc)),
-            getattr(exc, "status_code", 400),
+            _form_error(exc), getattr(exc, "status_code", 400)
         )
 
-    await db.commit()
     return RedirectResponse(url=f"/admin/projects/{project.id}", status_code=303)
 
 
@@ -367,6 +384,7 @@ async def detail_view(
     request: Request,
     db: DbSession,
     error: str | None = Query(None),
+    _=read(PermissionCode.PROJECT_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from app.modules.inquiries.repository import InquiryRepository
@@ -382,18 +400,28 @@ async def detail_view(
         raise NotFoundError("Project not found")
 
     items = await repo.list_items(project_id)
-    customer = await CustomerRepository(db).get(project.customer_id) if project.customer_id else None
-    vehicle = await VehicleRepository(db).get(project.vehicle_id) if project.vehicle_id else None
+    customer = (
+        await CustomerRepository(db).get(project.customer_id)
+        if project.customer_id else None
+    )
+    vehicle = (
+        await VehicleRepository(db).get(project.vehicle_id)
+        if project.vehicle_id else None
+    )
 
     source_inquiry = None
     if project.inquiry_id:
         source_inquiry = await InquiryRepository(db).get(project.inquiry_id)
 
     materials = list(
-        (await db.execute(MaterialRepository(db).query(is_active=True))).scalars().all()
+        (await db.execute(
+            MaterialRepository(db).query(is_active=True)
+        )).scalars().all()
     )
     employees = list(
-        (await db.execute(EmployeeRepository(db).query(is_active=True))).scalars().all()
+        (await db.execute(
+            EmployeeRepository(db).query(is_active=True)
+        )).scalars().all()
     )
     next_statuses = ALLOWED_PROJECT_TRANSITIONS.get(project.status, frozenset())
     overhead_rate = await CostingService(db).overhead_rate_per_hour()
@@ -403,7 +431,6 @@ async def detail_view(
         by_category.setdefault(item.category, []).append(item)
 
     hpp_for_pricing = float(project.actual_hpp or project.estimated_hpp or 0)
-
     service_interest = source_inquiry.service_interest if source_inquiry else None
     vehicle_category = vehicle.category if vehicle else None
 
@@ -452,18 +479,28 @@ async def detail_view(
 
 
 # ════════════════════════════════════════════════════════════════
-# EDIT
+# EDIT / UPDATE / STATUS
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/{project_id}/edit", response_class=HTMLResponse)
 async def edit_view(
-    project_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    project_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PROJECT_UPDATE),
+    current=Depends(get_current_user),
 ) -> HTMLResponse:
     project = await ProjectRepository(db).get(project_id)
     if not project:
         raise NotFoundError("Project not found")
-    customer = await CustomerRepository(db).get(project.customer_id) if project.customer_id else None
-    vehicle = await VehicleRepository(db).get(project.vehicle_id) if project.vehicle_id else None
+    customer = (
+        await CustomerRepository(db).get(project.customer_id)
+        if project.customer_id else None
+    )
+    vehicle = (
+        await VehicleRepository(db).get(project.vehicle_id)
+        if project.vehicle_id else None
+    )
     return templates.render(
         request,
         "admin/projects/form.html",
@@ -482,7 +519,11 @@ async def edit_view(
 
 @router.post("/{project_id}")
 async def update_submit(
-    project_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    project_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PROJECT_UPDATE),
+    current=Depends(get_current_user),
 ):
     form = await request.form()
     try:
@@ -506,13 +547,13 @@ async def update_submit(
     return RedirectResponse(url=f"/admin/projects/{project_id}", status_code=303)
 
 
-# ════════════════════════════════════════════════════════════════
-# STATUS
-# ════════════════════════════════════════════════════════════════
-
 @router.post("/{project_id}/status")
 async def status_submit(
-    project_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    project_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PROJECT_APPROVE),
+    current=Depends(get_current_user),
 ):
     form = await request.form()
     try:
@@ -536,7 +577,11 @@ async def status_submit(
 
 @router.post("/{project_id}/items")
 async def add_item_submit(
-    project_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    project_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PROJECT_COST),
+    current=Depends(get_current_user),
 ):
     form = await request.form()
     try:
@@ -562,7 +607,11 @@ async def add_item_submit(
 
 @router.post("/{project_id}/items/{item_id}")
 async def update_item_submit(
-    project_id: UUID, item_id: UUID, request: Request, db: DbSession,
+    project_id: UUID,
+    item_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PROJECT_COST),
     current=Depends(get_current_user),
 ):
     form = await request.form()
@@ -576,7 +625,9 @@ async def update_item_submit(
             status=(form.get("status") or "").strip() or None,
             notes=(form.get("notes") or "").strip() or None,
         )
-        await CostingService(db).update_item(project_id, item_id, payload, actor=current)
+        await CostingService(db).update_item(
+            project_id, item_id, payload, actor=current
+        )
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
@@ -586,7 +637,11 @@ async def update_item_submit(
 
 @router.post("/{project_id}/items/{item_id}/delete")
 async def delete_item_submit(
-    project_id: UUID, item_id: UUID, request: Request, db: DbSession,
+    project_id: UUID,
+    item_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PROJECT_COST),
     current=Depends(get_current_user),
 ):
     try:
@@ -599,7 +654,7 @@ async def delete_item_submit(
 
 
 # ════════════════════════════════════════════════════════════════
-# SEARCH (HTMX fragments)
+# SEARCH FRAGMENTS
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/api/search-customers", response_class=HTMLResponse)
@@ -607,6 +662,7 @@ async def search_customers_fragment(
     request: Request,
     db: DbSession,
     q: str = Query("", max_length=100),
+    _=read(PermissionCode.PROJECT_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from sqlalchemy import and_, or_
@@ -646,6 +702,7 @@ async def search_vehicles_fragment(
     db: DbSession,
     q: str = Query("", max_length=100),
     customer_id: UUID | None = Query(None),
+    _=read(PermissionCode.PROJECT_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from sqlalchemy import and_, or_

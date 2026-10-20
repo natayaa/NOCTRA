@@ -1,64 +1,162 @@
 {% extends "admin/base.html" %}
-{% block content %}
 {% set fv = form_values or {} %}
 
+{# FIX: distinguish "not submitted" from "user unchecked" #}
+{% if '_has_is_active' in fv %}
+  {% set cur_active = fv.get('is_active') == 'true' %}
+{% else %}
+  {% set cur_active = employee.is_active if employee else True %}
+{% endif %}
+
+{% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">{{ 'New Employee' if mode == 'create' else 'Edit Employee' }}</h1></div>
-  <div class="page-actions"><a href="/admin/employees" class="btn btn-secondary btn-sm">Back</a></div>
+  <div>
+    <h1 class="page-title">{{ 'New Employee' if mode == 'create' else 'Edit Employee' }}</h1>
+    {% if employee %}<p class="page-subtitle mono text-xs">{{ employee.code }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="/admin/employees" class="btn btn-secondary btn-sm">Back</a>
+  </div>
 </div>
 
-{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
-
-<form method="post" action="{{ '/admin/employees' if mode == 'create' else '/admin/employees/' ~ employee.id }}"
-      class="max-w-2xl panel space-y-5" data-guard>
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row"><label class="form-label" for="code">Code</label>
-      <input class="input mono" id="code" name="code" maxlength="32"
-             {% if mode == 'edit' %}disabled{% endif %}
-             placeholder="auto-generated if empty"
-             value="{{ fv.get('code') or (employee.code if employee else '') }}" /></div>
-    <div class="form-row"><label class="form-label" for="name">Name <span class="req">*</span></label>
-      <input class="input" id="name" name="name" required maxlength="255"
-             value="{{ fv.get('name') or (employee.name if employee else '') }}" /></div>
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
   </div>
+</div>
+{% endif %}
 
-  <div class="form-row"><label class="form-label" for="position">Position</label>
-    <input class="input" id="position" name="position" maxlength="100" placeholder="Painter, Prep Technician…"
-           value="{{ fv.get('position') or (employee.position if employee else '') }}" /></div>
+<form method="post"
+      action="{{ '/admin/employees' if mode == 'create' else '/admin/employees/' ~ employee.id }}"
+      class="max-w-2xl space-y-5"
+      data-guard
+      data-shortcut-submit>
 
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row"><label class="form-label" for="hourly_rate">Hourly rate (IDR)</label>
-      <input class="input" type="number" step="1000" id="hourly_rate" name="hourly_rate" required
-             value="{{ fv.get('hourly_rate') or (employee.hourly_rate if employee else '') }}" />
-      <div class="form-hint">Used for labor costing on projects.</div></div>
-    <div class="form-row"><label class="form-label" for="monthly_salary">Monthly salary (IDR)</label>
-      <input class="input" type="number" step="100000" id="monthly_salary" name="monthly_salary"
-             value="{{ fv.get('monthly_salary') or (employee.monthly_salary if employee else '') }}" /></div>
-  </div>
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+  {# Sentinel: signals this form controls is_active #}
+  <input type="hidden" name="_has_is_active" value="1" />
 
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row"><label class="form-label" for="phone">Phone</label>
-      <input class="input" id="phone" name="phone" maxlength="32"
-             value="{{ fv.get('phone') or (employee.phone if employee else '') }}" /></div>
-    <div class="form-row"><label class="form-label" for="joined_at">Joined</label>
-      <input class="input" type="date" id="joined_at" name="joined_at"
-             value="{{ fv.get('joined_at') or (employee.joined_at.strftime('%Y-%m-%d') if employee and employee.joined_at else '') }}" /></div>
-  </div>
+  <section class="panel">
+    <div class="panel-title mb-4">Identity</div>
 
-  <div class="form-row"><label class="form-label" for="notes">Notes</label>
-    <textarea class="textarea" id="notes" name="notes" rows="2">{{ fv.get('notes') or (employee.notes if employee else '') }}</textarea></div>
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="code">Code</label>
+        <input class="input mono" id="code" name="code" maxlength="32"
+               {% if mode == 'edit' %}readonly{% endif %}
+               placeholder="auto-generated if empty"
+               value="{{ fv.get('code', employee.code if employee else '') }}" />
+        {% if mode == 'edit' %}
+          <div class="form-hint">Code is immutable after creation.</div>
+        {% endif %}
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="name">Name <span class="req">*</span></label>
+        <input class="input" id="name" name="name" required maxlength="255"
+               {% if mode == 'create' %}autofocus{% endif %}
+               value="{{ fv.get('name', employee.name if employee else '') }}" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="position">Position</label>
+      <input class="input" id="position" name="position" maxlength="100"
+             placeholder="Painter, Prep Technician…"
+             value="{{ fv.get('position', employee.position if employee else '') }}" />
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title mb-4">Pay</div>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="hourly_rate">Hourly rate (IDR) <span class="req">*</span></label>
+        <input class="input" type="number" step="1000" min="0"
+               id="hourly_rate" name="hourly_rate" required
+               value="{{ fv.get('hourly_rate', employee.hourly_rate if employee else '') }}" />
+        <div class="form-hint">Used for labor costing on projects.</div>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="monthly_salary">Monthly salary (IDR)</label>
+        <input class="input" type="number" step="100000" min="0"
+               id="monthly_salary" name="monthly_salary"
+               value="{{ fv.get('monthly_salary', employee.monthly_salary if employee and employee.monthly_salary is not none else '') }}" />
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title mb-4">Contact & tenure</div>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="phone">Phone</label>
+        <input class="input" type="tel" id="phone" name="phone" maxlength="32"
+               value="{{ fv.get('phone', employee.phone if employee else '') }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="joined_at">Joined</label>
+        <input class="input" type="date" id="joined_at" name="joined_at"
+               value="{{ fv.get('joined_at', employee.joined_at.isoformat() if employee and employee.joined_at else '') }}" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="textarea" id="notes" name="notes" rows="2" maxlength="5000"
+                placeholder="Internal notes about this employee…">{{ fv.get('notes', employee.notes if employee else '') }}</textarea>
+    </div>
+  </section>
 
   {% if mode == 'edit' %}
-  <label class="flex items-center gap-2 text-sm">
-    <input type="checkbox" name="is_active" value="true" {% if employee.is_active %}checked{% endif %} /> Active
-  </label>
+  <section class="panel">
+    <div class="panel-title mb-4">Status</div>
+    <label class="flex items-center gap-2 text-sm cursor-pointer">
+      <input type="checkbox" name="is_active" value="true"
+             {% if cur_active %}checked{% endif %} />
+      Active
+    </label>
+  </section>
   {% endif %}
 
-  <div class="flex gap-2 pt-2">
-    <button class="btn btn-primary">{{ 'Create' if mode == 'create' else 'Save changes' }}</button>
-    <a href="/admin/employees" class="btn btn-secondary">Cancel</a>
+  {# ── Sticky save bar ──────────────────────────────── #}
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Create' if mode == 'create' else 'Save changes' }}
+      </button>
+      <a href="{{ '/admin/employees' if mode == 'create' else '/admin/employees/' ~ employee.id }}"
+         class="btn btn-secondary">Cancel</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
+    </div>
   </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const form = document.querySelector('form[data-shortcut-submit]');
+  if (form) {
+    form.addEventListener('keydown', (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+      if (e.target && e.target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    });
+  }
+})();
+</script>
 {% endblock %}

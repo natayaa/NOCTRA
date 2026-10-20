@@ -6,17 +6,22 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import select
 
 from app.core.constants import PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, paginate, page_params
 from app.modules.auth.dependencies import CurrentUser, require_permission
 from app.modules.inventory.constants import (
+    MANUAL_TRANSACTION_TYPES,
     MATERIAL_CATEGORIES,
     MATERIAL_CATEGORY_LABELS,
+    MATERIAL_SORT_OPTIONS,
+    PO_SORT_OPTIONS,
     PURCHASE_ORDER_STATUSES,
     PURCHASE_ORDER_STATUS_LABELS,
+    TRANSACTION_SORT_OPTIONS,
     TRANSACTION_TYPES,
     TRANSACTION_TYPE_LABELS,
     UNITS,
@@ -75,6 +80,7 @@ async def inventory_catalog() -> InventoryCatalog:
         units=UNITS,
         transaction_types=TRANSACTION_TYPES,
         transaction_type_labels=TRANSACTION_TYPE_LABELS,
+        manual_transaction_types=MANUAL_TRANSACTION_TYPES,
         purchase_order_statuses=PURCHASE_ORDER_STATUSES,
         purchase_order_status_labels=PURCHASE_ORDER_STATUS_LABELS,
     )
@@ -145,9 +151,25 @@ async def list_materials(
     q: str | None = Query(None, max_length=200),
     category: str | None = Query(None),
     is_active: bool | None = Query(True),
+    sort: str = Query(
+        "category_name",
+        description=f"One of: {', '.join(MATERIAL_SORT_OPTIONS)}",
+    ),
     _=Depends(require_permission(PermissionCode.INVENTORY_READ)),
 ) -> Page[MaterialListItem]:
-    stmt = MaterialRepository(db).query(q=q, category=category, is_active=is_active)
+    if category is not None and category not in MATERIAL_CATEGORIES:
+        raise ValidationError(
+            f"Invalid category {category!r}. "
+            f"Choose from: {', '.join(MATERIAL_CATEGORIES)}"
+        )
+    if sort not in MATERIAL_SORT_OPTIONS:
+        raise ValidationError(
+            f"Invalid sort {sort!r}. Choose from: {', '.join(MATERIAL_SORT_OPTIONS)}"
+        )
+
+    stmt = MaterialRepository(db).query(
+        q=q, category=category, is_active=is_active, sort=sort
+    )
     rows, meta = await paginate(db, stmt, params)
     return Page[MaterialListItem](
         items=[MaterialListItem.model_validate(r) for r in rows], meta=meta
@@ -210,7 +232,10 @@ async def update_material_price(
     return MaterialDetail.model_validate(material)
 
 
-@materials_router.get("/{material_id}/transactions", response_model=Page[InventoryTransactionOut])
+@materials_router.get(
+    "/{material_id}/transactions",
+    response_model=Page[InventoryTransactionOut],
+)
 async def list_material_transactions(
     material_id: UUID,
     db: DbSession,
@@ -218,6 +243,12 @@ async def list_material_transactions(
     transaction_type: str | None = Query(None),
     _=Depends(require_permission(PermissionCode.INVENTORY_READ)),
 ) -> Page[InventoryTransactionOut]:
+    if transaction_type is not None and transaction_type not in TRANSACTION_TYPES:
+        raise ValidationError(
+            f"Invalid transaction_type {transaction_type!r}. "
+            f"Choose from: {', '.join(TRANSACTION_TYPES)}"
+        )
+
     stmt = InventoryTransactionRepository(db).query(
         material_id=material_id, transaction_type=transaction_type,
     )
@@ -267,14 +298,30 @@ async def list_transactions(
     reference_type: str | None = Query(None),
     reference_id: UUID | None = Query(None),
     since: datetime | None = Query(None),
+    sort: str = Query(
+        "created_desc",
+        description=f"One of: {', '.join(TRANSACTION_SORT_OPTIONS)}",
+    ),
     _=Depends(require_permission(PermissionCode.INVENTORY_READ)),
 ) -> Page[InventoryTransactionOut]:
+    if transaction_type is not None and transaction_type not in TRANSACTION_TYPES:
+        raise ValidationError(
+            f"Invalid transaction_type {transaction_type!r}. "
+            f"Choose from: {', '.join(TRANSACTION_TYPES)}"
+        )
+    if sort not in TRANSACTION_SORT_OPTIONS:
+        raise ValidationError(
+            f"Invalid sort {sort!r}. "
+            f"Choose from: {', '.join(TRANSACTION_SORT_OPTIONS)}"
+        )
+
     stmt = InventoryTransactionRepository(db).query(
         material_id=material_id,
         transaction_type=transaction_type,
         reference_type=reference_type,
         reference_id=reference_id,
         since=since,
+        sort=sort,
     )
     rows, meta = await paginate(db, stmt, params)
     return Page[InventoryTransactionOut](
@@ -291,9 +338,18 @@ async def record_transaction(
     payload: InventoryTransactionCreate,
     db: DbSession,
     actor: CurrentUser,
+    strict_stock: bool = Query(
+        False,
+        description=(
+            "When true, reject OUTBOUND transactions that would result in "
+            "negative stock. Default false logs a note but allows the write."
+        ),
+    ),
     _=Depends(require_permission(PermissionCode.INVENTORY_TRANSACT)),
 ) -> InventoryTransactionOut:
-    tx = await InventoryService(db).record(payload, actor=actor)
+    tx = await InventoryService(db).record(
+        payload, actor=actor, strict_stock=strict_stock,
+    )
     return InventoryTransactionOut.model_validate(tx)
 
 
@@ -301,19 +357,56 @@ async def record_transaction(
 # PURCHASE ORDERS
 # ════════════════════════════════════════════════════════════════
 
+# @router_dummy := APIRouter  # noqa — placeholder to keep imports tight
+
+
 @purchase_orders_router.get("", response_model=Page[PurchaseOrderListItem])
 async def list_purchase_orders(
     db: DbSession,
     params: PageParams = Depends(page_params),
     status_: str | None = Query(None, alias="status"),
     supplier_id: UUID | None = Query(None),
+    q: str | None = Query(None, max_length=200),
+    sort: str = Query(
+        "created_desc",
+        description=f"One of: {', '.join(PO_SORT_OPTIONS)}",
+    ),
     _=Depends(require_permission(PermissionCode.INVENTORY_READ)),
 ) -> Page[PurchaseOrderListItem]:
-    stmt = PurchaseOrderRepository(db).query(status=status_, supplier_id=supplier_id)
-    rows, meta = await paginate(db, stmt, params)
-    return Page[PurchaseOrderListItem](
-        items=[PurchaseOrderListItem.model_validate(r) for r in rows], meta=meta
+    if status_ is not None and status_ not in PURCHASE_ORDER_STATUSES:
+        raise ValidationError(
+            f"Invalid status {status_!r}. "
+            f"Choose from: {', '.join(PURCHASE_ORDER_STATUSES)}"
+        )
+    if sort not in PO_SORT_OPTIONS:
+        raise ValidationError(
+            f"Invalid sort {sort!r}. Choose from: {', '.join(PO_SORT_OPTIONS)}"
+        )
+
+    stmt = PurchaseOrderRepository(db).query(
+        status=status_, supplier_id=supplier_id, q=q, sort=sort,
     )
+    rows, meta = await paginate(db, stmt, params)
+
+    # Batch-fetch supplier names for the page (1 extra query).
+    from app.modules.inventory.models import Supplier
+
+    sids = {r.supplier_id for r in rows if r.supplier_id}
+    suppliers: dict = {}
+    if sids:
+        s_rows = await db.execute(
+            select(Supplier.id, Supplier.name).where(Supplier.id.in_(sids))
+        )
+        suppliers = {sid: name for sid, name in s_rows.all()}
+
+    items = []
+    for r in rows:
+        item = PurchaseOrderListItem.model_validate(r)
+        if r.supplier_id in suppliers:
+            item.supplier_name = suppliers[r.supplier_id]
+        items.append(item)
+
+    return Page[PurchaseOrderListItem](items=items, meta=meta)
 
 
 @purchase_orders_router.post(

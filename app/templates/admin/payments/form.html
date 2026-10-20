@@ -1,147 +1,155 @@
 {% extends "admin/base.html" %}
 {% block content %}
+{% set today_date = today() if today is callable else today %}
+
 <div class="page-header">
   <div>
-    <h1 class="page-title">Record {{ 'payment in' if direction == 'IN' else 'payment out' }}</h1>
+    <h1 class="page-title">Record {{ 'Payment In' if direction == 'IN' else 'Payment Out' }}</h1>
+    <p class="page-subtitle">Catat uang masuk/keluar dari customer atau supplier.</p>
   </div>
   <div class="page-actions"><a href="/admin/payments" class="btn btn-secondary btn-sm">Back</a></div>
 </div>
 
 {% if error %}
-<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">{{ error }}</div>
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="text-sm text-red-200">{{ error }}</div>
 </div>
 {% endif %}
 
-<form method="post" action="/admin/payments" class="max-w-2xl panel space-y-5" data-guard>
+<form method="post" action="/admin/payments" class="max-w-3xl space-y-5" data-guard data-shortcut-submit>
   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
   <input type="hidden" name="direction" value="{{ direction }}" />
-
-  {# Hidden reference_type / reference_id — set by JS when an invoice is picked,
-  or preserved from the URL when arriving via the "Record DP" button. #}
   <input type="hidden" name="reference_type" id="reference_type" value="{{ reference_type or '' }}" />
   <input type="hidden" name="reference_id" id="reference_id" value="{{ reference_id or '' }}" />
 
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="method">Method</label>
-      <select class="select" id="method" name="method">
-        {% for m in payment_methods %}<option value="{{ m }}">{{ payment_method_labels.get(m, m) }}</option>{% endfor %}
-      </select>
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Detail Pembayaran</h2>
+      <span class="text-xs text-noctra-dim">Wajib diisi</span>
     </div>
-    <div class="form-row">
-      <label class="form-label" for="amount">Amount (IDR) <span class="req">*</span></label>
-      <input class="input" type="number" id="amount" name="amount" required />
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="method">Metode</label>
+        <select class="select" id="method" name="method">
+          {% for m in payment_methods %}<option value="{{ m }}">{{ payment_method_labels.get(m, m) }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="amount">Nominal (IDR) <span class="req">*</span></label>
+        <input class="input" type="number" id="amount" name="amount" required />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="payment_date">Tanggal Bayar <span class="req">*</span></label>
+        <input class="input" type="date" id="payment_date" name="payment_date" required value="{{ today_date.isoformat() }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="account_id">Akun (Kas / Bank)</label>
+        <select class="select" id="account_id" name="account_id">
+          <option value="">—</option>
+          {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
+        </select>
+      </div>
     </div>
-  </div>
+  </section>
 
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="payment_date">Payment date <span class="req">*</span></label>
-      <input class="input" type="date" id="payment_date" name="payment_date" required value="{{ today }}" />
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">{{ 'Customer & Invoice' if direction == 'IN' else 'Supplier' }}</h2>
     </div>
-    <div class="form-row">
-      <label class="form-label" for="account_id">Account</label>
-      <select class="select" id="account_id" name="account_id">
-        <option value="">—</option>
-        {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
-      </select>
-    </div>
-  </div>
 
-  {# ═══════════════ IN: customer + invoice picker ═══════════════ #}
-  {% if direction == 'IN' %}
+    {% if direction == 'IN' %}
+      {% if reference_type == 'PROJECT' and reference_id %}
+      <div class="mb-4 rounded-lg p-3 text-xs flex items-start gap-2" style="border: 1px solid rgba(14,165,233,0.3); background: rgba(14,165,233,0.05);">
+        <span class="text-noctra-muted">
+          Mencatat <strong>DP (Down Payment)</strong> untuk Project ID <span class="mono font-semibold">{{ reference_id }}</span>.
+          Uang ini otomatis akan memotong tagihan saat Invoice dibuat.
+        </span>
+      </div>
+      {% endif %}
 
-  {# ── Preset context: arriving from project page as a DP ── #}
-  {% if reference_type == 'PROJECT' and reference_id %}
-  <div class="panel text-xs text-neutral-400">
-    Recording a <strong>DP</strong> against project
-    <span class="mono">{{ reference_id }}</span>.
-    It will be auto-applied when an invoice is created for that project.
-  </div>
-  {% endif %}
+      <div class="form-row" data-party-picker>
+        <label class="form-label" for="customer_id">Customer</label>
+        {% if customers %}
+        <input class="input mb-2" type="text" placeholder="Cari nama customer…" data-party-search autocomplete="off" />
+        <select class="select" id="customer_id" name="customer_id" data-party-select>
+          <option value="">— Pilih Customer —</option>
+          {% for c in customers %}
+          <option value="{{ c.id }}" data-search="{{ ((c.code or '') ~ ' ' ~ c.name)|lower }}" {% if customer_id and customer_id|string==c.id|string %}selected{% endif %}>
+            {% if c.code %}{{ c.code }} — {% endif %}{{ c.name }}
+          </option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <p class="text-noctra-dim text-xs">Belum ada customer. <a href="/admin/customers/new" class="text-noctra-accent hover:underline">Buat dulu</a>.</p>
+        {% endif %}
+      </div>
 
-  <div class="form-row" data-party-picker>
-    <label class="form-label" for="customer_id">Customer</label>
-    {% if customers %}
-    <input class="input mb-2" type="text" placeholder="Type to filter…" data-party-search autocomplete="off" />
-    <select class="select" id="customer_id" name="customer_id" data-party-select>
-      <option value="">— None —</option>
-      {% for c in customers %}
-      <option value="{{ c.id }}" data-search="{{ ((c.code or '') ~ ' ' ~ c.name)|lower }}" {% if customer_id and
-        customer_id|string==c.id|string %}selected{% endif %}>
-        {% if c.code %}{{ c.code }} — {% endif %}{{ c.name }}
-      </option>
-      {% endfor %}
-    </select>
+      {% if reference_type != 'PROJECT' %}
+      <div class="form-row mt-5" id="invoice-picker-row">
+        <label class="form-label" for="invoice_id">Kaitkan ke Invoice <span class="text-noctra-dim text-xs">(opsional — kosongkan jika hanya DP/Advance)</span></label>
+        <select class="select" id="invoice_id" name="__invoice_picker">
+          <option value="">— Customer Advance (Belum ada invoice) —</option>
+          {% for inv in open_invoices %}
+          <option value="{{ inv.id }}" data-customer="{{ inv.customer_id }}" data-balance="{{ inv.balance }}">
+            {{ inv.code }} — {{ inv.customer_name }} — sisa Rp {{ '{:,.0f}'.format(inv.balance) }}
+          </option>
+          {% endfor %}
+        </select>
+        <p class="text-xs text-noctra-accent mt-1 font-medium" id="invoice-hint"></p>
+      </div>
+      {% endif %}
+
     {% else %}
-    <p class="text-neutral-500 text-xs">
-      No customers in the system yet.
-      <a href="/admin/customers/new" class="text-noctra-accent hover:underline">Create one first</a>.
-    </p>
+      <div class="form-row" data-party-picker>
+        <label class="form-label" for="supplier_id">Supplier</label>
+        {% if suppliers %}
+        <input class="input mb-2" type="text" placeholder="Cari supplier…" data-party-search autocomplete="off" />
+        <select class="select" id="supplier_id" name="supplier_id" data-party-select>
+          <option value="">— Pilih Supplier —</option>
+          {% for s in suppliers %}
+          <option value="{{ s.id }}" data-search="{{ ((s.code or '') ~ ' ' ~ s.name)|lower }}">
+            {% if s.code %}{{ s.code }} — {% endif %}{{ s.name }}
+          </option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <p class="text-noctra-dim text-xs">Belum ada supplier. <a href="/admin/suppliers/new" class="text-noctra-accent hover:underline">Buat dulu</a>.</p>
+        {% endif %}
+      </div>
     {% endif %}
-  </div>
+  </section>
 
-  {# ── Invoice picker — only shown when recording against an invoice ── #}
-  {% if reference_type != 'PROJECT' %}
-  <div class="form-row" id="invoice-picker-row">
-    <label class="form-label" for="invoice_id">Apply to invoice <span class="text-neutral-500 text-xs">(optional — leave
-        blank for a customer advance)</span></label>
-    <select class="select" id="invoice_id" name="__invoice_picker">
-      <option value="">— Customer advance (unapplied) —</option>
-      {% for inv in open_invoices %}
-      <option value="{{ inv.id }}" data-customer="{{ inv.customer_id }}" data-balance="{{ inv.balance }}">
-        {{ inv.code }} — {{ inv.customer_name }} — balance Rp {{ '{:,.0f}'.format(inv.balance) }}
-      </option>
-      {% endfor %}
-    </select>
-    <p class="text-xs text-neutral-500 mt-1" id="invoice-hint"></p>
-  </div>
-  {% endif %}
-
-  {% else %}
-  {# ── OUT: supplier picker ── #}
-  <div class="form-row" data-party-picker>
-    <label class="form-label" for="supplier_id">Supplier</label>
-    {% if suppliers %}
-    <input class="input mb-2" type="text" placeholder="Type to filter…" data-party-search autocomplete="off" />
-    <select class="select" id="supplier_id" name="supplier_id" data-party-select>
-      <option value="">— None —</option>
-      {% for s in suppliers %}
-      <option value="{{ s.id }}" data-search="{{ ((s.code or '') ~ ' ' ~ s.name)|lower }}">
-        {% if s.code %}{{ s.code }} — {% endif %}{{ s.name }}
-      </option>
-      {% endfor %}
-    </select>
-    {% else %}
-    <p class="text-neutral-500 text-xs">
-      No suppliers yet.
-      <a href="/admin/suppliers/new" class="text-noctra-accent hover:underline">Create one first</a>.
-    </p>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="reference_number">Reference number</label>
-      <input class="input" id="reference_number" name="reference_number" maxlength="100"
-        placeholder="bank ref, receipt no." />
+  <section class="panel">
+    <div class="panel-title mb-4">Info Tambahan</div>
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="reference_number">No. Referensi / Bukti</label>
+        <input class="input" id="reference_number" name="reference_number" maxlength="100" placeholder="No. transfer, dll" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="notes">Catatan</label>
+        <input class="input" id="notes" name="notes" placeholder="Catatan internal…" />
+      </div>
     </div>
-    <div class="form-row">
-      <label class="form-label" for="notes">Notes</label>
-      <input class="input" id="notes" name="notes" />
-    </div>
-  </div>
+  </section>
 
-  <div class="flex gap-2 pt-2">
-    <button class="btn btn-primary">Record payment</button>
-    <a href="/admin/payments" class="btn btn-secondary">Cancel</a>
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg" style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%); backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">Simpan Pembayaran</button>
+      <a href="/admin/payments" class="btn btn-secondary">Batal</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
+    </div>
   </div>
 </form>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-  // ── Party picker filter (customer/supplier) ─────────────────
+(() => {
   document.querySelectorAll('[data-party-picker]').forEach(picker => {
     const search = picker.querySelector('[data-party-search]');
     const select = picker.querySelector('[data-party-select]');
@@ -156,14 +164,11 @@
       for (const opt of all.slice(1)) {
         if (!q || opt.dataset.search.includes(q)) select.appendChild(opt);
       }
-      if (Array.from(select.options).some(o => o.value === currentValue)) {
-        select.value = currentValue;
-      }
+      if (Array.from(select.options).some(o => o.value === currentValue)) select.value = currentValue;
       select.dispatchEvent(new Event('change'));
     });
   });
 
-  // ── Invoice picker ─────────────────────────────────────────
   const customerSelect = document.getElementById('customer_id');
   const invoiceSelect = document.getElementById('invoice_id');
   const amountInput = document.getElementById('amount');
@@ -177,23 +182,16 @@
     const current = invoiceSelect.value;
     const options = Array.from(invoiceSelect.options);
 
-    // Show only invoices for the selected customer (or all if none picked).
-    let lastSelected = '';
     options.forEach((opt, idx) => {
-      if (idx === 0) return; // placeholder
+      if (idx === 0) return;
       const matches = !customerId || opt.dataset.customer === customerId;
       opt.hidden = !matches;
       opt.disabled = !matches;
     });
 
-    // If the currently selected invoice no longer matches, clear it.
     if (current) {
       const sel = invoiceSelect.querySelector(`option[value="${current}"]`);
-      if (sel && (sel.hidden || sel.disabled)) {
-        invoiceSelect.value = '';
-      } else {
-        lastSelected = current;
-      }
+      if (sel && (sel.hidden || sel.disabled)) invoiceSelect.value = '';
     }
     updateFromInvoice();
   }
@@ -202,34 +200,26 @@
     if (!invoiceSelect) return;
     const opt = invoiceSelect.options[invoiceSelect.selectedIndex];
     if (!opt || !opt.value) {
-      refTypeInput.value = '';
-      refIdInput.value = '';
+      refTypeInput.value = ''; refIdInput.value = '';
       if (invoiceHint) invoiceHint.textContent = '';
       return;
     }
     const rawBalance = parseFloat(opt.dataset.balance || '0');
-    refTypeInput.value = 'INVOICE';
-    refIdInput.value = opt.value;
+    refTypeInput.value = 'INVOICE'; refIdInput.value = opt.value;
 
     if (rawBalance > 0) {
-      const rounded = Math.round(rawBalance);
-      amountInput.value = rounded > 0 ? rounded : 1;   // never 0
-      if (invoiceHint) {
-        invoiceHint.textContent =
-          `Outstanding balance: Rp ${rawBalance.toLocaleString('id-ID')}`;
-      }
+      if (amountInput) amountInput.value = Math.round(rawBalance);
+      if (invoiceHint) invoiceHint.textContent = `Sisa tagihan invoice ini: Rp ${rawBalance.toLocaleString('id-ID')}`;
     } else if (invoiceHint) {
-      invoiceHint.textContent = 'This invoice has no outstanding balance.';
+      invoiceHint.textContent = 'Invoice ini sudah lunas.';
     }
   }
 
-  if (customerSelect) {
-    customerSelect.addEventListener('change', refreshInvoiceOptions);
-  }
+  if (customerSelect) customerSelect.addEventListener('change', refreshInvoiceOptions);
   if (invoiceSelect) {
     invoiceSelect.addEventListener('change', updateFromInvoice);
-    // Initial pass — respects any pre-selected values.
     refreshInvoiceOptions();
   }
+})();
 </script>
 {% endblock %}

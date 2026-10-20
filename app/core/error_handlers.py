@@ -41,9 +41,17 @@ def register_error_handlers(app: FastAPI) -> None:
     async def _validation_error(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        errors = exc.errors()
+        if settings.is_production:
+            # `input` and `ctx` may contain secrets (passwords, tokens).
+            # Strip them outside development/test.
+            errors = [
+                {k: v for k, v in e.items() if k not in ("input", "ctx")}
+                for e in errors
+            ]
         return JSONResponse(
             status_code=422,
-            content=_payload("validation_error", "Invalid input", details=exc.errors()),
+            content=_payload("validation_error", "Invalid input", details=errors),
         )
 
     @app.exception_handler(StarletteHTTPException)

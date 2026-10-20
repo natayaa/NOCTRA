@@ -11,12 +11,12 @@ from app.core.deps import DbSession
 from app.core.exceptions import NotFoundError
 from app.core.pagination import Page, PageParams, paginate, page_params
 from app.modules.auth.dependencies import CurrentUser, require_permission
+from app.modules.pricing.constants import rule_specificity
 from app.modules.pricing.repository import (
     PricingRuleRepository,
     PricingSnapshotRepository,
 )
 from app.modules.pricing.schemas import (
-    MarginEvaluation,
     PricingPreviewRequest,
     PricingPreviewResponse,
     PricingRuleCreate,
@@ -44,6 +44,9 @@ async def preview_pricing(
     """
     Given an HPP and (optionally) a proposed price, return the
     recommendation and — if a proposed price is given — an evaluation.
+
+    `PricingService` memoizes rule resolution internally so the second
+    call (evaluate) reuses the resolved rule from the first (recommend).
     """
     svc = PricingService(db)
     rec = await svc.recommend(
@@ -83,7 +86,11 @@ async def list_rules(
     )
 
 
-@router.post("/rules", response_model=PricingRuleDetail, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/rules",
+    response_model=PricingRuleDetail,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_rule(
     payload: PricingRuleCreate,
     db: DbSession,
@@ -91,7 +98,11 @@ async def create_rule(
     _=Depends(require_permission(PermissionCode.PRICING_WRITE)),
 ) -> PricingRuleDetail:
     rule = await PricingService(db).create_rule(payload, actor=actor)
-    return PricingRuleDetail.model_validate(rule)
+    detail = PricingRuleDetail.model_validate(rule)
+    detail.specificity = rule_specificity(
+        rule.service_interest, rule.vehicle_category
+    )
+    return detail
 
 
 @router.get("/rules/{rule_id}", response_model=PricingRuleDetail)
@@ -104,13 +115,9 @@ async def get_rule(
     if not rule:
         raise NotFoundError("Pricing rule not found")
     detail = PricingRuleDetail.model_validate(rule)
-    # Compute specificity for display
-    spec = 0
-    if rule.service_interest:
-        spec += 2
-    if rule.vehicle_category:
-        spec += 1
-    detail.specificity = spec
+    detail.specificity = rule_specificity(
+        rule.service_interest, rule.vehicle_category
+    )
     return detail
 
 
@@ -123,7 +130,11 @@ async def update_rule(
     _=Depends(require_permission(PermissionCode.PRICING_WRITE)),
 ) -> PricingRuleDetail:
     rule = await PricingService(db).update_rule(rule_id, payload, actor=actor)
-    return PricingRuleDetail.model_validate(rule)
+    detail = PricingRuleDetail.model_validate(rule)
+    detail.specificity = rule_specificity(
+        rule.service_interest, rule.vehicle_category
+    )
+    return detail
 
 
 @router.delete("/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -148,7 +159,9 @@ async def list_snapshots(
     project_id: UUID | None = Query(None),
     _=Depends(require_permission(PermissionCode.PRICING_READ)),
 ) -> Page[PricingSnapshotOut]:
-    stmt = PricingSnapshotRepository(db).query(inquiry_id=inquiry_id, project_id=project_id)
+    stmt = PricingSnapshotRepository(db).query(
+        inquiry_id=inquiry_id, project_id=project_id,
+    )
     rows, meta = await paginate(db, stmt, params)
     return Page[PricingSnapshotOut](
         items=[PricingSnapshotOut.model_validate(r) for r in rows], meta=meta

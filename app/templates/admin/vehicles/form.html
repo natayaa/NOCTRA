@@ -16,162 +16,218 @@
 </div>
 
 {% if error %}
-<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">{{ error }}</div>
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
+  </div>
 </div>
 {% endif %}
 
 <form method="post"
       action="{{ '/admin/vehicles' if mode == 'create' else '/admin/vehicles/' ~ vehicle.id }}"
-      class="max-w-3xl panel space-y-5" data-guard>
+      class="max-w-3xl space-y-5"
+      data-guard
+      data-shortcut-submit>
 
-  {# ── Owner ─────────────────────────────────────── #}
-  {% if mode == 'create' %}
-    {% if preselected_customer %}
-    <div class="form-row">
-      <label class="form-label">Owner</label>
-      <input class="input" disabled
-             value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
-      <input type="hidden" name="customer_id" value="{{ preselected_customer.id }}" />
+  {# ── Owner ──────────────────────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Owner</h2>
+      <span class="text-xs text-noctra-dim">
+        {% if mode == 'create' %}Required{% else %}Read-only{% endif %}
+      </span>
     </div>
-    {% else %}
-    <div class="form-row">
-      <label class="form-label" for="customer_search">Customer <span class="req">*</span></label>
-      <input type="hidden" name="customer_id" id="customer_id_input"
-             value="{{ fv.get('customer_id') or '' }}" required />
 
-      <div id="customer_display"
-           class="hidden panel mb-2 flex items-center justify-between">
-        <div>
-          <div class="font-medium text-sm" id="customer_name_display"></div>
-          <div class="mono text-xs text-neutral-500" id="customer_code_display"></div>
+    {% if mode == 'create' %}
+      {% if preselected_customer %}
+      <div class="form-row !mb-0">
+        <label class="form-label">Customer</label>
+        <input class="input" disabled
+               value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
+        <input type="hidden" name="customer_id" value="{{ preselected_customer.id }}" />
+      </div>
+      {% else %}
+      <div class="form-row !mb-0" data-customer-picker>
+        <label class="form-label" for="customer_search">Customer <span class="req">*</span></label>
+        <input type="hidden" name="customer_id" id="customer_id_input"
+               value="{{ fv.get('customer_id') or '' }}" required />
+
+        <div id="customer_display" class="hidden panel !p-3 mb-2 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="font-medium text-sm" id="customer_name_display"></div>
+            <div class="mono text-xs text-noctra-dim" id="customer_code_display"></div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" data-clear-customer>Change</button>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="clearCustomer()">Change</button>
-      </div>
 
-      <div id="customer_picker">
-        <input class="input" id="customer_search" name="q"
-               placeholder="Type name, phone, or code…" autocomplete="off"
-               hx-get="/admin/vehicles/api/search-customers"
-               hx-trigger="input changed delay:200ms, focus"
-               hx-target="#customer_options" hx-swap="innerHTML"
-               hx-on::before-request="document.getElementById('customer_options').classList.remove('hidden')" />
-
-        <div id="customer_options"
-             class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden"></div>
+        <div id="customer_picker">
+          <input class="input" id="customer_search" name="q"
+                 placeholder="Type name, phone, or code…" autocomplete="off"
+                 hx-get="/admin/vehicles/api/search-customers"
+                 hx-trigger="input changed delay:200ms, focus"
+                 hx-target="#customer_options" hx-swap="innerHTML" />
+          <div id="customer_options"
+               class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden"></div>
+        </div>
+        <div class="form-hint">Type at least 2 characters to search.</div>
       </div>
-      <div class="form-hint">Type at least 2 characters to search.</div>
+      {% endif %}
+    {% else %}
+    <div class="form-row !mb-0">
+      <label class="form-label">Customer</label>
+      <input class="input" disabled
+             value="{{ preselected_customer.name if preselected_customer else '—' }}{% if preselected_customer %} ({{ preselected_customer.code }}){% endif %}" />
     </div>
     {% endif %}
-  {% else %}
-  <div class="form-row">
-    <label class="form-label">Owner</label>
-    <input class="input" disabled
-           value="{{ preselected_customer.name if preselected_customer else '—' }}{% if preselected_customer %} ({{ preselected_customer.code }}){% endif %}" />
-  </div>
-  {% endif %}
+  </section>
 
-  {# ── Specs ─────────────────────────────────────── #}
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="brand">Brand <span class="req">*</span></label>
-      <input class="input" id="brand" name="brand" required maxlength="100"
-             list="brand-suggestions" autocomplete="off"
-             value="{{ fv.get('brand') or (vehicle.brand if vehicle else '') }}" />
-      <datalist id="brand-suggestions">
-        {% for b in brands_catalog %}<option value="{{ b.name }}"></option>{% endfor %}
-      </datalist>
+  {# ── Specification ──────────────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Specification</h2>
+      <span class="text-xs text-noctra-dim">Vehicle details</span>
     </div>
-    <div class="form-row">
-      <label class="form-label" for="model">Model <span class="req">*</span></label>
-      <input class="input" id="model" name="model" required maxlength="120"
-             value="{{ fv.get('model') or (vehicle.model if vehicle else '') }}" />
-    </div>
-    <div class="form-row">
-      <label class="form-label" for="year">Year</label>
-      <input class="input" type="number" id="year" name="year"
-             min="1900" max="2100"
-             value="{{ fv.get('year') or (vehicle.year if vehicle else '') or '' }}" />
-    </div>
-    <div class="form-row">
-      <label class="form-label" for="color">Color</label>
-      <input class="input" id="color" name="color" maxlength="64"
-             value="{{ fv.get('color') or (vehicle.color if vehicle else '') }}" />
-    </div>
-    <div class="form-row">
-      <label class="form-label" for="plate_number">Plate number</label>
-      <input class="input mono" id="plate_number" name="plate_number" maxlength="20"
-             value="{{ fv.get('plate_number') or (vehicle.plate_number if vehicle else '') }}" />
-      <div class="form-hint">Will be uppercased automatically.</div>
-    </div>
-    <div class="form-row">
-      <label class="form-label" for="category">Category</label>
-      <select class="select" id="category" name="category">
-        <option value="">—</option>
-        {% set cur_cat = fv.get('category') or (vehicle.category if vehicle else '') %}
-        {% for c in categories %}
-          <option value="{{ c }}" {% if cur_cat == c %}selected{% endif %}>
-            {{ category_labels.get(c, c) }}
-          </option>
-        {% endfor %}
-      </select>
-    </div>
-  </div>
 
-  {# ── Identifiers ───────────────────────────────── #}
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="vin">VIN</label>
-      <input class="input mono" id="vin" name="vin" maxlength="64"
-             value="{{ fv.get('vin') or (vehicle.vin if vehicle else '') }}" />
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="brand">Brand <span class="req">*</span></label>
+        <input class="input" id="brand" name="brand" required maxlength="100"
+               list="brand-suggestions" autocomplete="off"
+               value="{{ fv.get('brand') or (vehicle.brand if vehicle else '') }}" />
+        <datalist id="brand-suggestions">
+          {% for b in brands_catalog %}<option value="{{ b.name }}"></option>{% endfor %}
+        </datalist>
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="model">Model <span class="req">*</span></label>
+        <input class="input" id="model" name="model" required maxlength="120"
+               value="{{ fv.get('model') or (vehicle.model if vehicle else '') }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="year">Year</label>
+        <input class="input" type="number" id="year" name="year"
+               min="1900" max="2100" inputmode="numeric"
+               value="{{ fv.get('year') or (vehicle.year if vehicle else '') or '' }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="color">Color</label>
+        <input class="input" id="color" name="color" maxlength="64"
+               value="{{ fv.get('color') or (vehicle.color if vehicle else '') }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="plate_number">Plate number</label>
+        <input class="input mono uppercase" id="plate_number" name="plate_number" maxlength="20"
+               value="{{ fv.get('plate_number') or (vehicle.plate_number if vehicle else '') }}" />
+        <div class="form-hint">Will be uppercased automatically.</div>
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="category">Category</label>
+        <select class="select" id="category" name="category">
+          <option value="">—</option>
+          {% set cur_cat = fv.get('category') or (vehicle.category if vehicle else '') %}
+          {% for c in categories %}
+            <option value="{{ c }}" {% if cur_cat == c %}selected{% endif %}>
+              {{ category_labels.get(c, c) }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
-    <div class="form-row">
-      <label class="form-label" for="engine_number">Engine number</label>
-      <input class="input mono" id="engine_number" name="engine_number" maxlength="64"
-             value="{{ fv.get('engine_number') or (vehicle.engine_number if vehicle else '') }}" />
-    </div>
-  </div>
+  </section>
 
-  <div class="form-row">
-    <label class="form-label" for="notes">Notes</label>
-    <textarea class="textarea" id="notes" name="notes"
-              maxlength="5000">{{ fv.get('notes') or (vehicle.notes if vehicle else '') }}</textarea>
-  </div>
+  {# ── Identifiers ────────────────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Identifiers</h2>
+      <span class="text-xs text-noctra-dim">VIN &amp; engine</span>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="vin">VIN</label>
+        <input class="input mono" id="vin" name="vin" maxlength="64"
+               value="{{ fv.get('vin') or (vehicle.vin if vehicle else '') }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="engine_number">Engine number</label>
+        <input class="input mono" id="engine_number" name="engine_number" maxlength="64"
+               value="{{ fv.get('engine_number') or (vehicle.engine_number if vehicle else '') }}" />
+      </div>
+    </div>
+  </section>
+
+  {# ── Notes ──────────────────────────────────────── #}
+  <section class="panel">
+    <div class="panel-title mb-4">Notes</div>
+    <div class="form-row !mb-0">
+      <textarea class="textarea" id="notes" name="notes"
+                maxlength="5000" rows="3"
+                placeholder="Internal notes about this vehicle…">{{ fv.get('notes') or (vehicle.notes if vehicle else '') }}</textarea>
+    </div>
+  </section>
 
   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
 
-  <div class="flex gap-2 pt-2">
-    <button type="submit" class="btn btn-primary">
-      {{ 'Create' if mode == 'create' else 'Save changes' }}
-    </button>
-    <a href="{{ '/admin/vehicles' if mode == 'create' else '/admin/vehicles/' ~ vehicle.id }}"
-       class="btn btn-secondary">Cancel</a>
+  {# ── Sticky save bar ────────────────────────────── #}
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Create' if mode == 'create' else 'Save changes' }}
+      </button>
+      <a href="{{ '/admin/vehicles' if mode == 'create' else '/admin/vehicles/' ~ vehicle.id }}"
+         class="btn btn-secondary">Cancel</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
+    </div>
   </div>
 </form>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-  // ── Customer picker ──────────────────────────────
+/* ── Customer picker (scoped, no global pollution) ── */
+(() => {
+  const picker = document.querySelector('[data-customer-picker]');
+  if (!picker) return;
+
+  const idInput   = document.getElementById('customer_id_input');
+  const nameDisp  = document.getElementById('customer_name_display');
+  const codeDisp  = document.getElementById('customer_code_display');
+  const display   = document.getElementById('customer_display');
+  const pickerEl  = document.getElementById('customer_picker');
+  const options   = document.getElementById('customer_options');
+  const searchIn  = document.getElementById('customer_search');
+  const clearBtn  = picker.querySelector('[data-clear-customer]');
+
   function selectCustomer(id, name, code) {
-    document.getElementById('customer_id_input').value = id;
-    document.getElementById('customer_name_display').textContent = name;
-    document.getElementById('customer_code_display').textContent = code;
-    document.getElementById('customer_display').classList.remove('hidden');
-    document.getElementById('customer_picker').classList.add('hidden');
-    document.getElementById('customer_options').classList.add('hidden');
+    idInput.value = id;
+    nameDisp.textContent = name;
+    codeDisp.textContent = code;
+    display.classList.remove('hidden');
+    pickerEl.classList.add('hidden');
+    options.classList.add('hidden');
   }
 
   function clearCustomer() {
-    document.getElementById('customer_id_input').value = '';
-    document.getElementById('customer_display').classList.add('hidden');
-    document.getElementById('customer_picker').classList.remove('hidden');
-    document.getElementById('customer_search').value = '';
-    document.getElementById('customer_search').focus();
+    idInput.value = '';
+    display.classList.add('hidden');
+    pickerEl.classList.remove('hidden');
+    searchIn.value = '';
+    searchIn.focus();
   }
 
-  // Delegate click on dynamically-swapped options
+  // Delegate click — HTMX-swapped options use .js-customer-option
   document.addEventListener('click', (e) => {
     const opt = e.target.closest('.js-customer-option');
-    if (opt) {
+    if (opt && picker.contains(opt)) {
       selectCustomer(
         opt.dataset.customerId,
         opt.dataset.customerName,
@@ -179,9 +235,35 @@
       );
       return;
     }
-    const co = document.getElementById('customer_options');
-    const cs = document.getElementById('customer_search');
-    if (co && !co.contains(e.target) && e.target !== cs) co.classList.add('hidden');
+    // Tutup options saat klik di luar
+    if (options && !options.classList.contains('hidden')) {
+      if (!options.contains(e.target) && e.target !== searchIn) {
+        options.classList.add('hidden');
+      }
+    }
   });
+
+  if (clearBtn) clearBtn.addEventListener('click', clearCustomer);
+
+  // Tampilkan options saat HTMX selesai swap
+  document.body.addEventListener('htmx:afterSwap', (e) => {
+    if (e.detail.target && e.detail.target.id === 'customer_options') {
+      options.classList.remove('hidden');
+    }
+  });
+})();
+
+/* ── ⌘/Ctrl + Enter submit ───────────────────────── */
+(() => {
+  const form = document.querySelector('form[data-shortcut-submit]');
+  if (!form) return;
+  form.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+    if (e.target && e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    if (form.requestSubmit) form.requestSubmit();
+    else form.submit();
+  });
+})();
 </script>
 {% endblock %}

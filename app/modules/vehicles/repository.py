@@ -45,27 +45,50 @@ class VehicleRepository:
         if conds:
             stmt = stmt.where(and_(*conds))
 
-        # ── Sorting ──
+        # Stable secondary sort on id prevents pagination drift.
         if sort == "created_asc":
-            stmt = stmt.order_by(Vehicle.created_at.asc())
+            stmt = stmt.order_by(Vehicle.created_at.asc(), Vehicle.id.asc())
         elif sort == "brand_asc":
-            stmt = stmt.order_by(Vehicle.brand.asc(), Vehicle.model.asc())
+            stmt = stmt.order_by(
+                Vehicle.brand.asc(), Vehicle.model.asc(), Vehicle.id.asc()
+            )
         elif sort == "year_desc":
-            stmt = stmt.order_by(Vehicle.year.desc().nulls_last())
+            stmt = stmt.order_by(
+                Vehicle.year.desc().nulls_last(), Vehicle.id.asc()
+            )
         elif sort == "plate_asc":
-            stmt = stmt.order_by(Vehicle.plate_number.asc().nulls_last())
-        else:
-            stmt = stmt.order_by(Vehicle.created_at.desc())
+            stmt = stmt.order_by(
+                Vehicle.plate_number.asc().nulls_last(), Vehicle.id.asc()
+            )
+        else:  # created_desc
+            stmt = stmt.order_by(Vehicle.created_at.desc(), Vehicle.id.asc())
 
         return stmt
 
     async def find_by_plate_for_customer(
         self, customer_id: UUID, plate: str
     ) -> Vehicle | None:
-        stmt = select(Vehicle).where(
-            and_(Vehicle.customer_id == customer_id, Vehicle.plate_number == plate)
+        # `limit(1)` + deterministic order prevents MultipleResultsFound
+        # from surfacing as a 500 when duplicate plates already exist in
+        # the DB (pre-constraint legacy data).
+        stmt = (
+            select(Vehicle)
+            .where(
+                and_(
+                    Vehicle.customer_id == customer_id,
+                    Vehicle.plate_number == plate,
+                )
+            )
+            .order_by(Vehicle.created_at.asc())
+            .limit(1)
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def get_brand(self, brand_id: UUID) -> VehicleBrand | None:
+        return await self.db.get(VehicleBrand, brand_id)
+
+    async def get_model(self, model_id: UUID) -> VehicleModel | None:
+        return await self.db.get(VehicleModel, model_id)
 
     async def stats(
         self, *, customer_id: UUID | None = None
@@ -105,11 +128,15 @@ class VehicleRepository:
 
     # ── Catalog ───────────────────────────────────────
     async def list_brands(self) -> list[VehicleBrand]:
-        stmt = select(VehicleBrand).order_by(VehicleBrand.name)
+        stmt = select(VehicleBrand).order_by(
+            VehicleBrand.name.asc(), VehicleBrand.id.asc()
+        )
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def list_models(self, brand_id: UUID | None = None) -> list[VehicleModel]:
-        stmt = select(VehicleModel).order_by(VehicleModel.name)
+        stmt = select(VehicleModel).order_by(
+            VehicleModel.name.asc(), VehicleModel.id.asc()
+        )
         if brand_id:
             stmt = stmt.where(VehicleModel.brand_id == brand_id)
         return list((await self.db.execute(stmt)).scalars().all())

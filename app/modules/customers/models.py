@@ -15,10 +15,17 @@ class Customer(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (
         Index("ix_customers_status_created", "status", "created_at"),
         Index("ix_customers_name", "name"),
+        # Functional index lets the case-insensitive email lookup in
+        # `find_by_email` use the index instead of a sequential scan.
+        # Add via migration:
+        #   CREATE INDEX CONCURRENTLY ix_customers_email_lower
+        #   ON customers (lower(email));
     )
 
     # Human-readable: NOCTRA-C-2026-000123
-    code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    code: Mapped[str] = mapped_column(
+        String(32), unique=True, nullable=False
+    )
 
     # Primary contact
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -32,16 +39,24 @@ class Customer(Base, UUIDMixin, TimestampMixin):
     city: Mapped[str | None] = mapped_column(String(100))
     province: Mapped[str | None] = mapped_column(String(100))
     postal_code: Mapped[str | None] = mapped_column(String(20))
-    country: Mapped[str] = mapped_column(String(64), default="Indonesia", nullable=False)
+    country: Mapped[str] = mapped_column(
+        String(64), default="Indonesia", server_default="Indonesia", nullable=False
+    )
 
     # Business metadata
     status: Mapped[str] = mapped_column(
-        String(16), default=CustomerStatus.LEAD.value, nullable=False, index=True
+        String(16),
+        default=CustomerStatus.LEAD.value,
+        server_default=CustomerStatus.LEAD.value,
+        nullable=False,
+        index=True,
     )
     tax_id: Mapped[str | None] = mapped_column(String(64))       # NPWP
     notes: Mapped[str | None] = mapped_column(Text)
     source: Mapped[str | None] = mapped_column(String(32))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
 
     contacts: Mapped[list["CustomerContact"]] = relationship(
         back_populates="customer",

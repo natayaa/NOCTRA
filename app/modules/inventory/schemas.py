@@ -5,14 +5,27 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator, model_validator
 
 from app.modules.inventory.constants import (
+    MANUAL_TRANSACTION_TYPES,
     MATERIAL_CATEGORIES,
     PURCHASE_ORDER_STATUSES,
-    TRANSACTION_TYPES,
+    REFERENCE_TYPES,
     UNITS,
 )
+
+
+_EMPTY = {"", "none", "null", "undefined", "nil"}
+
+
+def _clean_optional(v):
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s or s.lower() in _EMPTY:
+        return None
+    return s
 
 
 # ════════════════════════════════════════════════════════════════
@@ -22,24 +35,54 @@ from app.modules.inventory.constants import (
 class SupplierCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     contact_person: str | None = Field(None, max_length=255)
-    email: str | None = Field(None, max_length=255)
+    email: EmailStr | None = None
     phone: str | None = Field(None, max_length=32)
     address: str | None = Field(None, max_length=2000)
     tax_id: str | None = Field(None, max_length=64)
     payment_terms: str | None = Field(None, max_length=64)
     notes: str | None = Field(None, max_length=5000)
 
+    @field_validator("email", "phone", "address", "tax_id", "payment_terms", "notes",
+                     mode="before")
+    @classmethod
+    def _clean_optional(cls, v):
+        return _clean_optional(v)
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v):
+        v = v.strip() if isinstance(v, str) else v
+        if not v:
+            raise ValueError("name cannot be blank")
+        return v
+
 
 class SupplierUpdate(BaseModel):
     name: str | None = Field(None, min_length=2, max_length=255)
     contact_person: str | None = None
-    email: str | None = None
+    email: EmailStr | None = None
     phone: str | None = None
     address: str | None = None
     tax_id: str | None = None
     payment_terms: str | None = None
     notes: str | None = None
     is_active: bool | None = None
+
+    @field_validator("email", "phone", "address", "tax_id", "payment_terms", "notes",
+                     mode="before")
+    @classmethod
+    def _clean_optional(cls, v):
+        return _clean_optional(v)
+
+    @field_validator("name")
+    @classmethod
+    def _non_nullable_name(cls, v):
+        if v is None:
+            raise ValueError("name cannot be null")
+        v = v.strip()
+        if not v:
+            raise ValueError("name cannot be blank")
+        return v
 
 
 class SupplierListItem(BaseModel):
@@ -49,7 +92,7 @@ class SupplierListItem(BaseModel):
     name: str
     contact_person: str | None
     phone: str | None
-    email: str | None
+    email: EmailStr | None
     is_active: bool
 
 
@@ -129,6 +172,17 @@ class MaterialUpdate(BaseModel):
             raise ValueError(f"unit must be one of {UNITS}")
         return v
 
+    # Non-nullable in DB — reject explicit null on these fields.
+    @field_validator(
+        "name", "category", "purchase_unit", "stock_unit",
+        "stock_units_per_purchase", "reorder_point", "min_stock",
+    )
+    @classmethod
+    def _non_nullable(cls, v):
+        if v is None:
+            raise ValueError("field cannot be null")
+        return v
+
 
 class MaterialListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -162,7 +216,6 @@ class MaterialWithStock(MaterialDetail):
 
 
 class MaterialUpdatePrice(BaseModel):
-    """Record a price change; also updates the material's current price."""
     new_purchase_price: float = Field(..., ge=0)
     note: str | None = Field(None, max_length=500)
 
@@ -173,6 +226,8 @@ class MaterialUpdatePrice(BaseModel):
 
 class InventoryTransactionCreate(BaseModel):
     material_id: UUID
+    # Restricted to MANUAL_TRANSACTION_TYPES — PURCHASE and RETURN are
+    # exclusive to the PO workflow and must not be forged via this API.
     transaction_type: str
     quantity: float = Field(..., gt=0)
     unit_cost: float | None = Field(None, ge=0)
@@ -184,9 +239,28 @@ class InventoryTransactionCreate(BaseModel):
     @field_validator("transaction_type")
     @classmethod
     def _validate_type(cls, v):
-        if v not in TRANSACTION_TYPES:
-            raise ValueError(f"transaction_type must be one of {TRANSACTION_TYPES}")
+        if v not in MANUAL_TRANSACTION_TYPES:
+            raise ValueError(
+                f"transaction_type must be one of {MANUAL_TRANSACTION_TYPES}. "
+                f"PURCHASE and RETURN are reserved for the PO workflow."
+            )
         return v
+
+    @field_validator("reference_type")
+    @classmethod
+    def _validate_ref(cls, v):
+        v = _clean_optional(v)
+        if v is not None and v not in REFERENCE_TYPES:
+            raise ValueError(f"reference_type must be one of {REFERENCE_TYPES}")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_reference_pair(self):
+        if (self.reference_type is None) != (self.reference_id is None):
+            raise ValueError(
+                "reference_type and reference_id must be provided together"
+            )
+        return self
 
 
 class InventoryTransactionOut(BaseModel):
@@ -200,6 +274,7 @@ class InventoryTransactionOut(BaseModel):
     reference_id: UUID | None
     reference_note: str | None
     notes: str | None
+    occurred_at: datetime
     created_by_id: UUID | None
     created_at: datetime
 
@@ -254,6 +329,8 @@ class PurchaseOrderListItem(BaseModel):
     expected_date: date | None
     total_amount: float
     created_at: datetime
+    # Enrichment — populated by API layer via batch join.
+    supplier_name: str | None = None
 
 
 class PurchaseOrderDetail(PurchaseOrderListItem):
@@ -284,5 +361,6 @@ class InventoryCatalog(BaseModel):
     units: list[str]
     transaction_types: list[str]
     transaction_type_labels: dict[str, str]
+    manual_transaction_types: list[str]
     purchase_order_statuses: list[str]
     purchase_order_status_labels: dict[str, str]

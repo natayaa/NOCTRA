@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+
 {% block content %}
 {% set fv = form_values or {} %}
 
@@ -14,14 +15,22 @@
 </div>
 
 {% if error %}
-<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">{{ error }}</div>
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
+  </div>
 </div>
 {% endif %}
 
 <form method="post"
       action="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
-      class="max-w-3xl panel space-y-6" data-guard>
+      class="max-w-3xl space-y-5"
+      data-guard
+      data-shortcut-submit>
 
   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
 
@@ -30,117 +39,115 @@
   {% endif %}
 
   {% if mode == 'create' %}
-  <section>
-    <h2 class="panel-title">Customer & Vehicle</h2>
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Customer & Vehicle</h2>
+      <span class="text-xs text-noctra-dim">Required</span>
+    </div>
 
-    {# ── Customer picker ── #}
-    <div class="mt-3">
+    {# Customer picker #}
+    <div class="form-row">
       {% if preselected_customer %}
-      <div class="form-row">
-        <label class="form-label">Customer</label>
-        <input class="input" disabled
-               value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
-        <input type="hidden" name="customer_id" id="customer_id_input"
-               value="{{ preselected_customer.id }}" />
-      </div>
+      <label class="form-label">Customer</label>
+      <input class="input" disabled
+             value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
+      <input type="hidden" name="customer_id" id="customer_id_input"
+             value="{{ preselected_customer.id }}" />
       {% else %}
-      <div class="form-row">
-        <label class="form-label" for="customer_search">Customer <span class="req">*</span></label>
+      <label class="form-label" for="customer_search">Customer <span class="req">*</span></label>
 
-        <input type="hidden" name="customer_id" id="customer_id_input"
-               value="{{ fv.get('customer_id') or '' }}" required />
+      <input type="hidden" name="customer_id" id="customer_id_input"
+             value="{{ fv.get('customer_id') or '' }}" required />
 
-        <div id="customer_display" class="hidden panel mb-2 flex items-center justify-between">
-          <div>
-            <div class="font-medium text-sm" id="customer_name_display"></div>
-            <div class="mono text-xs text-neutral-500" id="customer_code_display"></div>
-          </div>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="clearCustomer()">Change</button>
+      <div id="customer_display" class="hidden panel !p-3 mb-2 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-medium text-sm" id="customer_name_display"></div>
+          <div class="mono text-xs text-noctra-dim" id="customer_code_display"></div>
         </div>
-
-        <div id="customer_picker">
-          <input class="input" id="customer_search" name="q"
-                 placeholder="Type name, phone, or code…" autocomplete="off"
-                 hx-get="/admin/projects/api/search-customers"
-                 hx-trigger="input changed delay:200ms, focus"
-                 hx-target="#customer_options" hx-swap="innerHTML"
-                 hx-on::before-request="document.getElementById('customer_options').classList.remove('hidden')" />
-
-          <div id="customer_options" class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden"></div>
-        </div>
+        <button type="button" class="btn btn-ghost btn-sm" data-clear-customer>Change</button>
       </div>
+
+      <div id="customer_picker">
+        <input class="input" id="customer_search" name="q"
+               placeholder="Type name, phone, or code…" autocomplete="off"
+               hx-get="/admin/projects/api/search-customers"
+               hx-trigger="input changed delay:200ms, focus"
+               hx-target="#customer_options" hx-swap="innerHTML" />
+        <div id="customer_options" class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden"></div>
+      </div>
+      <div class="form-hint">Type at least 2 characters to search.</div>
       {% endif %}
     </div>
 
-    {# ── Vehicle picker ── #}
-    <div class="mt-4">
-      {% if preselected_vehicle %}
-      <div class="form-row">
-        <label class="form-label">Vehicle</label>
-        <input class="input" disabled
-               value="{{ preselected_vehicle.brand }} {{ preselected_vehicle.model }}{% if preselected_vehicle.plate_number %} — {{ preselected_vehicle.plate_number }}{% endif %}" />
-        <input type="hidden" name="vehicle_id" value="{{ preselected_vehicle.id }}" />
-      </div>
-      {% else %}
-      <div class="form-row">
-        <label class="form-label" for="vehicle_search">Vehicle</label>
+    {# Vehicle picker #}
+    {% if not preselected_vehicle %}
+    <div class="form-row mt-4">
+      <label class="form-label" for="vehicle_search">Vehicle</label>
 
-        <input type="hidden" name="vehicle_id" id="vehicle_id_input"
-               value="{{ fv.get('vehicle_id') or '' }}" />
+      <input type="hidden" name="vehicle_id" id="vehicle_id_input"
+             value="{{ fv.get('vehicle_id') or '' }}" />
 
-        <div id="vehicle_display" class="hidden panel mb-2 flex items-center justify-between">
-          <div>
-            <div class="font-medium text-sm" id="vehicle_label_display"></div>
-          </div>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="clearVehicle()">Change</button>
+      <div id="vehicle_display" class="hidden panel !p-3 mb-2 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-medium text-sm" id="vehicle_label_display"></div>
         </div>
-
-        <div id="vehicle_picker">
-          <input class="input" id="vehicle_search" name="q"
-                 placeholder="Type brand, model, or plate…" autocomplete="off"
-                 hx-get="/admin/projects/api/search-vehicles"
-                 hx-trigger="input changed delay:200ms, focus"
-                 hx-target="#vehicle_options" hx-swap="innerHTML"
-                 hx-include="#customer_id_input"
-                 hx-on::before-request="document.getElementById('vehicle_options').classList.remove('hidden')" />
-
-          <div id="vehicle_options" class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden">
-            <div class="px-3 py-3 text-xs text-neutral-500">Select a customer first.</div>
-          </div>
-        </div>
-        <div class="form-hint">Optional. Leave blank to add a vehicle later.</div>
+        <button type="button" class="btn btn-ghost btn-sm" data-clear-vehicle>Change</button>
       </div>
-      {% endif %}
+
+      <div id="vehicle_picker">
+        <input class="input" id="vehicle_search" name="q"
+               placeholder="Type brand, model, or plate…" autocomplete="off"
+               hx-get="/admin/projects/api/search-vehicles"
+               hx-trigger="input changed delay:200ms, focus"
+               hx-target="#vehicle_options" hx-swap="innerHTML"
+               hx-include="#customer_id_input" />
+        <div id="vehicle_options" class="mt-1 panel !p-0 max-h-64 overflow-y-auto hidden">
+          <div class="px-3 py-3 text-xs text-noctra-dim">Select a customer first.</div>
+        </div>
+      </div>
+      <div class="form-hint">Optional. Leave blank to add a vehicle later.</div>
     </div>
+    {% else %}
+    <div class="form-row mt-4">
+      <label class="form-label">Vehicle</label>
+      <input class="input" disabled
+             value="{{ preselected_vehicle.brand }} {{ preselected_vehicle.model }}{% if preselected_vehicle.plate_number %} — {{ preselected_vehicle.plate_number }}{% endif %}" />
+      <input type="hidden" name="vehicle_id" value="{{ preselected_vehicle.id }}" />
+    </div>
+    {% endif %}
   </section>
   {% endif %}
 
-  <section>
-    <h2 class="panel-title">Details</h2>
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Details</h2>
+    </div>
 
-    <div class="form-row mt-3">
+    <div class="form-row">
       <label class="form-label" for="title">Title</label>
       <input class="input" id="title" name="title" maxlength="255"
              placeholder="e.g. Full body repaint — Mio Sporty"
              value="{{ fv.get('title') or (project.title if project else '') }}" />
     </div>
 
-    <div class="form-row">
+    <div class="form-row !mb-0">
       <label class="form-label" for="description">Description</label>
       <textarea class="textarea" id="description" name="description"
                 rows="3">{{ fv.get('description') or (project.description if project else '') }}</textarea>
     </div>
   </section>
 
-  <section>
-    <h2 class="panel-title">Pricing</h2>
-    <div class="grid md:grid-cols-2 gap-5 mt-3">
-      <div class="form-row">
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Pricing</h2>
+    </div>
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row !mb-0">
         <label class="form-label" for="quoted_price">Quoted price (IDR)</label>
         <input class="input" type="number" step="1000" id="quoted_price" name="quoted_price"
                value="{{ fv.get('quoted_price') or (project.quoted_price if project else '') or '' }}" />
       </div>
-      <div class="form-row">
+      <div class="form-row !mb-0">
         <label class="form-label" for="approved_price">Approved price (IDR)</label>
         <input class="input" type="number" step="1000" id="approved_price" name="approved_price"
                value="{{ fv.get('approved_price') or (project.approved_price if project else '') or '' }}" />
@@ -149,27 +156,29 @@
     </div>
   </section>
 
-  <section>
-    <h2 class="panel-title">Timeline & Lead</h2>
-    <div class="grid md:grid-cols-3 gap-5 mt-3">
-      <div class="form-row">
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Timeline & Lead</h2>
+    </div>
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="form-row !mb-0">
         <label class="form-label" for="start_date">Start date</label>
         <input class="input" type="date" id="start_date" name="start_date"
                value="{{ fv.get('start_date') or (project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '') }}" />
       </div>
-      <div class="form-row">
+      <div class="form-row !mb-0">
         <label class="form-label" for="target_end_date">Target end date</label>
         <input class="input" type="date" id="target_end_date" name="target_end_date"
                value="{{ fv.get('target_end_date') or (project.target_end_date.strftime('%Y-%m-%d') if project and project.target_end_date else '') }}" />
       </div>
-      <div class="form-row">
+      <div class="form-row !mb-0">
         <label class="form-label" for="priority">Priority</label>
         <input class="input" type="number" id="priority" name="priority" min="0" max="10"
                value="{{ fv.get('priority') or (project.priority if project else 0) }}" />
       </div>
     </div>
 
-    <div class="form-row">
+    <div class="form-row mt-5 !mb-0">
       <label class="form-label" for="assigned_lead_id">Workshop lead</label>
       <select class="select" id="assigned_lead_id" name="assigned_lead_id">
         <option value="">—</option>
@@ -185,9 +194,11 @@
   </section>
 
   {% if mode == 'edit' %}
-  <section>
-    <h2 class="panel-title">Completion</h2>
-    <div class="form-row mt-3">
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Completion</h2>
+    </div>
+    <div class="form-row !mb-0">
       <label class="form-label" for="actual_end_date">Actual end date</label>
       <input class="input" type="date" id="actual_end_date" name="actual_end_date"
              value="{{ fv.get('actual_end_date') or (project.actual_end_date.strftime('%Y-%m-%d') if project and project.actual_end_date else '') }}" />
@@ -196,77 +207,106 @@
   </section>
   {% endif %}
 
-  <section>
-    <h2 class="panel-title">Notes</h2>
-    <div class="form-row mt-3">
-      <label class="form-label" for="internal_notes">Internal notes</label>
+  <section class="panel">
+    <div class="panel-title mb-4">Notes</div>
+    <div class="form-row !mb-0">
       <textarea class="textarea" id="internal_notes" name="internal_notes"
-                rows="2">{{ fv.get('internal_notes') or (project.internal_notes if project else '') }}</textarea>
+                rows="3" placeholder="Internal notes…">{{ fv.get('internal_notes') or (project.internal_notes if project else '') }}</textarea>
     </div>
   </section>
 
-  <div class="flex gap-2 pt-2">
-    <button class="btn btn-primary">
-      {{ 'Create Project' if mode == 'create' else 'Save changes' }}
-    </button>
-    <a href="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
-       class="btn btn-secondary">Cancel</a>
+  {# ── Sticky save bar ────────────────────────────── #}
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Create Project' if mode == 'create' else 'Save changes' }}
+      </button>
+      <a href="{{ '/admin/projects' if mode == 'create' else '/admin/projects/' ~ project.id }}"
+         class="btn btn-secondary">Cancel</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
+    </div>
   </div>
 </form>
+{% endblock %}
 
-{% if mode == 'create' %}
+{% block extra_js %}
 <script>
+(() => {
+  /* ── ⌘/Ctrl + Enter ─────────────────────────────── */
+  const form = document.querySelector('form[data-shortcut-submit]');
+  if (form) {
+    form.addEventListener('keydown', (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+      if (e.target && e.target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      if (form.requestSubmit) form.requestSubmit(); else form.submit();
+    });
+  }
+
+  /* ── Customer & Vehicle Pickers ─────────────────── */
+  const idCust = document.getElementById('customer_id_input');
+  const idVeh = document.getElementById('vehicle_id_input');
+  if (!idCust) return; // Edit mode, no pickers
+
+  const dispCust = document.getElementById('customer_display');
+  const dispVeh = document.getElementById('vehicle_display');
+  const pickCust = document.getElementById('customer_picker');
+  const pickVeh = document.getElementById('vehicle_picker');
+  const optCust = document.getElementById('customer_options');
+  const optVeh = document.getElementById('vehicle_options');
+  const searchCust = document.getElementById('customer_search');
+  const searchVeh = document.getElementById('vehicle_search');
+
   function selectCustomer(id, name, code) {
-    const input = document.getElementById('customer_id_input');
-    if (!input) return;
-    input.value = id;
+    idCust.value = id;
     document.getElementById('customer_name_display').textContent = name;
     document.getElementById('customer_code_display').textContent = code;
-    document.getElementById('customer_display').classList.remove('hidden');
-    document.getElementById('customer_picker').classList.add('hidden');
-    document.getElementById('customer_options').classList.add('hidden');
+    dispCust.classList.remove('hidden');
+    pickCust.classList.add('hidden');
+    optCust.classList.add('hidden');
     clearVehicle();
   }
 
   function clearCustomer() {
-    const input = document.getElementById('customer_id_input');
-    if (!input) return;
-    input.value = '';
-    document.getElementById('customer_display').classList.add('hidden');
-    document.getElementById('customer_picker').classList.remove('hidden');
-    document.getElementById('customer_search').value = '';
-    document.getElementById('customer_search').focus();
+    idCust.value = '';
+    dispCust.classList.add('hidden');
+    pickCust.classList.remove('hidden');
+    searchCust.value = '';
+    searchCust.focus();
   }
 
   function selectVehicle(id, label) {
-    const input = document.getElementById('vehicle_id_input');
-    if (!input) return;
-    input.value = id;
+    idVeh.value = id;
     document.getElementById('vehicle_label_display').textContent = label;
-    document.getElementById('vehicle_display').classList.remove('hidden');
-    document.getElementById('vehicle_picker').classList.add('hidden');
-    document.getElementById('vehicle_options').classList.add('hidden');
+    dispVeh.classList.remove('hidden');
+    pickVeh.classList.add('hidden');
+    optVeh.classList.add('hidden');
   }
 
   function clearVehicle() {
-    const input = document.getElementById('vehicle_id_input');
-    if (!input) return;
-    input.value = '';
-    document.getElementById('vehicle_display').classList.add('hidden');
-    document.getElementById('vehicle_picker').classList.remove('hidden');
-    const vs = document.getElementById('vehicle_search');
-    if (vs) vs.value = '';
+    idVeh.value = '';
+    dispVeh.classList.add('hidden');
+    pickVeh.classList.remove('hidden');
+    if (searchVeh) searchVeh.value = '';
   }
 
-  // Event delegation — works with dynamically-swapped HTMX content
+  // Event listeners
+  const btnClearCust = document.querySelector('[data-clear-customer]');
+  if (btnClearCust) btnClearCust.addEventListener('click', clearCustomer);
+
+  const btnClearVeh = document.querySelector('[data-clear-vehicle]');
+  if (btnClearVeh) btnClearVeh.addEventListener('click', clearVehicle);
+
+  // Delegation for HTMX results
   document.addEventListener('click', (e) => {
     const custOpt = e.target.closest('.js-customer-option');
     if (custOpt) {
-      selectCustomer(
-        custOpt.dataset.customerId,
-        custOpt.dataset.customerName,
-        custOpt.dataset.customerCode
-      );
+      selectCustomer(custOpt.dataset.customerId, custOpt.dataset.customerName, custOpt.dataset.customerCode);
       return;
     }
     const vehOpt = e.target.closest('.js-vehicle-option');
@@ -274,14 +314,20 @@
       selectVehicle(vehOpt.dataset.vehicleId, vehOpt.dataset.vehicleLabel);
       return;
     }
-    // Close dropdowns on outside click
-    const co = document.getElementById('customer_options');
-    const vo = document.getElementById('vehicle_options');
-    const cs = document.getElementById('customer_search');
-    const vs = document.getElementById('vehicle_search');
-    if (co && !co.contains(e.target) && e.target !== cs) co.classList.add('hidden');
-    if (vo && !vo.contains(e.target) && e.target !== vs) vo.classList.add('hidden');
+    // Close on outside click
+    if (optCust && !optCust.classList.contains('hidden') && !optCust.contains(e.target) && e.target !== searchCust) {
+      optCust.classList.add('hidden');
+    }
+    if (optVeh && !optVeh.classList.contains('hidden') && !optVeh.contains(e.target) && e.target !== searchVeh) {
+      optVeh.classList.add('hidden');
+    }
   });
+
+  // Show options on HTMX swap
+  document.body.addEventListener('htmx:afterSwap', (e) => {
+    if (e.detail.target.id === 'customer_options') optCust.classList.remove('hidden');
+    if (e.detail.target.id === 'vehicle_options') optVeh.classList.remove('hidden');
+  });
+})();
 </script>
-{% endif %}
 {% endblock %}

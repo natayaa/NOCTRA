@@ -6,17 +6,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.logging import log
+from app.core.config import settings
 from app.core.constants import AuditAction
-from app.core.exceptions import (
-    ConflictError,
-    NotFoundError,
-    ValidationError,
-)
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.logging import log
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.inventory.constants import (
@@ -49,8 +47,24 @@ from app.modules.projects.schemas import (
     ProjectItemCreate,
     ProjectItemUpdate,
     ProjectUpdate,
+    _validate_item_links,
 )
 from app.modules.settings.service import SettingsService
+
+
+def _today_local() -> "datetime.date":
+    return datetime.now(ZoneInfo(settings.APP_TIMEZONE)).date()
+
+
+# ════════════════════════════════════════════════════════════════
+# HELPERS
+# ════════════════════════════════════════════════════════════════
+
+def _effective_unit_cost(item: ProjectItem) -> float:
+    """Return actual_unit_cost if explicitly set (even if 0), else estimated."""
+    if item.actual_unit_cost is not None:
+        return float(item.actual_unit_cost)
+    return float(item.estimated_unit_cost or 0)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -106,8 +120,6 @@ class EmployeeService:
 
 @dataclass
 class CostInputs:
-    """Resolved inputs the caller provides for computing a cost."""
-
     category: str
     quantity: float
     unit_cost: float
@@ -121,6 +133,13 @@ class CostingService:
     Material consumption creates InventoryTransaction(CONSUMPTION).
     Every project total is denormalized on the Project row and kept in sync
     by `recalc_project_totals`.
+
+    Ledger consistency rules for `update_item`:
+    - Quantity-only change (unit_cost unchanged, material unchanged):
+      delta adjustment (efficient).
+    - Material swap OR unit_cost change: reverse the full old consumption
+      and re-consume at the new values, so the inventory ledger always
+      reconciles with the project item's `actual_cost`.
     """
 
     def __init__(self, db: AsyncSession) -> None:
@@ -149,18 +168,11 @@ class CostingService:
         employee_id: UUID | None,
         provided_unit_cost: float | None,
     ) -> float:
-        """
-        Determine the unit cost for a line item.
-
-        - MATERIAL / PART: from the material's `cost_per_stock_unit`
-        - LABOR: from the employee's `hourly_rate`
-        - OVERHEAD: computed from settings
-        - OUTSOURCE / MISC: from provided_unit_cost (or 0)
-        """
         if category in INVENTORY_CATEGORIES:
             if not material_id:
                 raise ValidationError(
-                    f"material_id is required for {COST_CATEGORY_LABELS.get(category, category)} items"
+                    f"material_id is required for "
+                    f"{COST_CATEGORY_LABELS.get(category, category)} items"
                 )
             material = await self.materials.get(material_id)
             if not material:
@@ -178,7 +190,6 @@ class CostingService:
         if category == CostCategory.OVERHEAD.value:
             return await self.overhead_rate_per_hour()
 
-        # OUTSOURCE and MISC: whatever the caller supplied
         return provided_unit_cost or 0.0
 
     # ── Project item operations ────────────────────────
@@ -193,6 +204,8 @@ class CostingService:
         project = await self._get_project_or_404(project_id)
         if project.status in TERMINAL_PROJECT_STATUSES:
             raise ConflictError(f"Cannot add items to a {project.status} project")
+
+        _validate_item_links(payload.category, payload.material_id, payload.employee_id)
 
         est_unit_cost = await self.resolve_unit_cost(
             category=payload.category,
@@ -214,9 +227,10 @@ class CostingService:
             actual_quantity=payload.actual_quantity,
             actual_unit_cost=payload.actual_unit_cost,
             notes=payload.notes,
+            occurred_at=datetime.now(UTC),
         )
         await self.projects.add_item(item)
-        await self._sync_actual_cost(item)
+        await self._sync_actual_cost(item, actor=actor)
         await self.recalc_project_totals(project_id)
         await self.audit.log(
             action=AuditAction.COST_ENTRY,
@@ -244,10 +258,19 @@ class CostingService:
             raise ConflictError(f"Cannot edit items on a {project.status} project")
 
         item = await self._get_item_or_404(project_id, item_id)
+
+        # Capture pre-update state
         old_actual_qty = float(item.actual_quantity or 0)
+        old_material_id = item.material_id
+        old_actual_unit_cost = _effective_unit_cost(item)
 
         for field in payload.model_fields_set:
             setattr(item, field, getattr(payload, field))
+
+        try:
+            _validate_item_links(item.category, item.material_id, item.employee_id)
+        except ValueError as e:
+            raise ValidationError(str(e)) from e
 
         if item.category in INVENTORY_CATEGORIES or item.category in LABOR_CATEGORIES:
             resolved = await self.resolve_unit_cost(
@@ -262,7 +285,60 @@ class CostingService:
             float(item.estimated_quantity or 0) * float(item.estimated_unit_cost or 0)
         )
 
-        await self._sync_actual_cost(item, previous_actual_qty=old_actual_qty)
+        new_material_id = item.material_id
+        new_actual_unit_cost = _effective_unit_cost(item)
+
+        material_swapped = old_material_id != new_material_id
+        unit_cost_changed = (
+            not material_swapped
+            and old_material_id is not None
+            and abs(new_actual_unit_cost - old_actual_unit_cost) > 1e-6
+        )
+
+        if material_swapped:
+            # Reverse old consumption on the old material, then consume
+            # fully on the new material at its current cost.
+            if old_material_id and old_actual_qty:
+                await self._record_inventory_adjustment(
+                    project=project,
+                    material_id=old_material_id,
+                    quantity=-old_actual_qty,
+                    unit_cost=old_actual_unit_cost,
+                    reason="Material changed — reversing previous consumption",
+                    description=item.description,
+                    actor=actor,
+                )
+            await self._sync_actual_cost(
+                item, actor=actor, previous_actual_qty=0.0,
+            )
+        elif unit_cost_changed:
+            # Full reverse-and-reconsume so the inventory ledger reconciles
+            # with the project item's `actual_cost`. A delta-only adjustment
+            # here would leave the ledger and the item in disagreement.
+            if old_actual_qty:
+                await self._record_inventory_adjustment(
+                    project=project,
+                    material_id=old_material_id,
+                    quantity=-old_actual_qty,
+                    unit_cost=old_actual_unit_cost,
+                    reason="Unit cost changed — reversing previous consumption",
+                    description=item.description,
+                    actor=actor,
+                )
+                await self._sync_actual_cost(
+                    item, actor=actor, previous_actual_qty=0.0,
+                )
+            else:
+                # No prior consumption — just recompute fields.
+                item.actual_unit_cost = new_actual_unit_cost
+                item.actual_cost = (
+                    float(item.actual_quantity or 0) * new_actual_unit_cost
+                )
+        else:
+            await self._sync_actual_cost(
+                item, actor=actor, previous_actual_qty=old_actual_qty,
+            )
+
         await self.recalc_project_totals(project_id)
         await self.audit.log(
             action=AuditAction.COST_ENTRY,
@@ -285,9 +361,11 @@ class CostingService:
         if item.material_id and item.actual_quantity:
             await self._record_inventory_adjustment(
                 project=project,
-                item=item,
+                material_id=item.material_id,
                 quantity=-float(item.actual_quantity),
+                unit_cost=_effective_unit_cost(item),
                 reason="Item deleted — consumption reversed",
+                description=item.description,
                 actor=actor,
             )
 
@@ -312,9 +390,11 @@ class CostingService:
     async def _sync_actual_cost(
         self,
         item: ProjectItem,
+        *,
+        actor: User | None = None,
         previous_actual_qty: float | None = None,
     ) -> None:
-        actual_unit_cost = float(item.actual_unit_cost or item.estimated_unit_cost or 0)
+        actual_unit_cost = _effective_unit_cost(item)
         item.actual_unit_cost = actual_unit_cost
         item.actual_cost = float(item.actual_quantity or 0) * actual_unit_cost
 
@@ -327,19 +407,23 @@ class CostingService:
                 if project:
                     await self._record_inventory_adjustment(
                         project=project,
-                        item=item,
+                        material_id=item.material_id,
                         quantity=delta,
+                        unit_cost=actual_unit_cost,
                         reason="Project item consumption update",
-                        actor=None,
+                        description=item.description,
+                        actor=actor,
                     )
 
     async def _record_inventory_adjustment(
         self,
         *,
         project: Project,
-        item: ProjectItem,
+        material_id: UUID,
         quantity: float,
+        unit_cost: float,
         reason: str,
+        description: str,
         actor: User | None,
     ) -> None:
         if quantity > 0:
@@ -349,16 +433,16 @@ class CostingService:
             tx_type = TransactionType.ADJUSTMENT_IN.value
             qty = -quantity
 
-        unit_cost = float(item.actual_unit_cost or item.estimated_unit_cost or 0)
         tx = InventoryTransaction(
-            material_id=item.material_id,
+            material_id=material_id,
             transaction_type=tx_type,
             quantity=qty,
             unit_cost=unit_cost,
             reference_type=ReferenceType.PROJECT.value,
             reference_id=project.id,
-            reference_note=f"{project.code} — {item.description[:80]}",
+            reference_note=f"{project.code} — {description[:80]}",
             notes=reason,
+            occurred_at=datetime.now(UTC),
             created_by_id=actor.id if actor else None,
         )
         self.db.add(tx)
@@ -368,7 +452,7 @@ class CostingService:
         project = await self._get_project_or_404(project_id)
         items = await self.projects.list_items(project_id)
 
-        totals = {
+        totals: dict[str, float] = {
             "estimated_materials": 0.0, "estimated_parts": 0.0,
             "estimated_labor": 0.0, "estimated_outsource": 0.0,
             "estimated_overhead": 0.0, "estimated_misc": 0.0,
@@ -407,8 +491,12 @@ class CostingService:
         project.actual_overhead = totals["actual_overhead"]
         project.actual_misc = totals["actual_misc"]
 
-        project.estimated_hpp = sum(totals[k] for k in totals if k.startswith("estimated_"))
-        project.actual_hpp = sum(totals[k] for k in totals if k.startswith("actual_"))
+        project.estimated_hpp = sum(
+            totals[k] for k in totals if k.startswith("estimated_")
+        )
+        project.actual_hpp = sum(
+            totals[k] for k in totals if k.startswith("actual_")
+        )
 
         await self.db.flush()
         return project
@@ -437,9 +525,7 @@ class ProjectService:
         self.audit = AuditService(db)
         self.costing = CostingService(db)
 
-    async def create(
-        self, payload: ProjectCreate, *, actor: User
-    ) -> Project:
+    async def create(self, payload: ProjectCreate, *, actor: User) -> Project:
         from app.modules.customers.repository import CustomerRepository
         from app.modules.vehicles.repository import VehicleRepository
 
@@ -451,6 +537,9 @@ class ProjectService:
             from app.modules.inquiries.repository import InquiryRepository
             if not await InquiryRepository(self.db).get(payload.inquiry_id):
                 raise NotFoundError("Inquiry not found")
+        if payload.assigned_lead_id:
+            if not await self.db.get(User, payload.assigned_lead_id):
+                raise NotFoundError("Assigned lead user not found")
 
         project = Project(
             code=await self.repo.next_code(),
@@ -484,12 +573,17 @@ class ProjectService:
         )
         return project
 
-    async def update(
-        self, pid: UUID, payload: ProjectUpdate, *, actor: User
-    ) -> Project:
+    async def update(self, pid: UUID, payload: ProjectUpdate, *, actor: User) -> Project:
         project = await self._get_or_404(pid)
         if project.status in TERMINAL_PROJECT_STATUSES:
             raise ConflictError(f"Cannot edit a {project.status} project")
+
+        if (
+            "assigned_lead_id" in payload.model_fields_set
+            and payload.assigned_lead_id is not None
+        ):
+            if not await self.db.get(User, payload.assigned_lead_id):
+                raise NotFoundError("Assigned lead user not found")
 
         for field in payload.model_fields_set:
             setattr(project, field, getattr(payload, field))
@@ -510,15 +604,31 @@ class ProjectService:
         if new_status not in PROJECT_STATUSES:
             raise ValidationError(f"status must be one of {PROJECT_STATUSES}")
 
-        project = await self._get_or_404(pid)
+        # Lock the project to prevent concurrent transitions from both
+        # passing the state-machine check.
+        project = await self.repo.get_for_update(pid)
+        if not project:
+            raise NotFoundError("Project not found")
+        await self.db.refresh(project, ["items"])
+
         current = project.status
 
         allowed = ALLOWED_PROJECT_TRANSITIONS.get(current, frozenset())
         if new_status not in allowed:
             raise ConflictError(
                 f"Cannot move project from {current} to {new_status}",
-                context={"current": current, "target": new_status, "allowed": sorted(allowed)},
+                context={
+                    "current": current, "target": new_status,
+                    "allowed": sorted(allowed),
+                },
             )
+
+        # Guard: approval requires a price to approve against.
+        if new_status == ProjectStatus.APPROVED.value:
+            if project.approved_price is None and project.quoted_price is None:
+                raise ConflictError(
+                    "Cannot approve a project without a quoted or approved price"
+                )
 
         project.status = new_status
 
@@ -526,11 +636,13 @@ class ProjectService:
             project.approved_price = project.quoted_price
 
         if new_status == ProjectStatus.DELIVERED.value:
-            project.actual_end_date = datetime.now(UTC).date()
+            project.actual_end_date = _today_local()
 
         if note:
             existing = project.closing_note or ""
-            project.closing_note = f"{existing}\n[{current} → {new_status}] {note}".strip()
+            project.closing_note = (
+                f"{existing}\n[{current} → {new_status}] {note}".strip()
+            )
 
         await self.db.flush()
 
@@ -547,7 +659,7 @@ class ProjectService:
             await self._record_approval_snapshot(project, actor=actor)
 
         if new_status == ProjectStatus.DELIVERED.value:
-            await self._update_delivery_snapshot(project, actor=actor)
+            await self._record_delivery_snapshot(project, actor=actor)
 
         return project
 
@@ -584,40 +696,57 @@ class ProjectService:
                     if project.approved_price
                     else (float(project.quoted_price) if project.quoted_price else None)
                 ),
-                notes=f"Snapshot at approval. Status transitioned to {ProjectStatus.APPROVED.value}.",
+                notes=(
+                    f"Snapshot at approval. "
+                    f"Status transitioned to {ProjectStatus.APPROVED.value}."
+                ),
             ),
             actor=actor,
         )
 
-    async def _update_delivery_snapshot(self, project, *, actor: User) -> None:
-        from sqlalchemy import select
-        from app.modules.pricing.models import PricingSnapshot
+    async def _record_delivery_snapshot(self, project, *, actor: User) -> None:
+        """
+        Record the final HPP/price at DELIVERED as a *new* snapshot rather
+        than mutating the existing approval snapshot — preserves history.
+        """
+        from app.modules.pricing.schemas import PricingSnapshotCreate
+        from app.modules.pricing.service import PricingService
 
-        stmt = (
-            select(PricingSnapshot)
-            .where(PricingSnapshot.project_id == project.id)
-            .order_by(PricingSnapshot.created_at.desc())
-            .limit(1)
-        )
-        snap = (await self.db.execute(stmt)).scalar_one_or_none()
-        if not snap:
+        final_hpp = float(project.actual_hpp or 0)
+        if final_hpp <= 0:
             return
 
-        final_hpp = float(project.actual_hpp or snap.hpp_estimate)
         final_price = (
             float(project.approved_price)
             if project.approved_price
             else (float(project.quoted_price) if project.quoted_price else None)
         )
 
-        snap.hpp_estimate = final_hpp
-        snap.actual_quoted_price = final_price
-        if final_price and final_hpp > 0:
-            from app.modules.pricing.service import margin_of
-            snap.actual_margin_pct = margin_of(final_price, final_hpp)
-        snap.notes = (snap.notes or "") + f"\n[DELIVERED] Final HPP: {final_hpp}, final price: {final_price}."
+        service_interest = None
+        vehicle_category = None
+        if project.inquiry_id:
+            from app.modules.inquiries.repository import InquiryRepository
+            inq = await InquiryRepository(self.db).get(project.inquiry_id)
+            if inq:
+                service_interest = inq.service_interest
+        if project.vehicle_id:
+            from app.modules.vehicles.repository import VehicleRepository
+            v = await VehicleRepository(self.db).get(project.vehicle_id)
+            if v:
+                vehicle_category = v.category
 
-        await self.db.flush()
+        await PricingService(self.db).record_snapshot(
+            PricingSnapshotCreate(
+                project_id=project.id,
+                inquiry_id=project.inquiry_id,
+                service_interest=service_interest,
+                vehicle_category=vehicle_category,
+                hpp_estimate=final_hpp,
+                actual_quoted_price=final_price,
+                notes=f"Snapshot at delivery ({ProjectStatus.DELIVERED.value}).",
+            ),
+            actor=actor,
+        )
 
     async def create_from_inquiry(
         self,
@@ -633,6 +762,13 @@ class ProjectService:
         from app.modules.inquiries.constants import InquiryStatus
         from app.modules.inquiries.models import Inquiry
         from app.modules.vehicles.models import Vehicle
+
+        # Advisory lock — one project per inquiry, guaranteed under concurrency.
+        from sqlalchemy import text as _text
+        await self.db.execute(
+            _text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": f"project-from-inquiry:{inquiry_id}"},
+        )
 
         inquiry = await self.db.get(Inquiry, inquiry_id)
         if not inquiry:

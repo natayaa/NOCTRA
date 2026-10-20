@@ -1,14 +1,22 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
 
+{% set has_filters = q or status_filter or only_open or assigned_filter or source_filter or color_filter or finish_filter %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
+{% set today_date = today() if today is callable else today %}
+{% set TERMINAL = ('CONVERTED', 'LOST') %}
+
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Inquiries</h1>
     <p class="page-subtitle">
       {{ page_meta.total }} total
-      {% if stats.open %}· <span class="text-neutral-400">{{ stats.open }} open</span>{% endif %}
-      {% if stats.overdue %}· <span class="text-red-400">{{ stats.overdue }} overdue</span>{% endif %}
+      {% if stats.open %}· <span class="text-noctra-muted">{{ stats.open }} open</span>{% endif %}
+      {% if stats.overdue %}· <span class="text-red-400 font-medium">{{ stats.overdue }} overdue</span>{% endif %}
+      {% if has_filters %}
+        · <a class="text-accent" href="/admin/inquiries">Clear filters</a>
+      {% endif %}
     </p>
   </div>
   <div class="page-actions flex gap-2">
@@ -20,29 +28,34 @@
   </div>
 </div>
 
-{# Status quick-filter chips #}
-<div class="mb-4 flex flex-wrap gap-2 items-center">
-  <a href="/admin/inquiries{{ qs(status='', only_open='') }}"
-     class="badge {% if not status_filter and not only_open %}badge-accent{% else %}badge-neutral{% endif %}">
-    All
-  </a>
-  {% for s in statuses %}
-    <a href="/admin/inquiries{{ qs(status=s, only_open='') }}"
-       class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
-      {{ s }}
-      {% if stats['status_' ~ s] %}<span class="opacity-70">· {{ stats['status_' ~ s] }}</span>{% endif %}
+{# ── Status chips ────────────────────────────── #}
+<div class="mb-4 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
+    <a href="/admin/inquiries{{ qs(status='', only_open='') }}"
+       class="badge whitespace-nowrap {% if not status_filter and not only_open %}badge-accent{% else %}badge-neutral{% endif %}">
+      All
     </a>
-  {% endfor %}
-  <a href="/admin/inquiries{{ qs(status='', only_open='true') }}"
-     class="badge {% if only_open and not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-    Open only
-  </a>
+    {% for s in statuses %}
+      <a href="/admin/inquiries{{ qs(status=s, only_open='') }}"
+         class="badge whitespace-nowrap {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
+        {{ status_labels.get(s, s) }}
+        {% if stats.get('status_' ~ s) %}
+          <span class="opacity-70">· {{ stats.get('status_' ~ s) }}</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+    <a href="/admin/inquiries{{ qs(status='', only_open='true') }}"
+       class="badge whitespace-nowrap {% if only_open and not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+      Open only
+    </a>
+  </div>
 </div>
 
-<form method="get" class="panel mb-4">
-  {# Preserve active quick filters #}
+{# ── Filter form ──────────────────────────────── #}
+<form method="get" action="/admin/inquiries" class="panel mb-4">
   {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
   {% if only_open %}<input type="hidden" name="only_open" value="true" />{% endif %}
+  <input type="hidden" name="per_page" value="{{ current_per_page }}" />
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
     <div class="form-row !mb-0 lg:col-span-2">
@@ -56,7 +69,8 @@
       <select class="select" id="assigned_to_id" name="assigned_to_id">
         <option value="">Anyone</option>
         {% for u in assignees %}
-          <option value="{{ u.id }}" {% if assigned_filter == u.id %}selected{% endif %}>
+          <option value="{{ u.id }}"
+                  {% if assigned_filter and assigned_filter|string == u.id|string %}selected{% endif %}>
             {{ u.full_name }}
           </option>
         {% endfor %}
@@ -110,99 +124,204 @@
 
     <div class="flex gap-2">
       <button class="btn btn-secondary flex-1">Filter</button>
-      <a href="/admin/inquiries" class="btn btn-ghost" title="Reset">Reset</a>
+      <a href="/admin/inquiries" class="btn btn-ghost" title="Reset filters">Reset</a>
     </div>
   </div>
 </form>
 
 {% if inquiries %}
-<div class="table-wrap">
-  <table class="table">
-    <thead>
-      <tr>
-        <th>Code</th>
-        <th>Customer / Vehicle</th>
-        <th>Request</th>
-        <th>Status</th>
-        <th>Assignee</th>
-        <th>Follow-up</th>
-        <th>Created</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for i in inquiries %}
-      {% set due = i.follow_up_date %}
-      {% set overdue = due and due < today and i.status not in ('CONVERTED', 'LOST') %}
-      {% set due_today = due and due == today and i.status not in ('CONVERTED', 'LOST') %}
-      <tr class="{% if overdue %}bg-red-500/5{% endif %}">
-        <td class="mono text-xs">{{ i.code }}</td>
-        <td>
-          {% set c = customers_by_id.get(i.customer_id) if i.customer_id else None %}
-          {% set v = vehicles_by_id.get(i.vehicle_id) if i.vehicle_id else None %}
-          {% if c %}
-            <div class="font-medium">{{ c.name }}</div>
-          {% else %}
-            <div class="text-neutral-500 italic">Unassigned</div>
-          {% endif %}
-          {% if v %}
-            <div class="text-xs text-neutral-500">
-              {{ v.brand }} {{ v.model }}{% if v.plate_number %} · {{ v.plate_number }}{% endif %}
-            </div>
-          {% endif %}
-        </td>
-        <td class="text-sm">
-          {% if i.service_interest %}
-            <div>{{ service_labels.get(i.service_interest, i.service_interest) }}</div>
-          {% endif %}
-          <div class="text-xs text-neutral-500 flex items-center gap-1.5 flex-wrap">
-            {% if i.color_family %}
-              <span class="inline-block w-2.5 h-2.5 rounded-full border border-noctra-border"
-                    style="background: {{ color_swatch.get(i.color_family, '#64748b') }};"
-                    title="{{ color_labels.get(i.color_family, i.color_family) }}"></span>
+
+{# ── Toolbar ──────────────────────────────────── #}
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+    {% if has_filters %}· <span class="text-noctra-muted">filtered</span>{% endif %}
+  </div>
+
+  <form method="get" class="per-page-form">
+    {% for k, v in request.query_params.items() %}
+      {% if k not in ('per_page', 'page') and v %}
+        <input type="hidden" name="{{ k }}" value="{{ v }}" />
+      {% endif %}
+    {% endfor %}
+    <label for="per_page_inq">Show</label>
+    <select id="per_page_inq" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
+</div>
+
+{# ── Desktop table ──────────────────────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Customer / Vehicle</th>
+          <th>Request</th>
+          <th>Status</th>
+          <th>Assignee</th>
+          <th>Follow-up</th>
+          <th>Created</th>
+          <th class="text-right"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in inquiries %}
+        {% set due = i.follow_up_date %}
+        {% set overdue = due and due < today_date and i.status not in TERMINAL %}
+        {% set due_today = due and due == today_date and i.status not in TERMINAL %}
+        <tr class="{% if overdue %}bg-red-500/[0.04]{% endif %}">
+          <td class="mono text-xs whitespace-nowrap">
+            {% if overdue %}<span class="text-red-400 mr-1" title="Overdue">⚠</span>{% endif %}
+            {{ i.code }}
+          </td>
+          <td>
+            {% set c = customers_by_id.get(i.customer_id) if i.customer_id else None %}
+            {% set v = vehicles_by_id.get(i.vehicle_id) if i.vehicle_id else None %}
+            {% if c %}
+              <div class="font-medium">{{ c.name }}</div>
+            {% else %}
+              <div class="text-noctra-dim italic">Unassigned</div>
             {% endif %}
-            {% if i.color_preference %}<span>{{ i.color_preference }}</span>{% endif %}
-            {% if i.finish_preference %} · {{ finish_labels.get(i.finish_preference, i.finish_preference) }}{% endif %}
-          </div>
-          {% if i.has_custom_graphics %}
-            <span class="badge badge-accent mt-1">Custom graphics</span>
-          {% endif %}
-        </td>
-        <td>
-          <span class="badge {{ status_tone.get(i.status, 'badge-neutral') }}">{{ i.status }}</span>
-        </td>
-        <td class="text-sm">
-          {% set u = users_by_id.get(i.assigned_to_id) if i.assigned_to_id else None %}
-          {% if u %}{{ u.full_name }}{% else %}<span class="text-neutral-500">—</span>{% endif %}
-        </td>
-        <td class="text-xs">
-          {% if due %}
-            <span class="{% if overdue %}text-red-400 font-medium{% elif due_today %}text-amber-400 font-medium{% else %}text-neutral-400{% endif %}">
-              {% if overdue %}⚠ {% endif %}{{ due.strftime('%d %b') }}
+            {% if v %}
+              <div class="text-xs text-noctra-dim">
+                {{ v.brand }} {{ v.model }}{% if v.plate_number %} · {{ v.plate_number }}{% endif %}
+              </div>
+            {% endif %}
+          </td>
+          <td class="text-sm">
+            {% if i.service_interest %}
+              <div>{{ service_labels.get(i.service_interest, i.service_interest) }}</div>
+            {% endif %}
+            <div class="text-xs text-noctra-dim flex items-center gap-1.5 flex-wrap">
+              {% if i.color_family %}
+                <span class="inline-block w-2.5 h-2.5 rounded-full border border-noctra-border"
+                      style="background: {{ color_swatch.get(i.color_family, '#64748b') }};"
+                      title="{{ color_labels.get(i.color_family, i.color_family) }}"></span>
+              {% endif %}
+              {% if i.color_preference %}<span>{{ i.color_preference }}</span>{% endif %}
+              {% if i.finish_preference %} · {{ finish_labels.get(i.finish_preference, i.finish_preference) }}{% endif %}
+            </div>
+            {% if i.has_custom_graphics %}
+              <span class="badge badge-accent mt-1">Custom graphics</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {{ status_tone.get(i.status, 'badge-neutral') }} whitespace-nowrap">
+              <span class="badge-dot"></span>
+              {{ status_labels.get(i.status, i.status) }}
             </span>
-          {% else %}
-            <span class="text-neutral-600">—</span>
-          {% endif %}
-        </td>
-        <td class="text-xs text-neutral-500">{{ i.created_at | dt_id('%d %b') }}</td>
-        <td class="text-right">
-          <a href="/admin/inquiries/{{ i.id }}" class="btn btn-ghost btn-sm">View</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+          </td>
+          <td class="text-sm whitespace-nowrap">
+            {% set u = users_by_id.get(i.assigned_to_id) if i.assigned_to_id else None %}
+            {% if u %}{{ u.full_name }}{% else %}<span class="text-noctra-dim">—</span>{% endif %}
+          </td>
+          <td class="text-xs whitespace-nowrap">
+            {% if due %}
+              <span class="{% if overdue %}text-red-400 font-medium{% elif due_today %}text-amber-400 font-medium{% else %}text-noctra-dim{% endif %}">
+                {% if overdue %}⚠ {% endif %}{{ due | date_id('%d %b') }}
+              </span>
+            {% else %}
+              <span class="text-noctra-dim">—</span>
+            {% endif %}
+          </td>
+          <td class="text-xs text-noctra-dim whitespace-nowrap">
+            {{ i.created_at | date_id('%d %b') }}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/inquiries/{{ i.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Mobile cards ──────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for i in inquiries %}
+  {% set due = i.follow_up_date %}
+  {% set overdue = due and due < today_date and i.status not in TERMINAL %}
+  {% set due_today = due and due == today_date and i.status not in TERMINAL %}
+  {% set c = customers_by_id.get(i.customer_id) if i.customer_id else None %}
+  {% set v = vehicles_by_id.get(i.vehicle_id) if i.vehicle_id else None %}
+  <a href="/admin/inquiries/{{ i.id }}"
+     class="block panel !p-4 hover:border-noctra-border active:scale-[0.995] transition
+            {% if overdue %}!border-l-2 !border-l-red-500{% endif %}">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <span class="mono text-xs text-noctra-dim">{{ i.code }}</span>
+      <span class="badge {{ status_tone.get(i.status, 'badge-neutral') }} shrink-0">
+        <span class="badge-dot"></span>
+        {{ status_labels.get(i.status, i.status) }}
+      </span>
+    </div>
+
+    {% if c %}
+      <div class="font-medium text-sm">{{ c.name }}</div>
+    {% else %}
+      <div class="text-noctra-dim italic text-sm">Unassigned customer</div>
+    {% endif %}
+
+    {% if v %}
+      <div class="text-xs text-noctra-dim mt-0.5">
+        {{ v.brand }} {{ v.model }}{% if v.plate_number %} · {{ v.plate_number }}{% endif %}
+      </div>
+    {% endif %}
+
+    {% if i.service_interest or i.color_preference %}
+      <div class="text-xs text-noctra-muted mt-2 flex items-center gap-1.5 flex-wrap">
+        {% if i.color_family %}
+          <span class="inline-block w-2.5 h-2.5 rounded-full border border-noctra-border"
+                style="background: {{ color_swatch.get(i.color_family, '#64748b') }};"></span>
+        {% endif %}
+        {% if i.service_interest %}{{ service_labels.get(i.service_interest, i.service_interest) }}{% endif %}
+        {% if i.color_preference %} · {{ i.color_preference }}{% endif %}
+      </div>
+    {% endif %}
+
+    {% if overdue %}
+      <div class="mt-2 text-xs text-red-400 font-medium">
+        ⚠ Overdue since {{ due | date_id }}
+      </div>
+    {% elif due_today %}
+      <div class="mt-2 text-xs text-amber-400 font-medium">
+        ⏰ Due today
+      </div>
+    {% endif %}
+  </a>
+  {% endfor %}
 </div>
 
 {% include "components/pagination.html" %}
 
 {% else %}
-{{ empty_state(
-  title='No inquiries match your filters',
-  message='Try adjusting filters or create a new inquiry to start building the pipeline.',
-  action_url='/admin/inquiries/new',
-  action_label='New Inquiry',
-  icon='plus'
-) }}
+
+{% if has_filters %}
+  {{ empty_state(
+    title='No inquiries match your filters',
+    message='Try adjusting filters or clearing them to see all inquiries.',
+    action_url='/admin/inquiries',
+    action_label='Clear filters',
+    icon='search'
+  ) }}
+{% else %}
+  {{ empty_state(
+    title='No inquiries yet',
+    message='Create your first inquiry to start building the pipeline.',
+    action_url='/admin/inquiries/new',
+    action_label='New Inquiry',
+    icon='plus'
+  ) }}
+{% endif %}
+
 {% endif %}
 {% endblock %}

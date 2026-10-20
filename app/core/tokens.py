@@ -7,10 +7,12 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 
+TokenType = Literal["access", "refresh"]
+
 
 class TokenPayload(BaseModel):
     sub: str
-    typ: Literal["access", "refresh"]
+    typ: TokenType
     iat: int
     exp: int
     jti: str
@@ -18,7 +20,9 @@ class TokenPayload(BaseModel):
     extra: dict[str, Any] = {}
 
 
-def _encode(sub: str, typ: str, expires: timedelta, extra: dict | None = None) -> str:
+def _encode(
+    sub: str, typ: TokenType, expires: timedelta, extra: dict | None = None
+) -> str:
     now = datetime.now(UTC)
     payload = {
         "sub": sub,
@@ -33,14 +37,27 @@ def _encode(sub: str, typ: str, expires: timedelta, extra: dict | None = None) -
 
 
 def create_access_token(sub: str, extra: dict | None = None) -> str:
-    return _encode(sub, "access", timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES), extra)
+    return _encode(
+        sub,
+        "access",
+        timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        extra,
+    )
 
 
 def create_refresh_token(sub: str) -> str:
     return _encode(sub, "refresh", timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
 
 
-def decode_token(token: str) -> TokenPayload:
+def decode_token(token: str, *, expected_typ: TokenType | None = None) -> TokenPayload:
+    """
+    Decode and validate a JWT.
+
+    Pass `expected_typ="access"` or `"refresh"` to prevent typ confusion
+    (a refresh token being accepted where an access token is required, or
+    vice versa). Prefer the `decode_access_token` / `decode_refresh_token`
+    helpers below.
+    """
     try:
         raw = jwt.decode(
             token,
@@ -50,4 +67,16 @@ def decode_token(token: str) -> TokenPayload:
         )
     except JWTError as exc:
         raise ValueError("Invalid token") from exc
-    return TokenPayload.model_validate(raw)
+
+    payload = TokenPayload.model_validate(raw)
+    if expected_typ is not None and payload.typ != expected_typ:
+        raise ValueError(f"Expected {expected_typ} token, got {payload.typ}")
+    return payload
+
+
+def decode_access_token(token: str) -> TokenPayload:
+    return decode_token(token, expected_typ="access")
+
+
+def decode_refresh_token(token: str) -> TokenPayload:
+    return decode_token(token, expected_typ="refresh")

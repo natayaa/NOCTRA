@@ -10,17 +10,17 @@ from enum import StrEnum
 # ════════════════════════════════════════════════════════════════
 
 class ProjectStatus(StrEnum):
-    DRAFT = "DRAFT"                        # created, not yet quoted
-    ESTIMATING = "ESTIMATING"              # costs being worked out
-    WAITING_APPROVAL = "WAITING_APPROVAL"  # quoted, waiting for customer
-    APPROVED = "APPROVED"                  # customer accepted
-    IN_PROGRESS = "IN_PROGRESS"            # work started
-    PAINTING = "PAINTING"                  # in paint booth
-    ASSEMBLY = "ASSEMBLY"                  # reassembling after paint
-    QC = "QC"                              # quality check
-    COMPLETED = "COMPLETED"                # work done, awaiting pickup
-    DELIVERED = "DELIVERED"                # picked up
-    CANCELLED = "CANCELLED"                # terminated
+    DRAFT = "DRAFT"
+    ESTIMATING = "ESTIMATING"
+    WAITING_APPROVAL = "WAITING_APPROVAL"
+    APPROVED = "APPROVED"
+    IN_PROGRESS = "IN_PROGRESS"
+    PAINTING = "PAINTING"
+    ASSEMBLY = "ASSEMBLY"
+    QC = "QC"
+    COMPLETED = "COMPLETED"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
 
 
 PROJECT_STATUSES: list[str] = [s.value for s in ProjectStatus]
@@ -39,7 +39,6 @@ PROJECT_STATUS_LABELS: dict[str, str] = {
     ProjectStatus.CANCELLED.value:        "Cancelled",
 }
 
-# Badge tone per status — single source of truth for templates
 PROJECT_STATUS_TONE: dict[str, str] = {
     ProjectStatus.DRAFT.value:            "badge-neutral",
     ProjectStatus.ESTIMATING.value:       "badge-info",
@@ -121,12 +120,12 @@ PROJECT_SORT_OPTIONS: dict[str, str] = {
 # ════════════════════════════════════════════════════════════════
 
 class CostCategory(StrEnum):
-    MATERIAL = "MATERIAL"      # paint, thinner, chemicals (from inventory)
-    PART = "PART"              # bolts, clips, replacement parts (from inventory)
-    LABOR = "LABOR"            # employee time
-    OUTSOURCE = "OUTSOURCE"    # external services (chrome, upholstery, machining)
-    OVERHEAD = "OVERHEAD"      # allocated from monthly overhead
-    MISC = "MISC"              # miscellaneous / one-off
+    MATERIAL = "MATERIAL"
+    PART = "PART"
+    LABOR = "LABOR"
+    OUTSOURCE = "OUTSOURCE"
+    OVERHEAD = "OVERHEAD"
+    MISC = "MISC"
 
 
 COST_CATEGORIES: list[str] = [c.value for c in CostCategory]
@@ -177,6 +176,11 @@ PROJECT_ITEM_STATUS_TONE: dict[str, str] = {
 
 # ════════════════════════════════════════════════════════════════
 # SETTINGS KEYS
+#
+# NOTE: SETTING_DEFAULT_MARGIN_PCT / SETTING_MINIMUM_MARGIN_PCT are
+# the same keys used by the pricing module (imported there under the
+# names SETTING_DEFAULT_TARGET_MARGIN / SETTING_MIN_MARGIN). Keep
+# both modules' constant names but never change the string values.
 # ════════════════════════════════════════════════════════════════
 
 SETTING_MONTHLY_OVERHEAD = "costing.overhead_monthly"

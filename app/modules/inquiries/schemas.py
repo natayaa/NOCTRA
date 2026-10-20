@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.config import settings
 from app.modules.inquiries.constants import (
     BUDGET_RANGES,
     COLOR_FAMILIES,
@@ -13,6 +15,7 @@ from app.modules.inquiries.constants import (
     INQUIRY_SOURCES,
     INQUIRY_STATUSES,
     SERVICE_INTERESTS,
+    today_local,
 )
 
 
@@ -30,9 +33,51 @@ class InquiryPhotoIn(BaseModel):
     @classmethod
     def _validate_url(cls, v: str) -> str:
         v = v.strip()
-        if not (v.startswith("http://") or v.startswith("https://") or v.startswith("/")):
-            raise ValueError("file_path must be a URL or absolute path")
-        return v
+
+        # ── Internal (path-based): must match a configured prefix ──
+        if v.startswith("/"):
+            if not any(v.startswith(p) for p in settings.MEDIA_URL_PREFIXES):
+                raise ValueError(
+                    f"Internal media path must start with one of: "
+                    f"{', '.join(settings.MEDIA_URL_PREFIXES)}"
+                )
+            # Reject path traversal, including encoded variants.
+            decoded = unquote(v)
+            if ".." in decoded.split("/"):
+                raise ValueError("Path traversal is not allowed")
+            if "\x00" in v:
+                raise ValueError("Null byte in path")
+            return v
+
+        # ── External (URL-based): http(s) AND host in allowlist ──
+        if v.startswith(("http://", "https://")):
+            parsed = urlparse(v)
+            if not parsed.hostname:
+                raise ValueError("URL must include a hostname")
+
+            if not settings.MEDIA_ALLOWED_HOSTS:
+                raise ValueError(
+                    "External URLs are not allowed. "
+                    "Upload the file via the media pipeline instead."
+                )
+
+            host = parsed.hostname.lower()
+            for allowed in settings.MEDIA_ALLOWED_HOSTS:
+                allowed = allowed.lower()
+                # Wildcard: "*.example.com" matches "a.example.com"
+                # (not bare "example.com"; that needs its own entry).
+                if allowed.startswith("*.") and host.endswith(allowed[1:]):
+                    return v
+                if host == allowed:
+                    return v
+            raise ValueError(
+                f"Host {host!r} is not in the allowed media hosts list"
+            )
+
+        raise ValueError(
+            "file_path must be an internal /media/ path or an allowlisted "
+            "http(s) URL"
+        )
 
 
 class InquiryPhotoOut(BaseModel):
@@ -70,6 +115,16 @@ class CustomerRequestMixin(BaseModel):
             raise ValueError(f"finish_preference must be one of {FINISH_TYPES}")
         return v
 
+    @field_validator("has_custom_graphics")
+    @classmethod
+    def _non_nullable_bool(cls, v):
+        # Runs only when the field is explicitly provided. The model column
+        # is NOT NULL; a PATCH with `"has_custom_graphics": null` must be
+        # 422, not a downstream DB constraint error.
+        if v is None:
+            raise ValueError("has_custom_graphics cannot be null")
+        return v
+
 
 # ════════════════════════════════════════════════════════════════
 # CREATE / UPDATE
@@ -91,8 +146,8 @@ class InquiryCreate(CustomerRequestMixin):
     @field_validator("service_interest")
     @classmethod
     def _validate_service(cls, v):
-        if v is not None and v not in SERVICE_INTERESTS and len(v) > 32:
-            raise ValueError("service_interest must be <= 32 chars")
+        if v is not None and v not in SERVICE_INTERESTS:
+            raise ValueError(f"service_interest must be one of {SERVICE_INTERESTS}")
         return v
 
     @field_validator("source")
@@ -111,12 +166,16 @@ class InquiryCreate(CustomerRequestMixin):
 
     @model_validator(mode="after")
     def _validate_dates(self):
-        today = date.today()
+        today = today_local()
         if self.desired_date and self.desired_date < today:
             raise ValueError("desired_date cannot be in the past")
         if self.follow_up_date and self.follow_up_date < today:
             raise ValueError("follow_up_date cannot be in the past")
-        if self.desired_date and self.follow_up_date and self.follow_up_date > self.desired_date:
+        if (
+            self.desired_date
+            and self.follow_up_date
+            and self.follow_up_date > self.desired_date
+        ):
             raise ValueError("follow_up_date must be on or before desired_date")
         return self
 
@@ -132,6 +191,13 @@ class InquiryUpdate(CustomerRequestMixin):
     desired_date: date | None = None
     follow_up_date: date | None = None
     notes: str | None = Field(None, max_length=5000)
+
+    @field_validator("service_interest")
+    @classmethod
+    def _validate_service(cls, v):
+        if v is not None and v not in SERVICE_INTERESTS:
+            raise ValueError(f"service_interest must be one of {SERVICE_INTERESTS}")
+        return v
 
     @field_validator("budget_range")
     @classmethod
@@ -155,6 +221,24 @@ class InquiryStatusChange(BaseModel):
         if v not in INQUIRY_STATUSES:
             raise ValueError(f"status must be one of {INQUIRY_STATUSES}")
         return v
+
+
+class InquiryConvert(BaseModel):
+    """Payload for POST /inquiries/{id}/convert."""
+    quoted_price: float | None = Field(None, ge=0)
+    approved_price: float | None = Field(None, ge=0)
+    closing_note: str | None = Field(None, max_length=2000)
+
+
+class InquiryTimelineEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID | None = None
+    action: str | None = None
+    user_id: UUID | None = None
+    user_name: str | None = None       # enriched by service layer
+    old_data: dict | None = None
+    new_data: dict | None = None
+    created_at: datetime | None = None
 
 
 # ════════════════════════════════════════════════════════════════
@@ -183,6 +267,11 @@ class InquiryListItem(BaseModel):
     last_contacted_at: datetime | None
 
     created_at: datetime
+
+    # Enrichment — populated by the API layer via batch joins.
+    customer_name: str | None = None
+    vehicle_label: str | None = None
+    assigned_to_name: str | None = None
 
 
 class InquiryDetail(InquiryListItem):

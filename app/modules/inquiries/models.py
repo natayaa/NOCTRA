@@ -73,11 +73,12 @@ class Inquiry(Base, UUIDMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(16),
         default=InquiryStatus.NEW.value,
+        server_default=InquiryStatus.NEW.value,
         nullable=False,
         index=True,
     )
     source: Mapped[str] = mapped_column(
-        String(32), default="ADMIN", nullable=False
+        String(32), default="ADMIN", server_default="ADMIN", nullable=False
     )
     assigned_to_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -104,7 +105,7 @@ class Inquiry(Base, UUIDMixin, TimestampMixin):
         back_populates="inquiry",
         cascade="all, delete-orphan",
         order_by="InquiryPhoto.created_at.desc()",
-        lazy="selectin",   
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

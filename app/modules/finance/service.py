@@ -19,6 +19,8 @@ from app.modules.finance.constants import (
     PaymentDirection,
     PaymentReferenceType,
     TERMINAL_INVOICE_STATUSES,
+    day_range_bounds,
+    today_local,
 )
 from app.modules.finance.models import (
     Expense,
@@ -62,6 +64,35 @@ class InvoiceService:
         if not await CustomerRepository(self.db).get(payload.customer_id):
             raise NotFoundError("Customer not found")
 
+        # Guard project + prevent duplicate-invoice race by acquiring the
+        # project-scoped advisory lock BEFORE the existence check.
+        if payload.project_id:
+            await self.repo.lock_project(payload.project_id)
+
+            from app.modules.projects.repository import ProjectRepository
+
+            project = await ProjectRepository(self.db).get(payload.project_id)
+            if not project:
+                raise NotFoundError("Project not found")
+
+            if project.customer_id != payload.customer_id:
+                raise ConflictError(
+                    f"Project {project.code} belongs to a different customer. "
+                    f"Invoice customer must match the project's customer."
+                )
+
+            existing = (await self.db.execute(
+                select(Invoice)
+                .where(Invoice.project_id == payload.project_id)
+                .where(Invoice.status != InvoiceStatus.CANCELLED.value)
+                .limit(1)
+            )).scalar_one_or_none()
+            if existing:
+                raise ConflictError(
+                    f"Project {project.code} already has invoice "
+                    f"{existing.code}. Cancel it first if you need to re-issue."
+                )
+
         invoice = Invoice(
             code=await self.repo.next_code(),
             customer_id=payload.customer_id,
@@ -90,7 +121,6 @@ class InvoiceService:
 
         await self._recalc_totals(invoice)
 
-        # If the invoice links to a project, pull in any DP payments.
         if invoice.project_id:
             await PaymentService(self.db).link_project_payments_to_invoice(
                 project_id=invoice.project_id,
@@ -116,15 +146,31 @@ class InvoiceService:
     ) -> Invoice:
         from app.modules.projects.repository import ProjectRepository
 
+        # Lock BEFORE the project read so two requests can't both pass
+        # the existence check that follows.
+        await self.repo.lock_project(payload.project_id)
+
         project = await ProjectRepository(self.db).get(payload.project_id)
         if not project:
             raise NotFoundError("Project not found")
         if project.approved_price is None and project.quoted_price is None:
             raise ValidationError("Project has no approved or quoted price")
 
+        existing = (await self.db.execute(
+            select(Invoice)
+            .where(Invoice.project_id == project.id)
+            .where(Invoice.status != InvoiceStatus.CANCELLED.value)
+            .limit(1)
+        )).scalar_one_or_none()
+        if existing:
+            raise ConflictError(
+                f"Project {project.code} already has invoice {existing.code}. "
+                f"Cancel it first if you need to re-issue."
+            )
+
         price = float(project.approved_price or project.quoted_price)
         description = project.title or f"Project {project.code}"
-        issue = payload.issue_date or datetime.now(UTC).date()
+        issue = payload.issue_date or today_local()
 
         invoice = Invoice(
             code=await self.repo.next_code(),
@@ -153,7 +199,6 @@ class InvoiceService:
 
         await self._recalc_totals(invoice)
 
-        # Auto-apply any DP payments made on the project.
         await PaymentService(self.db).link_project_payments_to_invoice(
             project_id=project.id,
             invoice_id=invoice.id,
@@ -184,7 +229,6 @@ class InvoiceService:
             setattr(invoice, field, getattr(payload, field))
 
         await self._recalc_totals(invoice)
-        # If total changed, re-evaluate status against payments.
         await self.apply_payment_status(iid)
 
         await self.audit.log(
@@ -210,6 +254,24 @@ class InvoiceService:
         if current == InvoiceStatus.PAID.value and new_status != InvoiceStatus.PAID.value:
             raise ConflictError("Paid invoices cannot be un-paid via status change")
 
+        # Guard: can't cancel an invoice that has net payments — would orphan them.
+        if new_status == InvoiceStatus.CANCELLED.value:
+            paid = await self.repo.paid_amount(iid)
+            if paid > 0.01:
+                raise ConflictError(
+                    f"Cannot cancel invoice — {paid:,.0f} already collected. "
+                    f"Reverse the payments first."
+                )
+
+        if new_status == InvoiceStatus.PAID.value and current != InvoiceStatus.PAID.value:
+            paid = await self.repo.paid_amount(iid)
+            total = float(invoice.total)
+            if paid < total - 0.01:
+                raise ConflictError(
+                    f"Cannot mark as PAID — outstanding balance is "
+                    f"{total - paid:,.0f}. Record a payment instead."
+                )
+
         invoice.status = new_status
 
         action = (
@@ -228,26 +290,46 @@ class InvoiceService:
         return invoice
 
     async def apply_payment_status(self, iid: UUID) -> Invoice:
-        """Recompute the invoice status based on its net payments."""
+        """Recompute the invoice status based on its net payments.
+
+        Only CANCELLED is truly terminal — PAID must be allowed to downgrade
+        if a payment is reversed or the invoice total is increased.
+        """
         invoice = await self._get_or_404(iid)
-        if invoice.status in TERMINAL_INVOICE_STATUSES:
+        if invoice.status == InvoiceStatus.CANCELLED.value:
             return invoice
 
         paid = await self.repo.paid_amount(iid)
         total = float(invoice.total)
+        today = today_local()
+        is_past_due = bool(invoice.due_date and today > invoice.due_date)
 
-        if paid >= total - 0.01 and total > 0:
-            invoice.status = InvoiceStatus.PAID.value
+        if total > 0 and paid >= total - 0.01:
+            new_status = InvoiceStatus.PAID.value
         elif paid > 0:
-            invoice.status = InvoiceStatus.PARTIALLY_PAID.value
-        elif (
-            invoice.status == InvoiceStatus.SENT.value
-            and invoice.due_date
-            and datetime.now(UTC).date() > invoice.due_date
+            new_status = (
+                InvoiceStatus.OVERDUE.value
+                if is_past_due
+                else InvoiceStatus.PARTIALLY_PAID.value
+            )
+        elif invoice.status in (
+            InvoiceStatus.PAID.value,
+            InvoiceStatus.PARTIALLY_PAID.value,
+            InvoiceStatus.OVERDUE.value,
         ):
-            invoice.status = InvoiceStatus.OVERDUE.value
+            new_status = (
+                InvoiceStatus.OVERDUE.value
+                if is_past_due
+                else InvoiceStatus.SENT.value
+            )
+        elif invoice.status == InvoiceStatus.SENT.value and is_past_due:
+            new_status = InvoiceStatus.OVERDUE.value
+        else:
+            new_status = invoice.status
 
-        await self.db.flush()
+        if new_status != invoice.status:
+            invoice.status = new_status
+            await self.db.flush()
         return invoice
 
     async def _recalc_totals(self, invoice: Invoice) -> None:
@@ -291,7 +373,26 @@ class PaymentService:
             if not payload.supplier_id and not payload.reference_id:
                 raise ValidationError("Direction OUT requires a supplier or a reference")
 
-        # Invoice validation + overpayment guard.
+        if (
+            payload.reference_type == PaymentReferenceType.PROJECT.value
+            and payload.reference_id
+        ):
+            from app.modules.projects.repository import ProjectRepository
+
+            project = await ProjectRepository(self.db).get(payload.reference_id)
+            if not project:
+                raise NotFoundError("Referenced project not found")
+
+            if payload.customer_id and payload.customer_id != project.customer_id:
+                raise ConflictError(
+                    f"Project {project.code} belongs to a different customer."
+                )
+
+            if not payload.customer_id:
+                payload = payload.model_copy(
+                    update={"customer_id": project.customer_id}
+                )
+
         if (
             payload.reference_type == PaymentReferenceType.INVOICE.value
             and payload.reference_id
@@ -302,8 +403,9 @@ class PaymentService:
             if inv.status == InvoiceStatus.CANCELLED.value:
                 raise ConflictError("Cannot apply a payment to a cancelled invoice")
 
+            already_paid = await self.invoices.paid_amount(payload.reference_id)
+
             if payload.direction == PaymentDirection.IN.value:
-                already_paid = await self.invoices.paid_amount(payload.reference_id)
                 remaining = float(inv.total) - already_paid
                 if payload.amount > remaining + 0.01:
                     raise ConflictError(
@@ -311,6 +413,17 @@ class PaymentService:
                         f"balance of {remaining:,.0f}. Record the excess as a "
                         f"separate unapplied payment."
                     )
+            else:
+                if payload.amount > already_paid + 0.01:
+                    raise ConflictError(
+                        f"Refund of {payload.amount:,.0f} exceeds the amount already "
+                        f"paid ({already_paid:,.0f})."
+                    )
+
+            if payload.customer_id and payload.customer_id != inv.customer_id:
+                raise ConflictError(
+                    "Payment customer does not match the invoice's customer."
+                )
 
         payment = Payment(
             code=await self.repo.next_code(),
@@ -357,18 +470,17 @@ class PaymentService:
     async def reverse(
         self, payment_id: UUID, *, actor: User, reason: str
     ) -> Payment:
-        """Reverse a payment by creating a compensating opposite entry."""
         original = await self.repo.get(payment_id)
         if not original:
             raise NotFoundError("Payment not found")
 
-        if original.notes and original.notes.startswith("Reversal of "):
+        # FK-based: cannot reverse a reversal.
+        if original.reversal_of_id is not None:
             raise ConflictError("Cannot reverse a reversal entry")
 
-        if await self.repo.find_reversal_for(original.code):
-            raise ConflictError(
-                f"Payment {original.code} has already been reversed"
-            )
+        # FK + unique constraint: at most one reversal per payment.
+        if await self.repo.find_reversal_for(payment_id):
+            raise ConflictError(f"Payment {original.code} has already been reversed")
 
         opposite = (
             PaymentDirection.OUT.value
@@ -381,14 +493,15 @@ class PaymentService:
             direction=opposite,
             method=original.method,
             amount=original.amount,
-            payment_date=datetime.now(UTC).date(),
+            payment_date=today_local(),
             customer_id=original.customer_id,
             supplier_id=original.supplier_id,
             account_id=original.account_id,
             reference_type=original.reference_type,
             reference_id=original.reference_id,
             reference_number=original.reference_number,
-            notes=f"Reversal of {original.code} — {reason}",
+            reversal_of_id=original.id,          # ← structured link
+            notes=f"Reversal of {original.code} — {reason}",  # kept for human readability
             created_by_id=actor.id,
         )
         await self.repo.add(reversal)
@@ -407,6 +520,7 @@ class PaymentService:
             old_data={"code": original.code, "amount": float(original.amount)},
             new_data={
                 "reversal_code": reversal.code,
+                "reversal_id": str(reversal.id),
                 "reversed_direction": opposite,
                 "reason": reason,
             },
@@ -417,17 +531,16 @@ class PaymentService:
         self, *, project_id: UUID, invoice_id: UUID, actor: User
     ) -> int:
         """
-        Re-point IN payments made against a project to its newly created
-        invoice. Returns the number of payments relinked.
+        Re-point payments made against a project to its newly created invoice.
+        Both IN (collected) and OUT (refund) are relinked so the invoice's
+        net paid amount stays accurate after prior refunds.
         """
         stmt = (
             select(Payment)
-            .where(Payment.direction == PaymentDirection.IN.value)
             .where(Payment.reference_type == PaymentReferenceType.PROJECT.value)
             .where(Payment.reference_id == project_id)
         )
         payments = list((await self.db.execute(stmt)).scalars().all())
-
         if not payments:
             return 0
 
@@ -493,6 +606,14 @@ class ExpenseService:
         if not exp:
             raise NotFoundError("Expense not found")
 
+        if exp.payment_id:
+            locked = {"amount", "expense_date"}.intersection(payload.model_fields_set)
+            if locked:
+                raise ConflictError(
+                    "Cannot modify amount or date of an expense that is "
+                    "linked to a payment. Reverse the payment first."
+                )
+
         for field in payload.model_fields_set:
             setattr(exp, field, getattr(payload, field))
 
@@ -530,6 +651,8 @@ class FinanceReportService:
         self.db = db
 
     async def pnl(self, *, from_date: date, to_date: date) -> PnLReport:
+        start, end_exclusive = day_range_bounds(from_date, to_date)
+
         # Revenue = net cash received against invoices (reversals subtract).
         amount_expr = case(
             (Payment.direction == PaymentDirection.IN.value, Payment.amount),
@@ -547,37 +670,56 @@ class FinanceReportService:
             PnLLine(label="Customer payments received", amount=total_revenue)
         ]
 
-        # COGS — materials consumed.
+        # COGS — materials consumed (minus project-linked ADJUSTMENT_IN).
         from app.modules.inventory.models import InventoryTransaction
-        from app.modules.inventory.constants import TransactionType
+        from app.modules.inventory.constants import TransactionType, ReferenceType
 
         cogs_materials_stmt = (
-            select(func.coalesce(func.sum(InventoryTransaction.quantity * InventoryTransaction.unit_cost), 0))
+            select(func.coalesce(func.sum(
+                InventoryTransaction.quantity * InventoryTransaction.unit_cost
+            ), 0))
             .where(InventoryTransaction.transaction_type == TransactionType.CONSUMPTION.value)
-            .where(func.date(InventoryTransaction.created_at) >= from_date)
-            .where(func.date(InventoryTransaction.created_at) <= to_date)
+            .where(InventoryTransaction.created_at >= start)
+            .where(InventoryTransaction.created_at < end_exclusive)
         )
-        cogs_materials = float((await self.db.execute(cogs_materials_stmt)).scalar_one() or 0)
+        cogs_materials = float(
+            (await self.db.execute(cogs_materials_stmt)).scalar_one() or 0
+        )
 
-        # COGS — labor + outsource.
+        reversal_stmt = (
+            select(func.coalesce(func.sum(
+                InventoryTransaction.quantity * InventoryTransaction.unit_cost
+            ), 0))
+            .where(InventoryTransaction.transaction_type == TransactionType.ADJUSTMENT_IN.value)
+            .where(InventoryTransaction.reference_type == ReferenceType.PROJECT.value)
+            .where(InventoryTransaction.created_at >= start)
+            .where(InventoryTransaction.created_at < end_exclusive)
+        )
+        cogs_materials -= float(
+            (await self.db.execute(reversal_stmt)).scalar_one() or 0
+        )
+
+        # COGS — labor + outsource, grouped by category in ONE query.
         from app.modules.projects.models import ProjectItem
         from app.modules.projects.constants import CostCategory
 
-        cogs_labor_stmt = (
-            select(func.coalesce(func.sum(ProjectItem.actual_cost), 0))
-            .where(ProjectItem.category == CostCategory.LABOR.value)
-            .where(ProjectItem.created_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=UTC))
-            .where(ProjectItem.created_at <= datetime.combine(to_date, datetime.max.time(), tzinfo=UTC))
+        cogs_stmt = (
+            select(
+                ProjectItem.category,
+                func.coalesce(func.sum(ProjectItem.actual_cost), 0).label("total"),
+            )
+            .where(ProjectItem.category.in_([
+                CostCategory.LABOR.value,
+                CostCategory.OUTSOURCE.value,
+            ]))
+            .where(ProjectItem.created_at >= start)
+            .where(ProjectItem.created_at < end_exclusive)
+            .group_by(ProjectItem.category)
         )
-        cogs_labor = float((await self.db.execute(cogs_labor_stmt)).scalar_one() or 0)
-
-        cogs_outsource_stmt = (
-            select(func.coalesce(func.sum(ProjectItem.actual_cost), 0))
-            .where(ProjectItem.category == CostCategory.OUTSOURCE.value)
-            .where(ProjectItem.created_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=UTC))
-            .where(ProjectItem.created_at <= datetime.combine(to_date, datetime.max.time(), tzinfo=UTC))
-        )
-        cogs_outsource = float((await self.db.execute(cogs_outsource_stmt)).scalar_one() or 0)
+        cogs_rows = (await self.db.execute(cogs_stmt)).all()
+        cogs_by_cat = {r.category: float(r.total or 0) for r in cogs_rows}
+        cogs_labor = cogs_by_cat.get(CostCategory.LABOR.value, 0.0)
+        cogs_outsource = cogs_by_cat.get(CostCategory.OUTSOURCE.value, 0.0)
 
         cogs_lines = [
             PnLLine(label="Materials consumed", amount=cogs_materials),
@@ -636,88 +778,117 @@ class FinanceReportService:
         )
 
     async def cash_flow(self, *, from_date: date, to_date: date) -> CashFlowSummary:
-        amount_expr = case(
-            (Payment.direction == PaymentDirection.IN.value, Payment.amount),
-            else_=-Payment.amount,
-        )
-        net_stmt = (
-            select(func.coalesce(func.sum(amount_expr), 0))
-            .where(Payment.payment_date >= from_date)
-            .where(Payment.payment_date <= to_date)
-        )
-        net = float((await self.db.execute(net_stmt)).scalar_one() or 0)
+        agg_stmt = select(
+            func.coalesce(func.sum(case(
+                (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+                else_=0,
+            )), 0).label("inflow"),
+            func.coalesce(func.sum(case(
+                (Payment.direction == PaymentDirection.OUT.value, Payment.amount),
+                else_=0,
+            )), 0).label("outflow"),
+        ).where(Payment.payment_date >= from_date).where(Payment.payment_date <= to_date)
 
-        inflow_stmt = (
-            select(func.coalesce(func.sum(Payment.amount), 0))
-            .where(Payment.direction == PaymentDirection.IN.value)
-            .where(Payment.payment_date >= from_date)
-            .where(Payment.payment_date <= to_date)
-        )
-        outflow_stmt = (
-            select(func.coalesce(func.sum(Payment.amount), 0))
-            .where(Payment.direction == PaymentDirection.OUT.value)
-            .where(Payment.payment_date >= from_date)
-            .where(Payment.payment_date <= to_date)
-        )
-        inflow = float((await self.db.execute(inflow_stmt)).scalar_one() or 0)
-        outflow = float((await self.db.execute(outflow_stmt)).scalar_one() or 0)
+        row = (await self.db.execute(agg_stmt)).one()
+        inflow = float(row.inflow or 0)
+        outflow = float(row.outflow or 0)
 
         return CashFlowSummary(
             period_start=from_date,
             period_end=to_date,
             total_inflow=inflow,
             total_outflow=outflow,
-            net_cash_flow=net,
+            net_cash_flow=inflow - outflow,
         )
 
     async def receivables(self) -> ReceivablesSummary:
-        stmt = select(Invoice).where(
-            Invoice.status.not_in([InvoiceStatus.PAID.value, InvoiceStatus.CANCELLED.value])
+        """Single-query aggregate — no N+1."""
+        # Net paid per invoice (IN − OUT against INVOICE).
+        paid_subq = (
+            select(
+                Payment.reference_id.label("invoice_id"),
+                func.coalesce(func.sum(case(
+                    (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+                    else_=-Payment.amount,
+                )), 0).label("paid"),
+            )
+            .where(Payment.reference_type == PaymentReferenceType.INVOICE.value)
+            .group_by(Payment.reference_id)
+            .subquery()
         )
-        invoices = list((await self.db.execute(stmt)).scalars().all())
 
-        repo = InvoiceRepository(self.db)
-        total = 0.0
-        overdue = 0.0
-        overdue_count = 0
-        today = datetime.now(UTC).date()
+        balance = func.greatest(
+            Invoice.total - func.coalesce(paid_subq.c.paid, 0),
+            0,
+        )
+        today = today_local()
+        is_overdue = Invoice.due_date.isnot(None) & (Invoice.due_date < today)
 
-        for inv in invoices:
-            paid = await repo.paid_amount(inv.id)
-            balance = float(inv.total) - paid
-            total += balance
-            if inv.due_date and today > inv.due_date:
-                overdue += balance
-                overdue_count += 1
+        stmt = (
+            select(
+                func.coalesce(func.sum(balance), 0).label("total"),
+                func.coalesce(func.sum(case(
+                    (is_overdue, balance),
+                    else_=0,
+                )), 0).label("overdue"),
+                func.count(Invoice.id).label("count"),
+                func.coalesce(func.sum(case(
+                    (is_overdue, 1),
+                    else_=0,
+                )), 0).label("overdue_count"),
+            )
+            .outerjoin(paid_subq, paid_subq.c.invoice_id == Invoice.id)
+            .where(Invoice.status.not_in([
+                InvoiceStatus.PAID.value, InvoiceStatus.CANCELLED.value,
+            ]))
+        )
+        row = (await self.db.execute(stmt)).one()
 
         return ReceivablesSummary(
-            total_outstanding=total,
-            total_overdue=overdue,
-            invoice_count=len(invoices),
-            overdue_count=overdue_count,
+            total_outstanding=float(row.total or 0),
+            total_overdue=float(row.overdue or 0),
+            invoice_count=int(row.count or 0),
+            overdue_count=int(row.overdue_count or 0),
         )
 
     async def payables(self) -> PayablesSummary:
+        """Single-query aggregate — no N+1."""
         from app.modules.inventory.constants import PurchaseOrderStatus
         from app.modules.inventory.models import PurchaseOrder
 
-        stmt = select(PurchaseOrder).where(
-            PurchaseOrder.status.in_([
+        # Net paid per PO (OUT − IN against PURCHASE_ORDER).
+        paid_subq = (
+            select(
+                Payment.reference_id.label("po_id"),
+                func.coalesce(func.sum(case(
+                    (Payment.direction == PaymentDirection.OUT.value, Payment.amount),
+                    else_=-Payment.amount,
+                )), 0).label("paid"),
+            )
+            .where(Payment.reference_type == PaymentReferenceType.PURCHASE_ORDER.value)
+            .group_by(Payment.reference_id)
+            .subquery()
+        )
+
+        balance = func.greatest(
+            PurchaseOrder.total_amount - func.coalesce(paid_subq.c.paid, 0),
+            0,
+        )
+
+        stmt = (
+            select(
+                func.coalesce(func.sum(balance), 0).label("total"),
+                func.count(PurchaseOrder.id).label("count"),
+            )
+            .outerjoin(paid_subq, paid_subq.c.po_id == PurchaseOrder.id)
+            .where(PurchaseOrder.status.in_([
                 PurchaseOrderStatus.RECEIVED.value,
                 PurchaseOrderStatus.SENT.value,
-            ])
+            ]))
         )
-        pos = list((await self.db.execute(stmt)).scalars().all())
+        row = (await self.db.execute(stmt)).one()
 
-        total = 0.0
-        for po in pos:
-            paid_stmt = (
-                select(func.coalesce(func.sum(Payment.amount), 0))
-                .where(Payment.direction == PaymentDirection.OUT.value)
-                .where(Payment.reference_type == PaymentReferenceType.PURCHASE_ORDER.value)
-                .where(Payment.reference_id == po.id)
-            )
-            paid = float((await self.db.execute(paid_stmt)).scalar_one() or 0)
-            total += max(0, float(po.total_amount) - paid)
-
-        return PayablesSummary(total_outstanding=total, po_count=len(pos))
+        return PayablesSummary(
+            total_outstanding=float(row.total or 0),
+            po_count=int(row.count or 0),
+        )

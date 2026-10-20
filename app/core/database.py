@@ -50,7 +50,9 @@ class TimestampMixin:
 
 
 class SoftDeleteMixin:
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
 
 
 engine = create_async_engine(
@@ -74,12 +76,18 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:
         try:
             yield session
-            await session.commit()
         except AppError:
             # Domain errors (401, 403, 404, 409) still need to persist
             # side effects like failed_login_attempts and audit logs.
-            await session.commit()
+            # If that commit fails, roll back and re-raise the ORIGINAL
+            # AppError — never let an IntegrityError mask the domain error.
+            try:
+                await session.commit()
+            except Exception:
+                await session.rollback()
             raise
         except Exception:
             await session.rollback()
             raise
+        else:
+            await session.commit()

@@ -108,6 +108,7 @@ class AuditAction(StrEnum):
     LOGIN = "LOGIN"
     LOGIN_FAILED = "LOGIN_FAILED"
     LOGOUT = "LOGOUT"
+    REFRESH = "REFRESH"  # addition
 
     # System
     EXPORT = "EXPORT"

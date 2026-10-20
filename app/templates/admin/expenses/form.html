@@ -1,78 +1,161 @@
 {% extends "admin/base.html" %}
-{% block content %}
 {% set fv = form_values or {} %}
+
+{% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">{{ 'New Expense' if mode == 'create' else 'Edit Expense' }}</h1></div>
-  <div class="page-actions"><a href="/admin/expenses" class="btn btn-secondary btn-sm">Back</a></div>
+  <div>
+    <h1 class="page-title">{{ 'New Expense' if mode == 'create' else 'Edit Expense' }}</h1>
+    {% if expense %}<p class="page-subtitle mono text-xs">{{ expense.code }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="/admin/expenses" class="btn btn-secondary btn-sm">Back</a>
+  </div>
 </div>
 
-{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
-
-<form method="post" action="{{ '/admin/expenses' if mode == 'create' else '/admin/expenses/' ~ expense.id }}"
-      class="max-w-2xl panel space-y-5" data-guard>
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-
-  <div class="form-row">
-    <label class="form-label" for="category">Category <span class="req">*</span></label>
-    <select class="select" id="category" name="category" required>
-      {% for c in categories %}
-        {% set cur = fv.get('category') or (expense.category if expense else '') %}
-        <option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ category_labels.get(c, c) }}</option>
-      {% endfor %}
-    </select>
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
   </div>
+</div>
+{% endif %}
 
-  <div class="form-row">
-    <label class="form-label" for="description">Description <span class="req">*</span></label>
-    <input class="input" id="description" name="description" required maxlength="500"
-           value="{{ fv.get('description') or (expense.description if expense else '') }}" />
-  </div>
+{# ── MAIN FORM ─────────────────────────────────────── #}
+<form method="post"
+      action="{{ '/admin/expenses' if mode == 'create' else '/admin/expenses/' ~ expense.id }}"
+      id="expense-form"
+      class="max-w-2xl space-y-5"
+      data-guard
+      data-shortcut-submit>
 
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="amount">Amount (IDR) <span class="req">*</span></label>
-      <input class="input" type="number" step="1000" id="amount" name="amount" required
-             value="{{ fv.get('amount') or (expense.amount if expense else '') }}" />
-    </div>
-    <div class="form-row">
-      <label class="form-label" for="expense_date">Date <span class="req">*</span></label>
-      <input class="input" type="date" id="expense_date" name="expense_date" required
-             value="{{ fv.get('expense_date') or (expense.expense_date.strftime('%Y-%m-%d') if expense else today) }}" />
-    </div>
-  </div>
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
 
-  <div class="grid md:grid-cols-2 gap-5">
+  <section class="panel">
+    <div class="panel-title mb-4">Details</div>
+
     <div class="form-row">
-      <label class="form-label" for="account_id">Account</label>
-      <select class="select" id="account_id" name="account_id">
-        <option value="">—</option>
-        {% for a in accounts %}
-          {% set cur = fv.get('account_id') or (expense.account_id|string if expense and expense.account_id else '') %}
-          <option value="{{ a.id }}" {% if cur == a.id|string %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>
+      <label class="form-label" for="category">Category <span class="req">*</span></label>
+      <select class="select" id="category" name="category" required>
+        {% for c in categories %}
+          {% set cur = fv.get('category', expense.category if expense else '') %}
+          <option value="{{ c }}" {% if cur == c %}selected{% endif %}>
+            {{ category_labels.get(c, c) }}
+          </option>
         {% endfor %}
       </select>
     </div>
+
     <div class="form-row">
-      <label class="form-label" for="reference_number">Reference number</label>
-      <input class="input" id="reference_number" name="reference_number" maxlength="100"
-             value="{{ fv.get('reference_number') or (expense.reference_number if expense else '') }}" />
+      <label class="form-label" for="description">Description <span class="req">*</span></label>
+      <input class="input" id="description" name="description" required maxlength="500"
+             {% if mode == 'create' %}autofocus{% endif %}
+             value="{{ fv.get('description', expense.description if expense else '') }}" />
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title mb-4">Amount & date</div>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="amount">Amount (IDR) <span class="req">*</span></label>
+        <input class="input" type="number" step="1000" min="0"
+               id="amount" name="amount" required
+               value="{{ fv.get('amount', expense.amount if expense else '') }}" />
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="expense_date">Date <span class="req">*</span></label>
+        <input class="input" type="date" id="expense_date" name="expense_date" required
+               value="{{ fv.get('expense_date', expense.expense_date.isoformat() if expense and expense.expense_date else today) }}" />
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title mb-4">Accounting</div>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row">
+        <label class="form-label" for="account_id">Account</label>
+        <select class="select" id="account_id" name="account_id">
+          <option value="">—</option>
+          {% set cur_acc = fv.get('account_id', expense.account_id|string if expense and expense.account_id else '') %}
+          {% for a in accounts %}
+            <option value="{{ a.id }}" {% if cur_acc == a.id|string %}selected{% endif %}>
+              {{ a.code }} — {{ a.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label" for="reference_number">Reference number</label>
+        <input class="input" id="reference_number" name="reference_number" maxlength="100"
+               value="{{ fv.get('reference_number', expense.reference_number if expense else '') }}" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="textarea" id="notes" name="notes" rows="3" maxlength="5000"
+                placeholder="Internal notes about this expense…">{{ fv.get('notes', expense.notes if expense else '') }}</textarea>
+    </div>
+  </section>
+
+  {# ── Sticky save bar ──────────────────────────────── #}
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Create' if mode == 'create' else 'Save changes' }}
+      </button>
+      <a href="/admin/expenses" class="btn btn-secondary">Cancel</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
     </div>
   </div>
+</form>
 
-  <div class="form-row">
-    <label class="form-label" for="notes">Notes</label>
-    <textarea class="textarea" id="notes" name="notes" rows="2">{{ fv.get('notes') or (expense.notes if expense else '') }}</textarea>
-  </div>
-
-  <div class="flex gap-2 pt-2">
-    <button class="btn btn-primary">{{ 'Create' if mode == 'create' else 'Save changes' }}</button>
-    <a href="/admin/expenses" class="btn btn-secondary">Cancel</a>
-    {% if mode == 'edit' %}
-    <form method="post" action="/admin/expenses/{{ expense.id }}/delete" data-confirm="Delete this expense?">
-      <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-      <button class="btn btn-danger ml-auto">Delete</button>
-    </form>
-    {% endif %}
+{# ── DELETE FORM — SEPARATE from main form ──────────── #}
+{# Nested <form> is invalid HTML — delete form MUST be outside. #}
+{% if mode == 'edit' %}
+<form method="post" action="/admin/expenses/{{ expense.id }}/delete"
+      class="max-w-2xl mt-6" data-confirm="Delete this expense permanently?">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+  <div class="panel" style="border-color: rgba(239,68,68,0.3);">
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <div class="text-sm font-medium">Delete expense</div>
+        <p class="text-xs text-noctra-dim mt-1">
+          This action is permanent and cannot be undone.
+        </p>
+      </div>
+      <button class="btn btn-danger btn-sm">Delete expense</button>
+    </div>
   </div>
 </form>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const form = document.querySelector('form[data-shortcut-submit]');
+  if (form) {
+    form.addEventListener('keydown', (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+      if (e.target && e.target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    });
+  }
+})();
+</script>
 {% endblock %}

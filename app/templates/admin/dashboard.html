@@ -1,8 +1,8 @@
 {% extends "admin/base.html" %}
 
 {% block extra_head %}
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script defer src="/static/js/dashboard-charts.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script defer src="/static/js/dashboard-charts.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -18,34 +18,40 @@
   </div>
 </div>
 
-<div class="mb-6 flex flex-wrap gap-2">
-  {% for p in period_presets %}
-    <a href="/admin/dashboard?preset={{ p }}"
-       class="badge {% if period_preset == p %}badge-accent{% else %}badge-neutral{% endif %}">
+{% if period_presets %}
+<div class="mb-6">
+  <div class="segmented-control" role="tablist" aria-label="Time period">
+    {% for p in period_presets %}
+    <a href="/admin/dashboard?preset={{ p }}" class="segmented-item{% if period_preset == p %} is-active{% endif %}"
+      role="tab" {% if period_preset==p %}aria-selected="true" {% endif %}>
       {{ period_labels.get(p, p) }}
     </a>
-  {% endfor %}
+    {% endfor %}
+  </div>
 </div>
+{% endif %}
 
 {% set icons = {
-  'revenue':         'M3 7h18v10H3zM3 7l2-3h14l2 3M16 12h2',
-  'gross_profit':    'M3 17l6-6 4 4 8-8M21 7v6h-6',
-  'net_profit':      'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
-  'gross_margin':    'M19 5 5 19M6.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm11 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
-  'active_projects': 'M22 12h-4l-3 9L9 3l-3 9H2',
-  'open_inquiries':  'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z',
-  'unpaid_invoices': 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 0v6h6M9 13h6M9 17h4',
-  'low_stock':       'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0ZM12 9v4M12 17h.01',
+'revenue': 'M3 7h18v10H3zM3 7l2-3h14l2 3M16 12h2',
+'gross_profit': 'M3 17l6-6 4 4 8-8M21 7v6h-6',
+'net_profit': 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+'gross_margin': 'M19 5 5 19M6.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm11 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
+'active_projects': 'M22 12h-4l-3 9L9 3l-3 9H2',
+'open_inquiries': 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0
+0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z',
+'unpaid_invoices': 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 0v6h6M9 13h6M9 17h4',
+'low_stock': 'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0ZM12 9v4M12
+17h.01',
 } %}
 {% set tones = {
-  'revenue':         'blue',
-  'gross_profit':    'green',
-  'net_profit':      'green',
-  'gross_margin':    'purple',
-  'active_projects': 'purple',
-  'open_inquiries':  'orange',
-  'unpaid_invoices': 'pink',
-  'low_stock':       'orange',
+'revenue': 'blue',
+'gross_profit': 'green',
+'net_profit': 'green',
+'gross_margin': 'purple',
+'active_projects': 'purple',
+'open_inquiries': 'orange',
+'unpaid_invoices': 'pink',
+'low_stock': 'orange',
 } %}
 
 <div class="stat-grid">
@@ -53,21 +59,20 @@
   <div class="stat">
     <div class="stat-icon tone-{{ tones.get(card.key, 'blue') }}" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none">
-        <path d="{{ icons.get(card.key, icons['revenue']) }}"
-              stroke="currentColor" stroke-width="1.9"
-              stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="{{ icons.get(card.key, icons['revenue']) }}" stroke="currentColor" stroke-width="1.9"
+          stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </div>
     <div class="stat-content">
       <div class="stat-label">{{ card.label }}</div>
       <div class="stat-value">{{ card.formatted }}</div>
       {% if card.delta_pct is not none %}
-        <div class="stat-delta {{ card.delta_direction }}">
-          {% if card.delta_direction == 'up' %}↑{% elif card.delta_direction == 'down' %}↓{% else %}→{% endif %}
-          {{ '%+.1f'|format(card.delta_pct) }}% vs prev
-        </div>
+      <div class="stat-delta {{ card.delta_direction }}">
+        {% if card.delta_direction == 'up' %}↑{% elif card.delta_direction == 'down' %}↓{% else %}→{% endif %}
+        {{ '%+.1f'|format(card.delta_pct) }}% vs prev
+      </div>
       {% elif card.hint %}
-        <div class="stat-delta">{{ card.hint }}</div>
+      <div class="stat-delta">{{ card.hint }}</div>
       {% endif %}
     </div>
   </div>
@@ -76,20 +81,18 @@
 
 {# ── Charts row ───────────────────────────────────── #}
 <div class="grid lg:grid-cols-3 gap-6 mb-6">
-
-  {# Revenue + Gross profit line chart #}
   <div class="panel lg:col-span-2">
     <div class="flex items-center justify-between">
       <div>
         <div class="panel-title">Revenue &amp; Gross Profit</div>
         <div class="panel-subtitle">{{ interval_label }} trend</div>
       </div>
-      <div class="flex items-center gap-3 text-xs">
-        <span class="flex items-center gap-1">
-          <span class="w-3 h-3 rounded-sm bg-noctra-accent"></span> Revenue
+      <div class="flex items-center gap-4 text-xs text-neutral-400">
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-noctra-accent"></span> Revenue
         </span>
-        <span class="flex items-center gap-1">
-          <span class="w-3 h-3 rounded-sm bg-noctra-success"></span> Gross Profit
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-noctra-success"></span> Gross Profit
         </span>
       </div>
     </div>
@@ -98,7 +101,6 @@
     </div>
   </div>
 
-  {# Cash flow bar chart #}
   <div class="panel">
     <div class="panel-title">Cash Flow</div>
     <div class="panel-subtitle">Money in vs money out</div>
@@ -119,23 +121,22 @@
     {% if funnel.total > 0 %}
     <div class="mt-4 space-y-3">
       {% for stage in funnel.stages %}
-        {% if stage.count > 0 or stage.status in ('NEW', 'CONTACTED', 'QUOTED', 'NEGOTIATING', 'APPROVED') %}
-        <div>
-          <div class="flex items-center justify-between text-xs mb-1">
-            <span class="text-neutral-400">{{ stage.label }}</span>
-            <span class="font-mono">{{ stage.count }}</span>
-          </div>
-          <div class="h-2 rounded-full bg-noctra-surface2 overflow-hidden">
-            <div class="h-full
+      {% if stage.count > 0 or stage.status in ('NEW', 'CONTACTED', 'QUOTED', 'NEGOTIATING', 'APPROVED') %}
+      <div>
+        <div class="flex items-center justify-between text-xs mb-1">
+          <span class="text-neutral-400">{{ stage.label }}</span>
+          <span class="font-mono">{{ stage.count }}</span>
+        </div>
+        <div class="h-2 rounded-full bg-noctra-surface2 overflow-hidden">
+          <div class="h-full
               {% if stage.status in ('CONVERTED',) %}bg-noctra-success
               {% elif stage.status == 'LOST' %}bg-noctra-danger
               {% elif stage.status == 'APPROVED' %}bg-noctra-accent
               {% elif stage.status == 'NEGOTIATING' %}bg-noctra-warning
-              {% else %}bg-neutral-600{% endif %}"
-                 style="width: {{ stage.pct_of_total }}%"></div>
-          </div>
+              {% else %}bg-neutral-600{% endif %}" style="width: {{ stage.pct_of_total }}%"></div>
         </div>
-        {% endif %}
+      </div>
+      {% endif %}
       {% endfor %}
     </div>
     {% else %}
@@ -193,7 +194,7 @@
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
           <a href="/admin/customers/{{ c.customer_id }}"
-             class="font-medium text-sm hover:text-noctra-accent truncate block">
+            class="font-medium text-sm hover:text-noctra-accent truncate block">
             {{ c.name }}
           </a>
           <div class="text-xs text-neutral-500">
@@ -263,13 +264,12 @@
     <div class="mt-4 space-y-2">
       {% for a in activity %}
       <div class="flex items-center gap-3 text-xs py-1.5 border-b border-noctra-border last:border-0">
-        <span class="badge
-          {% if a.action == 'CREATE' %}badge-success
-          {% elif a.action == 'UPDATE' or a.action == 'STATUS_CHANGE' %}badge-info
-          {% elif a.action == 'DELETE' %}badge-danger
-          {% elif a.action == 'LOGIN_FAILED' %}badge-warning
-          {% else %}badge-neutral{% endif %}"
-          style="font-size: 0.65rem; padding: 1px 6px;">
+        <span class="badge badge-xs
+    {% if a.action == 'CREATE' %}badge-success
+    {% elif a.action == 'UPDATE' or a.action == 'STATUS_CHANGE' %}badge-info
+    {% elif a.action == 'DELETE' %}badge-danger
+    {% elif a.action == 'LOGIN_FAILED' %}badge-warning
+    {% else %}badge-neutral{% endif %}">
           {{ a.action }}
         </span>
         <span class="text-neutral-400 truncate">{{ a.table_name }}</span>

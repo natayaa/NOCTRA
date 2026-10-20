@@ -3,13 +3,20 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import or_, select
 
 from app.core.constants import PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, paginate, page_params
 from app.modules.auth.dependencies import CurrentUser, require_permission
+from app.modules.customers.models import Customer
 from app.modules.customers.repository import CustomerRepository
+from app.modules.vehicles.constants import (
+    VEHICLE_CATEGORIES,
+    VEHICLE_SORT_OPTIONS,
+)
+from app.modules.vehicles.models import Vehicle
 from app.modules.vehicles.repository import VehicleRepository
 from app.modules.vehicles.schemas import (
     VehicleBrandOut,
@@ -17,6 +24,7 @@ from app.modules.vehicles.schemas import (
     VehicleDetail,
     VehicleListItem,
     VehicleModelOut,
+    VehicleSearchResult,
     VehicleUpdate,
 )
 from app.modules.vehicles.service import VehicleService
@@ -28,7 +36,26 @@ customer_vehicles_router = APIRouter(
 vehicles_router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
-# ── Nested list + create ────────────────────────────────────
+def _validate_category(category: str | None) -> None:
+    if category is not None and category not in VEHICLE_CATEGORIES:
+        raise ValidationError(
+            f"Invalid category {category!r}. "
+            f"Choose from: {', '.join(VEHICLE_CATEGORIES)}"
+        )
+
+
+def _validate_sort(sort: str) -> None:
+    if sort not in VEHICLE_SORT_OPTIONS:
+        raise ValidationError(
+            f"Invalid sort {sort!r}. "
+            f"Choose from: {', '.join(VEHICLE_SORT_OPTIONS)}"
+        )
+
+
+# ════════════════════════════════════════════════════════════════
+# NESTED — /customers/{customer_id}/vehicles
+# ════════════════════════════════════════════════════════════════
+
 @customer_vehicles_router.get("", response_model=Page[VehicleListItem])
 async def list_customer_vehicles(
     customer_id: UUID,
@@ -36,12 +63,21 @@ async def list_customer_vehicles(
     params: PageParams = Depends(page_params),
     q: str | None = Query(None, max_length=200),
     category: str | None = Query(None),
+    sort: str = Query(
+        "created_desc",
+        description=f"One of: {', '.join(VEHICLE_SORT_OPTIONS)}",
+    ),
     _=Depends(require_permission(PermissionCode.VEHICLE_READ)),
 ) -> Page[VehicleListItem]:
+    _validate_category(category)
+    _validate_sort(sort)
+
     if not await CustomerRepository(db).get(customer_id):
         raise NotFoundError("Customer not found")
 
-    stmt = VehicleRepository(db).query(customer_id=customer_id, q=q, category=category)
+    stmt = VehicleRepository(db).query(
+        customer_id=customer_id, q=q, category=category, sort=sort,
+    )
     rows, meta = await paginate(db, stmt, params)
     return Page[VehicleListItem](
         items=[VehicleListItem.model_validate(r) for r in rows],
@@ -63,16 +99,31 @@ async def create_customer_vehicle(
     return VehicleDetail.model_validate(vehicle)
 
 
-# ── Global list ─────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+# GLOBAL LIST
+# ════════════════════════════════════════════════════════════════
+
 @vehicles_router.get("", response_model=Page[VehicleListItem])
 async def list_vehicles(
     db: DbSession,
     params: PageParams = Depends(page_params),
     q: str | None = Query(None, max_length=200),
-    category: str | None = Query(None),
+    category: str | None = Query(None, max_length=32),
+    brand: str | None = Query(None, max_length=100),
+    customer_id: UUID | None = Query(None),
+    sort: str = Query(
+        "created_desc",
+        description=f"One of: {', '.join(VEHICLE_SORT_OPTIONS)}",
+    ),
     _=Depends(require_permission(PermissionCode.VEHICLE_READ)),
 ) -> Page[VehicleListItem]:
-    stmt = VehicleRepository(db).query(q=q, category=category)
+    _validate_category(category)
+    _validate_sort(sort)
+
+    stmt = VehicleRepository(db).query(
+        q=q, category=category, brand=brand,
+        customer_id=customer_id, sort=sort,
+    )
     rows, meta = await paginate(db, stmt, params)
     return Page[VehicleListItem](
         items=[VehicleListItem.model_validate(r) for r in rows],
@@ -80,19 +131,18 @@ async def list_vehicles(
     )
 
 
-# ── Static paths BEFORE /{vehicle_id} ───────────────────────
-@vehicles_router.get("/search", response_model=list[dict])
+# ════════════════════════════════════════════════════════════════
+# STATIC PATHS BEFORE /{vehicle_id}
+# ════════════════════════════════════════════════════════════════
+
+@vehicles_router.get("/search", response_model=list[VehicleSearchResult])
 async def search_vehicles(
     db: DbSession,
-    q: str = Query(..., min_length=1, max_length=100),  # ← FIX: required
+    q: str = Query(..., min_length=1, max_length=100),
     customer_id: UUID | None = Query(None),
     limit: int = Query(10, ge=1, le=50),
     _=Depends(require_permission(PermissionCode.VEHICLE_READ)),
-) -> list[dict]:
-    from sqlalchemy import and_, or_, select
-    from app.modules.customers.models import Customer
-    from app.modules.vehicles.models import Vehicle
-
+) -> list[VehicleSearchResult]:
     like = f"%{q.strip()}%"
     conds = [
         or_(
@@ -106,8 +156,8 @@ async def search_vehicles(
 
     stmt = (
         select(Vehicle)
-        .where(and_(*conds))
-        .order_by(Vehicle.brand, Vehicle.model)
+        .where(*conds)
+        .order_by(Vehicle.brand.asc(), Vehicle.model.asc(), Vehicle.id.asc())
         .limit(limit)
     )
     rows = (await db.execute(stmt)).scalars().all()
@@ -115,17 +165,20 @@ async def search_vehicles(
     cust_ids = {v.customer_id for v in rows if v.customer_id}
     customers: dict = {}
     if cust_ids:
-        c_rows = await db.execute(select(Customer).where(Customer.id.in_(cust_ids)))
-        customers = {c.id: c for c in c_rows.scalars().all()}
+        c_rows = await db.execute(
+            select(Customer.id, Customer.name).where(Customer.id.in_(cust_ids))
+        )
+        customers = {cid: name for cid, name in c_rows.all()}
 
     return [
-        {
-            "id": str(v.id),
-            "label": f"{v.brand} {v.model}" + (f" — {v.plate_number}" if v.plate_number else ""),
-            "sublabel": f"{v.year or ''} {v.category or ''}".strip(),
-            "customer_id": str(v.customer_id) if v.customer_id else None,
-            "customer_name": customers[v.customer_id].name if v.customer_id in customers else None,
-        }
+        VehicleSearchResult(
+            id=v.id,
+            label=f"{v.brand} {v.model}"
+            + (f" — {v.plate_number}" if v.plate_number else ""),
+            sublabel=f"{v.year or ''} {v.category or ''}".strip(),
+            customer_id=v.customer_id,
+            customer_name=customers.get(v.customer_id),
+        )
         for v in rows
     ]
 
@@ -153,7 +206,10 @@ async def list_models(
     ]
 
 
-# ── Dynamic path LAST ───────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+# DYNAMIC PATH LAST
+# ════════════════════════════════════════════════════════════════
+
 @vehicles_router.get("/{vehicle_id}", response_model=VehicleDetail)
 async def get_vehicle(
     vehicle_id: UUID,
@@ -176,3 +232,13 @@ async def update_vehicle(
 ) -> VehicleDetail:
     vehicle = await VehicleService(db).update(vehicle_id, payload, actor=actor)
     return VehicleDetail.model_validate(vehicle)
+
+
+@vehicles_router.delete("/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_vehicle(
+    vehicle_id: UUID,
+    db: DbSession,
+    actor: CurrentUser,
+    _=Depends(require_permission(PermissionCode.VEHICLE_DELETE)),
+) -> None:
+    await VehicleService(db).delete(vehicle_id, actor=actor)

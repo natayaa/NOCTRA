@@ -1,9 +1,12 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import quote_plus
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from app.core.constants import AppEnv
 
 # Absolute path so .env is found regardless of CWD
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -19,7 +22,7 @@ class Settings(BaseSettings):
 
     # ── App ─────────────────────────────────────────────
     APP_NAME: str = "NOCTRA Autoworks"
-    APP_ENV: Literal["development", "staging", "production", "test"] = "development"
+    APP_ENV: AppEnv = AppEnv.DEV
     APP_DEBUG: bool = False
     APP_SECRET_KEY: str = Field(..., min_length=32)
     APP_BASE_URL: str = "http://localhost:8000"
@@ -60,6 +63,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_LOGIN_PER_MINUTE: int = 10
     RATE_LIMIT_API_PER_MINUTE: int = 300
     RATE_LIMIT_PUBLIC_PER_MINUTE: int = 60
+    # Only enable behind a reverse proxy that STRIPS client-supplied
+    # X-Forwarded-For and sets its own. Otherwise, leave False.
+    TRUST_PROXY_HEADERS: bool = False
 
     # ── CORS / Hosts ────────────────────────────────────
     CORS_ORIGINS: Annotated[list[str], NoDecode] = []
@@ -70,7 +76,7 @@ class Settings(BaseSettings):
 
     MEDIA_ROOT: str = "media"
 
-    # ── Email ───────────────────────────────────────────
+        # ── Email ───────────────────────────────────────────
     EMAIL_ENABLED: bool = False
     EMAIL_FROM_NAME: str = "NOCTRA Autoworks"
     EMAIL_FROM_ADDRESS: str = "hello@noctra.local"
@@ -84,30 +90,60 @@ class Settings(BaseSettings):
     SMTP_USE_SSL: bool = False
     SMTP_TIMEOUT_SECONDS: int = 30
 
+    # ── Retry ───────────────────────────────────────────
+    # Total attempts = 1 initial + SMTP_MAX_RETRIES retries.
+    # Backoff: min(base × 2^attempt, max_delay) + up to 30% jitter.
+    SMTP_MAX_RETRIES: int = 3
+    SMTP_RETRY_BASE_DELAY: float = 1.0     # seconds
+    SMTP_RETRY_MAX_DELAY: float = 30.0     # cap per attempt
+    
     # ── Public contact info ─────────────────────────────
     PUBLIC_PHONE: str = "+62 812 3456 7890"
     PUBLIC_EMAIL: str = "hello@noctra.local"
     PUBLIC_ADDRESS: str = "Jl. Contoh No. 123, Jakarta"
     PUBLIC_WHATSAPP: str | None = None
 
+
+    # ── Media / Uploads ─────────────────────────────────
+    MEDIA_ROOT: str = "media"
+
+    # Internal media paths (uploads through this app) must start with one
+    # of these prefixes. Prevents arbitrary local path references.
+    MEDIA_URL_PREFIXES: Annotated[list[str], NoDecode] = ["/media/"]
+
+    # External media hosts allowlisted for photo references (e.g. a CDN).
+    # Empty = reject all external URLs — safe default for a self-hosted app.
+    # Wildcard subdomains supported: "*.cdn.example.com".
+    MEDIA_ALLOWED_HOSTS: Annotated[list[str], NoDecode] = []
+
+    # ── Inquiry workflow ────────────────────────────────
+    # When True, transitioning to any "contact happened" status
+    # (CONTACTED/QUOTED/NEGOTIATING/APPROVED) refreshes `last_contacted_at`.
+    # When False, only NEW → CONTACTED does (legacy behaviour).
+    INQUIRY_TRACK_CONTACT_ON_TRANSITION: bool = True
+
     # ── Derived ─────────────────────────────────────────
     @property
     def database_url(self) -> str:
+        user = quote_plus(self.POSTGRES_USER)
+        pwd = quote_plus(self.POSTGRES_PASSWORD)
         return (
-            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"postgresql+asyncpg://{user}:{pwd}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
     @property
     def sync_database_url(self) -> str:
+        user = quote_plus(self.POSTGRES_USER)
+        pwd = quote_plus(self.POSTGRES_PASSWORD)
         return (
-            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"postgresql://{user}:{pwd}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
     @property
     def is_production(self) -> bool:
-        return self.APP_ENV == "production"
+        return self.APP_ENV == AppEnv.PROD
 
     # ── Validators ──────────────────────────────────────
     @field_validator("APP_SECRET_KEY")
@@ -118,7 +154,11 @@ class Settings(BaseSettings):
             raise ValueError("APP_SECRET_KEY must be a strong random value")
         return v
 
-    @field_validator("CORS_ORIGINS", "TRUSTED_HOSTS", mode="before")
+    @field_validator(
+        "CORS_ORIGINS", "TRUSTED_HOSTS",
+        "MEDIA_URL_PREFIXES", "MEDIA_ALLOWED_HOSTS",
+        mode="before",
+    )
     @classmethod
     def _split_csv(cls, v):
         if isinstance(v, str):
@@ -128,13 +168,28 @@ class Settings(BaseSettings):
     @field_validator("POSTGRES_PASSWORD")
     @classmethod
     def _validate_db_password(cls, v: str) -> str:
-        # Reject obviously insecure passwords even if supplied via .env.
         bad = {"password", "postgres", "admin", "root", "1234"}
         if v.lower() in bad:
             raise ValueError(
                 "POSTGRES_PASSWORD is too weak — use a strong random value"
             )
         return v
+
+    @model_validator(mode="after")
+    def _enforce_invariants(self) -> "Settings":
+        # Browsers refuse SameSite=None without Secure.
+        if self.SESSION_COOKIE_SAMESITE == "none" and not self.SESSION_COOKIE_SECURE:
+            raise ValueError(
+                "SESSION_COOKIE_SAMESITE='none' requires SESSION_COOKIE_SECURE=True"
+            )
+        if self.is_production:
+            if self.APP_DEBUG:
+                raise ValueError("APP_DEBUG must be False in production")
+            if not self.SESSION_COOKIE_SECURE:
+                raise ValueError("SESSION_COOKIE_SECURE must be True in production")
+        return self
+
+    
 
 
 @lru_cache

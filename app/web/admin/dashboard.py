@@ -7,7 +7,10 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
+from app.core.exceptions import AppError
+from app.core.logging import log
 from app.modules.analytics.constants import (
     INTERVAL_LABELS,
     PERIOD_LABELS,
@@ -16,9 +19,11 @@ from app.modules.analytics.constants import (
 )
 from app.modules.analytics.service import AnalyticsService
 from app.modules.auth.dependencies import get_current_user
+from app.web.admin._perms import read
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin", tags=["admin-dashboard"])
+
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(
@@ -27,23 +32,92 @@ async def dashboard(
     preset: str = Query("month"),
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
+    _=read(PermissionCode.ANALYTICS_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
-    f, t = resolve_period(preset, from_date=from_date, to_date=to_date)
+    try:
+        f, t = resolve_period(preset, from_date=from_date, to_date=to_date)
+    except ValueError as exc:
+        # Invalid preset / inverted range → render with error banner,
+        # not a 500.
+        return templates.render(
+            request,
+            "admin/dashboard.html",
+            {
+                "title": "Dashboard",
+                "current_user": current,
+                "error": str(exc),
+                "period_preset": "month",
+                "period_labels": PERIOD_LABELS,
+                "period_presets": PERIOD_PRESETS,
+                "period_from": None,
+                "period_to": None,
+                "interval_label": None,
+                "funnel": None,
+                "top_customers": [],
+                "top_materials": [],
+                "accuracy": None,
+                "activity": [],
+                "chart_periods": [],
+                "chart_revenue": [],
+                "chart_gross_profit": [],
+                "chart_cash_periods": [],
+                "chart_cash_in": [],
+                "chart_cash_out": [],
+                "funnel_labels": [],
+                "funnel_counts": [],
+                "kpis": None,
+            },
+            status_code=400,
+        )
+
     svc = AnalyticsService(db)
 
-    kpis = await svc.kpis(f, t)
-    revenue_series = await svc.revenue_series(f, t)
-    gross_profit_series = await svc.gross_profit_series(f, t)
-    cash_flow_series = await svc.cash_flow_series(f, t)
-    funnel = await svc.inquiry_funnel(f, t)
-    top_customers = await svc.top_customers(f, t, limit=5)
-    top_materials = await svc.top_materials(f, t, limit=5)
-    accuracy = await svc.estimate_accuracy(f, t)
-    activity = await svc.recent_activity(limit=10)
+    try:
+        kpis = await svc.kpis(f, t)
+        revenue_series = await svc.revenue_series(f, t)
+        gross_profit_series = await svc.gross_profit_series(f, t)
+        cash_flow_series = await svc.cash_flow_series(f, t)
+        funnel = await svc.inquiry_funnel(f, t)
+        top_customers = await svc.top_customers(f, t, limit=5)
+        top_materials = await svc.top_materials(f, t, limit=5)
+        accuracy = await svc.estimate_accuracy(f, t)
+        activity = await svc.recent_activity(limit=10)
+    except AppError as exc:
+        # Domain error in a report query — surface it, don't crash.
+        log.warning("dashboard_analytics_failed", error=exc.message)
+        return templates.render(
+            request,
+            "admin/dashboard.html",
+            {
+                "title": "Dashboard",
+                "current_user": current,
+                "error": f"Could not load analytics: {exc.message}",
+                "period_preset": preset,
+                "period_labels": PERIOD_LABELS,
+                "period_presets": PERIOD_PRESETS,
+                "period_from": f,
+                "period_to": t,
+                "interval_label": None,
+                "funnel": None,
+                "top_customers": [],
+                "top_materials": [],
+                "accuracy": None,
+                "activity": [],
+                "chart_periods": [],
+                "chart_revenue": [],
+                "chart_gross_profit": [],
+                "chart_cash_periods": [],
+                "chart_cash_in": [],
+                "chart_cash_out": [],
+                "funnel_labels": [],
+                "funnel_counts": [],
+                "kpis": None,
+            },
+            status_code=503,
+        )
 
     # Shape the series for Chart.js
-    # Merge revenue + gross profit points into a single dataset keyed by period
     rev_by_period = {p.period.isoformat(): p.value for p in revenue_series.points}
     gp_by_period = {p.period.isoformat(): p.value for p in gross_profit_series.points}
     all_periods = sorted(set(rev_by_period) | set(gp_by_period))
@@ -67,13 +141,14 @@ async def dashboard(
             "period_presets": PERIOD_PRESETS,
             "period_from": f,
             "period_to": t,
-            "interval_label": INTERVAL_LABELS.get(revenue_series.interval, revenue_series.interval),
+            "interval_label": INTERVAL_LABELS.get(
+                revenue_series.interval, revenue_series.interval
+            ),
             "funnel": funnel,
             "top_customers": top_customers,
             "top_materials": top_materials,
             "accuracy": accuracy,
             "activity": activity,
-            # Chart data as JSON-safe structures
             "chart_periods": all_periods,
             "chart_revenue": chart_revenue,
             "chart_gross_profit": chart_gp,

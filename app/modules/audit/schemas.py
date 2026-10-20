@@ -6,8 +6,10 @@ from pydantic import BaseModel, ConfigDict
 
 class AuditLogItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     user_id: UUID | None
+    user_email: str | None = None  # enriched by API layer
     action: str
     table_name: str
     record_id: str
@@ -19,3 +21,8 @@ class AuditLogDetail(AuditLogItem):
     old_data: dict | None
     new_data: dict | None
     user_agent: str | None
+
+
+class AuditCatalog(BaseModel):
+    actions: list[str]
+    tables: list[str]

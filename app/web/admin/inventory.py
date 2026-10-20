@@ -5,14 +5,15 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime
-from urllib.parse import quote
+from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from sqlalchemy import select
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import AppError
 from app.core.pagination import PageParams, paginate, page_params
 from app.modules.auth.dependencies import get_current_user
 from app.modules.inventory.constants import (
@@ -26,21 +27,17 @@ from app.modules.inventory.constants import (
     TRANSACTION_TYPES,
     signed_quantity,
 )
+from app.modules.inventory.models import Material
 from app.modules.inventory.repository import (
     InventoryTransactionRepository,
     MaterialRepository,
 )
 from app.modules.inventory.service import InventoryService
+from app.web.admin._perms import read
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin/inventory", tags=["admin-inventory"])
 
-_FORM_ERRORS = (AppError, ValueError, KeyError)
-
-
-# ════════════════════════════════════════════════════════════════
-# HELPERS
-# ════════════════════════════════════════════════════════════════
 
 def _catalog() -> dict:
     return {
@@ -56,16 +53,21 @@ def _catalog() -> dict:
     }
 
 
-def _safe_float(raw) -> float | None:
-    if raw is None:
-        return None
-    s = str(raw).strip()
-    if not s:
-        return None
-    try:
-        return float(s)
-    except (ValueError, TypeError):
-        return None
+def _filter_rows(rows: list[dict], q: str | None, category: str | None, low_stock: bool) -> list[dict]:
+    out = rows
+    if q:
+        needle = q.strip().lower()
+        out = [
+            r for r in out
+            if needle in (r["material"].name or "").lower()
+            or needle in (r["material"].code or "").lower()
+            or needle in (r["material"].brand or "").lower()
+        ]
+    if category:
+        out = [r for r in out if r["material"].category == category]
+    if low_stock:
+        out = [r for r in out if r["below_reorder"]]
+    return out
 
 
 # ════════════════════════════════════════════════════════════════
@@ -80,27 +82,18 @@ async def overview(
     category: str | None = Query(None),
     low_stock: bool = Query(False),
     sort: str = Query("category_name"),
+    _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
-    # Load full overview and filter in memory (inventory is small; the
-    # overview already loads all active materials in one query).
-    rows = await InventoryService(db).stock_overview()
+    # One query — reuse the result for both filtered rows and stats.
+    all_rows = await InventoryService(db).stock_overview()
 
-    # Apply filters
-    if q:
-        needle = q.strip().lower()
-        rows = [
-            r for r in rows
-            if needle in (r["material"].name or "").lower()
-            or needle in (r["material"].code or "").lower()
-            or needle in (r["material"].brand or "").lower()
-        ]
-    if category:
-        rows = [r for r in rows if r["material"].category == category]
-    if low_stock:
-        rows = [r for r in rows if r["below_reorder"]]
+    low_stock_count = sum(1 for r in all_rows if r["below_reorder"])
+    below_min_count = sum(1 for r in all_rows if r["below_min"])
 
-    # Apply sort
+    rows = _filter_rows(all_rows, q, category, low_stock)
+
+    # Sort
     if sort == "name_asc":
         rows.sort(key=lambda r: (r["material"].name or "").lower())
     elif sort == "name_desc":
@@ -108,7 +101,9 @@ async def overview(
     elif sort == "code_asc":
         rows.sort(key=lambda r: (r["material"].code or "").lower())
     elif sort == "created_desc":
-        rows.sort(key=lambda r: r["material"].created_at or datetime.min, reverse=True)
+        rows.sort(
+            key=lambda r: r["material"].created_at or datetime.min, reverse=True
+        )
     else:  # category_name
         rows.sort(key=lambda r: (
             (r["material"].category or "").lower(),
@@ -117,12 +112,6 @@ async def overview(
 
     total_value = sum(r["stock_value"] for r in rows)
 
-    # Count low stock across ALL materials (not just filtered)
-    all_rows = await InventoryService(db).stock_overview()
-    low_stock_count = sum(1 for r in all_rows if r["below_reorder"])
-    below_min_count = sum(1 for r in all_rows if r["below_min"])
-
-    # Stats per category (only count filtered/visible)
     by_category: dict[str, dict] = {}
     for r in rows:
         cat = r["material"].category
@@ -131,7 +120,6 @@ async def overview(
         bucket["value"] += r["stock_value"]
 
     def _qs(**overrides) -> str:
-        from urllib.parse import urlencode
         base = {
             "q": q or "", "category": category or "",
             "low_stock": "true" if low_stock else "", "sort": sort,
@@ -161,7 +149,7 @@ async def overview(
 
 
 # ════════════════════════════════════════════════════════════════
-# OVERVIEW CSV EXPORT
+# OVERVIEW CSV
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/export.csv")
@@ -170,22 +158,11 @@ async def export_stock_csv(
     q: str | None = Query(None),
     category: str | None = Query(None),
     low_stock: bool = Query(False),
+    _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ):
-    rows = await InventoryService(db).stock_overview()
-
-    if q:
-        needle = q.strip().lower()
-        rows = [
-            r for r in rows
-            if needle in (r["material"].name or "").lower()
-            or needle in (r["material"].code or "").lower()
-            or needle in (r["material"].brand or "").lower()
-        ]
-    if category:
-        rows = [r for r in rows if r["material"].category == category]
-    if low_stock:
-        rows = [r for r in rows if r["below_reorder"]]
+    all_rows = await InventoryService(db).stock_overview()
+    rows = _filter_rows(all_rows, q, category, low_stock)
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -230,10 +207,10 @@ async def ledger(
     transaction_type: str | None = Query(None),
     reference_type: str | None = Query(None),
     sort: str = Query("created_desc"),
+    _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
-    tx_repo = InventoryTransactionRepository(db)
-    stmt = tx_repo.query(
+    stmt = InventoryTransactionRepository(db).query(
         material_id=material_id,
         transaction_type=transaction_type,
         reference_type=reference_type,
@@ -241,16 +218,14 @@ async def ledger(
     )
     rows, meta = await paginate(db, stmt, params)
 
-    # Only load materials referenced in this page (not all)
     material_ids = {t.material_id for t in rows}
     mat_map: dict = {}
     if material_ids:
-        from sqlalchemy import select
-        from app.modules.inventory.models import Material
-        m_rows = await db.execute(select(Material).where(Material.id.in_(material_ids)))
+        m_rows = await db.execute(
+            select(Material).where(Material.id.in_(material_ids))
+        )
         mat_map = {m.id: m for m in m_rows.scalars().all()}
 
-    # For filter dropdown, only load a lightweight list
     all_materials = list(
         (await db.execute(
             MaterialRepository(db).query(is_active=None, sort="category_name")
@@ -258,7 +233,6 @@ async def ledger(
     )
 
     def _qs(**overrides) -> str:
-        from urllib.parse import urlencode
         base = {
             "material_id": str(material_id) if material_id else "",
             "transaction_type": transaction_type or "",
@@ -288,7 +262,7 @@ async def ledger(
 
 
 # ════════════════════════════════════════════════════════════════
-# LEDGER CSV EXPORT
+# LEDGER CSV
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/transactions/export.csv")
@@ -297,11 +271,9 @@ async def export_ledger_csv(
     material_id: UUID | None = Query(None),
     transaction_type: str | None = Query(None),
     reference_type: str | None = Query(None),
+    _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ):
-    from sqlalchemy import select
-    from app.modules.inventory.models import Material
-
     stmt = InventoryTransactionRepository(db).query(
         material_id=material_id,
         transaction_type=transaction_type,
@@ -313,7 +285,9 @@ async def export_ledger_csv(
     mat_ids = {t.material_id for t in rows}
     mat_map: dict = {}
     if mat_ids:
-        m_rows = await db.execute(select(Material).where(Material.id.in_(mat_ids)))
+        m_rows = await db.execute(
+            select(Material).where(Material.id.in_(mat_ids))
+        )
         mat_map = {m.id: m for m in m_rows.scalars().all()}
 
     buf = io.StringIO()

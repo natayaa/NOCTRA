@@ -1,8 +1,6 @@
-"""
-Sliding-window rate limiter with bounded memory.
+"""Sliding-window rate limiter with bounded memory.
 
-Not suitable for multi-process deployments — swap for Redis
-when you scale beyond a single instance.
+Single-process only. Swap for Redis when scaling horizontally.
 """
 
 from __future__ import annotations
@@ -17,11 +15,12 @@ from starlette.responses import JSONResponse, Response
 from app.core.config import settings
 from app.core.request_id import get_request_id
 
-# Cap total number of buckets to prevent memory exhaustion from
-# adversarial client churn (spoofed IPs, etc.). LRU eviction.
 MAX_BUCKETS = 10_000
 CLEANUP_INTERVAL_SECONDS = 60
 WINDOW_SECONDS = 60
+
+EXEMPT_PREFIXES = ("/static/", "/favicon", "/media/")
+EXEMPT_PATHS = {"/health", "/healthz", "/readyz"}
 
 
 class _Bucket:
@@ -32,28 +31,17 @@ class _Bucket:
 
 
 class InMemoryRateLimiter:
-    """
-    Fixed-window (per WINDOW_SECONDS) limiter with LRU-bounded storage.
-
-    No locks needed: asyncio runs single-threaded, and the operations
-    here are all synchronous and cheap.
-    """
-
     def __init__(self, max_buckets: int = MAX_BUCKETS) -> None:
         self._buckets: OrderedDict[str, _Bucket] = OrderedDict()
         self._max_buckets = max_buckets
         self._last_cleanup = time.monotonic()
 
     def _cleanup_if_due(self) -> None:
-        """Evict empty/stale buckets periodically."""
         now = time.monotonic()
         if now - self._last_cleanup < CLEANUP_INTERVAL_SECONDS:
             return
         self._last_cleanup = now
-
         cutoff = now - WINDOW_SECONDS
-        # Drop buckets whose newest hit is older than the window.
-        # OrderedDict preserves insertion order; iterate a snapshot.
         stale_keys = [
             k for k, b in self._buckets.items()
             if not b.hits or b.hits[-1] < cutoff
@@ -62,25 +50,19 @@ class InMemoryRateLimiter:
             self._buckets.pop(k, None)
 
     def hit(self, key: str, limit: int, window_seconds: int) -> tuple[bool, int]:
-        """
-        Record a hit and return (allowed, retry_after_seconds).
-        """
         self._cleanup_if_due()
         now = time.monotonic()
         cutoff = now - window_seconds
 
         bucket = self._buckets.get(key)
         if bucket is None:
-            # Evict oldest bucket if we're at capacity
             while len(self._buckets) >= self._max_buckets:
                 self._buckets.popitem(last=False)
             bucket = _Bucket()
             self._buckets[key] = bucket
         else:
-            # Move to end (most recently used)
             self._buckets.move_to_end(key)
 
-        # Drop expired hits
         while bucket.hits and bucket.hits[0] < cutoff:
             bucket.hits.popleft()
 
@@ -100,7 +82,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not settings.RATE_LIMIT_ENABLED or self._is_exempt(request):
             return await call_next(request)
 
-        ip = request.client.host if request.client else "unknown"
+        ip = self._client_ip(request)
         limit, window, key = self._bucket_for(request, ip)
         allowed, retry_after = limiter.hit(key, limit, window)
 
@@ -120,7 +102,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _is_exempt(request: Request) -> bool:
-        return request.url.path.startswith("/static/")
+        path = request.url.path
+        return path in EXEMPT_PATHS or any(path.startswith(p) for p in EXEMPT_PREFIXES)
+
+    @staticmethod
+    def _client_ip(request: Request) -> str:
+        """Resolve the real client IP, honoring XFF only when trusted."""
+        if settings.TRUST_PROXY_HEADERS:
+            xff = request.headers.get("x-forwarded-for")
+            if xff:
+                first = xff.split(",", 1)[0].strip()
+                if first:
+                    return first
+            xreal = request.headers.get("x-real-ip")
+            if xreal:
+                return xreal.strip()
+        return request.client.host if request.client else "unknown"
 
     @staticmethod
     def _bucket_for(request: Request, ip: str) -> tuple[int, int, str]:

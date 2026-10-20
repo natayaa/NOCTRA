@@ -13,15 +13,15 @@
   </div>
   <div class="page-actions flex gap-2">
     {% if customer %}
-      <a href="/admin/customers/{{ customer.id }}" class="btn btn-secondary btn-sm">Customer</a>
+    <a href="/admin/customers/{{ customer.id }}" class="btn btn-secondary btn-sm">Customer</a>
     {% endif %}
     {% if vehicle %}
-      <a href="/admin/vehicles/{{ vehicle.id }}" class="btn btn-secondary btn-sm">Vehicle</a>
+    <a href="/admin/vehicles/{{ vehicle.id }}" class="btn btn-secondary btn-sm">Vehicle</a>
     {% endif %}
     <a href="/admin/projects/{{ project.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
     {% if project.status in ('APPROVED', 'IN_PROGRESS', 'PAINTING', 'ASSEMBLY', 'QC', 'COMPLETED', 'DELIVERED') %}
     <a href="/admin/invoices/new?customer_id={{ project.customer_id }}&project_id={{ project.id }}"
-       class="btn btn-secondary btn-sm">Create Invoice</a>
+      class="btn btn-secondary btn-sm">Create Invoice</a>
     {% endif %}
   </div>
 </div>
@@ -32,14 +32,16 @@
 </div>
 {% endif %}
 
-{% if project.estimated_hpp > 0
-      and project.actual_hpp > project.estimated_hpp * 1.1
-      and project.status not in ('DELIVERED', 'CANCELLED') %}
+{% set _est_hpp = project.estimated_hpp | float %}
+{% set _act_hpp = project.actual_hpp | float %}
+{% if _est_hpp > 0
+and _act_hpp > _est_hpp * 1.1
+and project.status not in ('DELIVERED', 'CANCELLED') %}
 <div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05);">
   <div class="text-sm text-red-300">
     ⚠ <strong>Cost overrun</strong> — Actual HPP is
-    {{ ((project.actual_hpp / project.estimated_hpp - 1) * 100) | round(1) }}%
-    above estimate ({{ (project.actual_hpp - project.estimated_hpp) | rupiah }}).
+    {{ ((_act_hpp / _est_hpp - 1) * 100) | round(1) }}%
+    above estimate ({{ (_act_hpp - _est_hpp) | rupiah }}).
   </div>
 </div>
 {% endif %}
@@ -130,7 +132,7 @@
   {% if project.status not in ('CANCELLED', 'DELIVERED') %}
   <div class="mt-4 flex gap-2">
     <a href="/admin/payments/new?direction=IN&reference_type=PROJECT&reference_id={{ project.id }}&customer_id={{ project.customer_id }}"
-       class="btn btn-secondary btn-sm">
+      class="btn btn-secondary btn-sm">
       + Record DP
     </a>
     <a href="/admin/invoices/new?project_id={{ project.id }}" class="btn btn-primary btn-sm">
@@ -253,12 +255,12 @@
           </thead>
           <tbody>
             {% set cats = [
-              ('materials', 'Materials', project.estimated_materials, project.actual_materials),
-              ('parts', 'Parts', project.estimated_parts, project.actual_parts),
-              ('labor', 'Labor', project.estimated_labor, project.actual_labor),
-              ('outsource', 'Outsourcing', project.estimated_outsource, project.actual_outsource),
-              ('overhead', 'Overhead', project.estimated_overhead, project.actual_overhead),
-              ('misc', 'Miscellaneous', project.estimated_misc, project.actual_misc),
+            ('materials', 'Materials', project.estimated_materials, project.actual_materials),
+            ('parts', 'Parts', project.estimated_parts, project.actual_parts),
+            ('labor', 'Labor', project.estimated_labor, project.actual_labor),
+            ('outsource', 'Outsourcing', project.estimated_outsource, project.actual_outsource),
+            ('overhead', 'Overhead', project.estimated_overhead, project.actual_overhead),
+            ('misc', 'Miscellaneous', project.estimated_misc, project.actual_misc),
             ] %}
             {% for key, label, est, act in cats %}
             <tr>
@@ -307,7 +309,7 @@
         <div class="table-wrap">
           <table class="table">
             <thead>
-              <tr>
+              <tr>            
                 <th>Description</th>
                 <th class="text-right">Est. qty</th>
                 <th class="text-right">Est. cost</th>
@@ -322,20 +324,20 @@
                 <td class="text-sm">
                   {{ item.description }}
                   {% if item.status and item.status != 'PLANNED' %}
-                    <span class="badge {{ item_status_tone.get(item.status, 'badge-neutral') }} ml-1 text-[10px]">
-                      {{ item_status_labels.get(item.status, item.status) }}
-                    </span>
+                  <span class="badge {{ item_status_tone.get(item.status, 'badge-neutral') }} ml-1 text-[10px]">
+                    {{ item_status_labels.get(item.status, item.status) }}
+                  </span>
                   {% endif %}
                 </td>
                 <td class="text-right font-mono text-xs text-neutral-500">
                   {% if item.estimated_quantity %}
-                    {{ '%.3f'|format(item.estimated_quantity) }} {{ item.unit or '' }}
+                  {{ '%.3f'|format(item.estimated_quantity) }} {{ item.unit or '' }}
                   {% else %}—{% endif %}
                 </td>
                 <td class="text-right font-mono text-xs text-neutral-500">{{ item.estimated_cost | rupiah }}</td>
                 <td class="text-right font-mono text-xs">
                   {% if item.actual_quantity %}
-                    {{ '%.3f'|format(item.actual_quantity) }} {{ item.unit or '' }}
+                  {{ '%.3f'|format(item.actual_quantity) }} {{ item.unit or '' }}
                   {% else %}—{% endif %}
                 </td>
                 <td class="text-right font-mono text-xs">{{ item.actual_cost | rupiah }}</td>
@@ -343,23 +345,23 @@
                   <details>
                     <summary class="text-xs text-neutral-500 cursor-pointer hover:text-noctra-accent">edit</summary>
                     <form method="post" action="/admin/projects/{{ project.id }}/items/{{ item.id }}"
-                          class="mt-2 grid grid-cols-2 gap-2 min-w-[400px]" data-guard>
+                      class="mt-2 grid grid-cols-2 gap-2 min-w-[400px]" data-guard>
                       <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
                       <div class="col-span-2">
                         <input class="input" name="description" value="{{ item.description }}" />
                       </div>
-                      <input class="input" type="number" step="0.001" name="estimated_quantity"
-                             placeholder="Est. qty" value="{{ item.estimated_quantity or '' }}" />
+                      <input class="input" type="number" step="0.001" name="estimated_quantity" placeholder="Est. qty"
+                        value="{{ item.estimated_quantity or '' }}" />
                       <input class="input" type="number" step="0.01" name="estimated_unit_cost"
-                             placeholder="Est. unit cost" value="{{ item.estimated_unit_cost or '' }}" />
-                      <input class="input" type="number" step="0.001" name="actual_quantity"
-                             placeholder="Act. qty" value="{{ item.actual_quantity or '' }}" />
+                        placeholder="Est. unit cost" value="{{ item.estimated_unit_cost or '' }}" />
+                      <input class="input" type="number" step="0.001" name="actual_quantity" placeholder="Act. qty"
+                        value="{{ item.actual_quantity or '' }}" />
                       <input class="input" type="number" step="0.01" name="actual_unit_cost"
-                             placeholder="Act. unit cost" value="{{ item.actual_unit_cost or '' }}" />
+                        placeholder="Act. unit cost" value="{{ item.actual_unit_cost or '' }}" />
                       <select class="select col-span-2" name="status">
                         <option value="">— keep status —</option>
                         {% for s in ['PLANNED', 'IN_PROGRESS', 'COMPLETED'] %}
-                        <option value="{{ s }}" {% if item.status == s %}selected{% endif %}>
+                        <option value="{{ s }}" {% if item.status==s %}selected{% endif %}>
                           {{ item_status_labels.get(s, s) }}
                         </option>
                         {% endfor %}
@@ -367,7 +369,7 @@
                       <button class="btn btn-primary btn-sm col-span-2">Save</button>
                     </form>
                     <form method="post" action="/admin/projects/{{ project.id }}/items/{{ item.id }}/delete"
-                          class="mt-1" data-confirm="Delete this cost item?">
+                      class="mt-1" data-confirm="Delete this cost item?">
                       <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
                       <button class="btn btn-ghost btn-sm text-noctra-danger">Delete</button>
                     </form>
@@ -391,15 +393,14 @@
     <div class="panel">
       <div class="panel-title">Add cost item</div>
 
-      <form method="post" action="/admin/projects/{{ project.id }}/items"
-            class="mt-3 space-y-4" data-guard id="add-item-form">
+      <form method="post" action="/admin/projects/{{ project.id }}/items" class="mt-3 space-y-4" data-guard
+        id="add-item-form">
         <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
 
         <div class="grid md:grid-cols-3 gap-4">
           <div class="form-row">
             <label class="form-label" for="add_category">Category</label>
-            <select class="select" id="add_category" name="category" required
-                    data-category-select>
+            <select class="select" id="add_category" name="category" required data-category-select>
               {% for c in cost_categories %}
               <option value="{{ c }}">{{ cost_category_labels.get(c, c) }}</option>
               {% endfor %}
@@ -407,8 +408,8 @@
           </div>
           <div class="form-row md:col-span-2">
             <label class="form-label" for="add_description">Description</label>
-            <input class="input" id="add_description" name="description" required
-                   maxlength="500" placeholder="e.g. Belkote 2100 clear coat" />
+            <input class="input" id="add_description" name="description" required maxlength="500"
+              placeholder="e.g. Belkote 2100 clear coat" />
           </div>
         </div>
 
@@ -418,7 +419,7 @@
             <option value="">—</option>
             {% for m in materials %}
             <option value="{{ m.id }}">
-              {{ m.code }} — {{ m.name }} ({{ m.stock_unit }} @ {{ m.cost_per_stock_unit | rupiah }})
+              {{ m.name }} ({{ m.stock_unit }} @ {{ m.cost_per_stock_unit | rupiah }})
             </option>
             {% endfor %}
           </select>
@@ -439,23 +440,20 @@
         <div id="cost-rows" class="grid md:grid-cols-4 gap-4">
           <div class="form-row">
             <label class="form-label" for="add_unit">Unit</label>
-            <input class="input" id="add_unit" name="unit" maxlength="16"
-                   placeholder="ml, hours, piece" />
+            <input class="input" id="add_unit" name="unit" maxlength="16" placeholder="ml, hours, piece" />
           </div>
           <div class="form-row">
             <label class="form-label" for="add_est_qty">Est. quantity</label>
-            <input class="input" type="number" step="0.001" id="add_est_qty"
-                   name="estimated_quantity" />
+            <input class="input" type="number" step="0.001" id="add_est_qty" name="estimated_quantity" />
           </div>
           <div class="form-row">
             <label class="form-label" for="add_est_cost">Est. unit cost</label>
-            <input class="input" type="number" step="0.01" id="add_est_cost"
-                   name="estimated_unit_cost" placeholder="auto from material/employee" />
+            <input class="input" type="number" step="0.01" id="add_est_cost" name="estimated_unit_cost"
+              placeholder="auto from material/employee" />
           </div>
           <div class="form-row">
             <label class="form-label" for="add_act_qty">Actual quantity</label>
-            <input class="input" type="number" step="0.001" id="add_act_qty"
-                   name="actual_quantity" />
+            <input class="input" type="number" step="0.001" id="add_act_qty" name="actual_quantity" />
           </div>
         </div>
 
@@ -472,7 +470,7 @@
   </div>
 
   {# ── Sidebar ────────────────────────────────────── #}
-  <aside class="space-y-6">
+  <aside class="space-y-6 lg:sticky lg:top-4 lg:self-start">
 
     <div class="panel">
       <div class="panel-title">Customer & Vehicle</div>
@@ -504,8 +502,7 @@
     {% if source_inquiry %}
     <div class="panel">
       <div class="panel-title">Source inquiry</div>
-      <a href="/admin/inquiries/{{ source_inquiry.id }}"
-         class="block mt-3 font-medium hover:text-noctra-accent">
+      <a href="/admin/inquiries/{{ source_inquiry.id }}" class="block mt-3 font-medium hover:text-noctra-accent">
         {{ source_inquiry.code }}
       </a>
       <div class="text-xs text-neutral-500 mt-1">{{ source_inquiry.status }}</div>
@@ -519,8 +516,7 @@
       <p class="text-xs text-neutral-500 mt-1">
         From <strong>{{ status_labels.get(project.status, project.status) }}</strong>:
       </p>
-      <form method="post" action="/admin/projects/{{ project.id }}/status"
-            class="mt-3 space-y-3" data-guard>
+      <form method="post" action="/admin/projects/{{ project.id }}/status" class="mt-3 space-y-3" data-guard>
         <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
         <select class="select" name="status" required>
           {% for s in next_statuses %}
@@ -568,22 +564,27 @@
   </aside>
 </div>
 
-<script>
-  (function() {
-    const sel = document.querySelector('[data-category-select]');
-    if (!sel) return;
-    const matRow = document.getElementById('material-row');
-    const empRow = document.getElementById('employee-row');
-    const costRows = document.getElementById('cost-rows');
+{% endblock %}
 
-    function update() {
-      const v = sel.value;
-      if (matRow) matRow.style.display = (v === 'MATERIAL' || v === 'PART') ? 'block' : 'none';
-      if (empRow) empRow.style.display = (v === 'LABOR') ? 'block' : 'none';
-      if (costRows) costRows.style.display = (v === 'OVERHEAD') ? 'none' : 'block';
-    }
-    sel.addEventListener('change', update);
-    update();
-  })();
+
+{# 🐛 FIX: Pindahkan script ke extra_js dan bungkus dengan IIFE #}
+{% block extra_js %}
+<script>
+(() => {
+  const sel = document.querySelector('[data-category-select]');
+  if (!sel) return;
+  const matRow = document.getElementById('material-row');
+  const empRow = document.getElementById('employee-row');
+  const costRows = document.getElementById('cost-rows');
+
+  function update() {
+    const v = sel.value;
+    if (matRow) matRow.style.display = (v === 'MATERIAL' || v === 'PART') ? 'block' : 'none';
+    if (empRow) empRow.style.display = (v === 'LABOR') ? 'block' : 'none';
+    if (costRows) costRows.style.display = (v === 'OVERHEAD') ? 'none' : 'block';
+  }
+  sel.addEventListener('change', update);
+  update();
+})();
 </script>
 {% endblock %}

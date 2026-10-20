@@ -1,18 +1,21 @@
+"""Admin web routes for vehicles."""
+
 from __future__ import annotations
 
 import csv
 import io
 from datetime import datetime
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import ValidationError as PydanticValidationError
-from sqlalchemy import select
-from urllib.parse import quote
+from sqlalchemy import and_, or_, select
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
 from app.modules.auth.dependencies import get_current_user
 from app.modules.customers.models import Customer
@@ -26,6 +29,7 @@ from app.modules.vehicles.constants import (
 from app.modules.vehicles.repository import VehicleRepository
 from app.modules.vehicles.schemas import VehicleCreate, VehicleUpdate
 from app.modules.vehicles.service import VehicleService
+from app.web.admin._perms import read, write
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin/vehicles", tags=["admin-vehicles"])
@@ -46,6 +50,10 @@ def _catalog_context() -> dict:
     }
 
 
+def _form_error(exc: Exception) -> str:
+    return (getattr(exc, "message", None) or str(exc) or "Invalid input").strip()
+
+
 async def _list_active_customers(db, limit: int = 500) -> list[Customer]:
     stmt = (
         select(Customer)
@@ -57,7 +65,6 @@ async def _list_active_customers(db, limit: int = 500) -> list[Customer]:
 
 
 def _parse_year(raw) -> int | None:
-    """Safely parse year; let Pydantic handle range validation."""
     if raw is None:
         return None
     s = str(raw).strip()
@@ -66,12 +73,10 @@ def _parse_year(raw) -> int | None:
     try:
         return int(s)
     except (ValueError, TypeError):
-        # Give Pydantic a chance to raise a clean error instead of 500
-        return -1  # out of range → will fail ge=1900 validation
+        return -1  # Let Pydantic range-check fail cleanly
 
 
 def _form_payload(form) -> dict:
-    """Build the create/update payload from a form dict."""
     return dict(
         plate_number=(form.get("plate_number") or "").strip() or None,
         brand=(form.get("brand") or "").strip(),
@@ -88,7 +93,7 @@ def _form_payload(form) -> dict:
 
 
 # ════════════════════════════════════════════════════════════════
-# CUSTOMER PICKER (HTMX fragment)
+# HTMX FRAGMENT
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/api/search-customers", response_class=HTMLResponse)
@@ -96,11 +101,9 @@ async def search_customers_fragment(
     request: Request,
     db: DbSession,
     q: str = Query("", max_length=100),
+    _=read(PermissionCode.VEHICLE_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
-    """HTML fragment for the customer picker dropdown."""
-    from sqlalchemy import and_, or_
-
     customers = []
     if q.strip():
         like = f"%{q.strip()}%"
@@ -130,7 +133,7 @@ async def search_customers_fragment(
 
 
 # ════════════════════════════════════════════════════════════════
-# LIST
+# LIST + EXPORT
 # ════════════════════════════════════════════════════════════════
 
 @router.get("", response_class=HTMLResponse)
@@ -143,10 +146,9 @@ async def list_view(
     category: str | None = Query(None),
     brand: str | None = Query(None),
     sort: str = Query("created_desc"),
+    _=read(PermissionCode.VEHICLE_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
-    from app.modules.auth.models import User
-
     repo = VehicleRepository(db)
     stmt = repo.query(
         q=q, customer_id=customer_id, category=category, brand=brand,
@@ -154,12 +156,13 @@ async def list_view(
     )
     rows, meta = await paginate(db, stmt, params)
 
-    # Preload owners
     owner_ids = {v.customer_id for v in rows if v.customer_id}
     owners_by_id: dict = {}
     if owner_ids:
-        c_rows = await db.execute(select(Customer).where(Customer.id.in_(owner_ids)))
-        owners_by_id = {c.id: c for c in c_rows.scalars().all()}
+        c_rows = await db.execute(
+            select(Customer.id, Customer.name).where(Customer.id.in_(owner_ids))
+        )
+        owners_by_id = {cid: name for cid, name in c_rows.all()}
 
     owner = None
     if customer_id:
@@ -169,7 +172,6 @@ async def list_view(
     brands = await repo.list_distinct_brands(customer_id=customer_id)
 
     def _qs(**overrides) -> str:
-        from urllib.parse import urlencode
         base = {
             "q": q or "",
             "customer_id": str(customer_id) if customer_id else "",
@@ -202,27 +204,29 @@ async def list_view(
     )
 
 
-# ════════════════════════════════════════════════════════════════
-# EXPORT CSV
-# ════════════════════════════════════════════════════════════════
-
 @router.get("/export.csv")
 async def export_csv(
     db: DbSession,
     q: str | None = Query(None),
     customer_id: UUID | None = Query(None),
     category: str | None = Query(None),
+    _=read(PermissionCode.VEHICLE_READ),
     current=Depends(get_current_user),
 ):
-    stmt = VehicleRepository(db).query(q=q, customer_id=customer_id, category=category)
+    stmt = VehicleRepository(db).query(
+        q=q, customer_id=customer_id, category=category,
+    )
     rows = (await db.execute(stmt)).scalars().all()
 
-    # Preload owner names
     owner_ids = {v.customer_id for v in rows if v.customer_id}
     owners: dict = {}
     if owner_ids:
-        c_rows = await db.execute(select(Customer).where(Customer.id.in_(owner_ids)))
-        owners = {c.id: c for c in c_rows.scalars().all()}
+        c_rows = await db.execute(
+            select(Customer.id, Customer.name, Customer.code).where(
+                Customer.id.in_(owner_ids)
+            )
+        )
+        owners = {cid: (name, code) for cid, name, code in c_rows.all()}
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -235,7 +239,7 @@ async def export_csv(
         writer.writerow([
             v.plate_number or "", v.brand, v.model, v.year or "",
             v.color or "", v.category or "", v.vin or "", v.engine_number or "",
-            o.name if o else "", o.code if o else "",
+            o[0] if o else "", o[1] if o else "",
             v.created_at.isoformat() if v.created_at else "",
         ])
 
@@ -257,6 +261,7 @@ async def new_view(
     request: Request,
     db: DbSession,
     customer_id: UUID | None = Query(None),
+    _=write(PermissionCode.VEHICLE_WRITE),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     preselected = None
@@ -287,6 +292,7 @@ async def new_view(
 async def create_submit(
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.VEHICLE_WRITE),
     current=Depends(get_current_user),
 ):
     form = await request.form()
@@ -316,7 +322,6 @@ async def create_submit(
             status_code=status_code,
         )
 
-    # Validate customer_id
     raw_cid = form.get("customer_id")
     if not raw_cid:
         return await _render_error("Please select a customer.")
@@ -327,13 +332,16 @@ async def create_submit(
 
     try:
         payload = VehicleCreate(**_form_payload(form))
-        vehicle = await VehicleService(db).create(customer_id, payload, actor=current)
+        vehicle = await VehicleService(db).create(
+            customer_id, payload, actor=current
+        )
+        await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        msg = getattr(exc, "message", str(exc))
-        return await _render_error(msg, getattr(exc, "status_code", 400))
+        return await _render_error(
+            _form_error(exc), getattr(exc, "status_code", 400)
+        )
 
-    await db.commit()
     return RedirectResponse(url=f"/admin/vehicles/{vehicle.id}", status_code=303)
 
 
@@ -347,11 +355,13 @@ async def detail_view(
     request: Request,
     db: DbSession,
     error: str | None = Query(None),
+    _=read(PermissionCode.VEHICLE_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from app.modules.inquiries.models import Inquiry
     from app.modules.inquiries.constants import (
-        SERVICE_INTEREST_LABELS, STATUS_TONE as INQ_STATUS_TONE,
+        SERVICE_INTEREST_LABELS,
+        STATUS_TONE as INQ_STATUS_TONE,
     )
 
     vehicle = await VehicleRepository(db).get(vehicle_id)
@@ -359,7 +369,6 @@ async def detail_view(
         raise NotFoundError("Vehicle not found")
     owner = await CustomerRepository(db).get(vehicle.customer_id)
 
-    # Related inquiries for this vehicle
     inq_rows = (
         await db.execute(
             select(Inquiry)
@@ -398,6 +407,7 @@ async def edit_view(
     vehicle_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.VEHICLE_WRITE),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     vehicle = await VehicleRepository(db).get(vehicle_id)
@@ -426,6 +436,7 @@ async def update_submit(
     vehicle_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.VEHICLE_WRITE),
     current=Depends(get_current_user),
 ):
     form = await request.form()
@@ -433,13 +444,17 @@ async def update_submit(
     async def _render_error(msg: str, status_code: int = 400):
         vehicle = await VehicleRepository(db).get(vehicle_id)
         owner = (
-            await CustomerRepository(db).get(vehicle.customer_id) if vehicle else None
+            await CustomerRepository(db).get(vehicle.customer_id)
+            if vehicle else None
         )
         return templates.render(
             request,
             "admin/vehicles/form.html",
             {
-                "title": f"Edit {vehicle.brand} {vehicle.model}" if vehicle else "Edit Vehicle",
+                "title": (
+                    f"Edit {vehicle.brand} {vehicle.model}"
+                    if vehicle else "Edit Vehicle"
+                ),
                 "mode": "edit",
                 "vehicle": vehicle,
                 "customer_id": vehicle.customer_id if vehicle else None,
@@ -455,14 +470,13 @@ async def update_submit(
     try:
         payload = VehicleUpdate(**_form_payload(form))
         await VehicleService(db).update(vehicle_id, payload, actor=current)
+        await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
         return await _render_error(
-            getattr(exc, "message", str(exc)),
-            getattr(exc, "status_code", 400),
+            _form_error(exc), getattr(exc, "status_code", 400)
         )
 
-    await db.commit()
     return RedirectResponse(url=f"/admin/vehicles/{vehicle_id}", status_code=303)
 
 
@@ -475,6 +489,7 @@ async def delete_submit(
     vehicle_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.VEHICLE_DELETE),
     current=Depends(get_current_user),
 ):
     try:
@@ -482,9 +497,9 @@ async def delete_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        msg = quote(getattr(exc, "message", str(exc)), safe="")
         return RedirectResponse(
-            url=f"/admin/vehicles/{vehicle_id}?error={msg}",
+            url=f"/admin/vehicles/{vehicle_id}?error="
+                f"{quote(_form_error(exc), safe='')}",
             status_code=303,
         )
     return RedirectResponse(url="/admin/vehicles", status_code=303)

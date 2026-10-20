@@ -5,13 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, case, func, or_, select
+from sqlalchemy import Select, and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.modules.inventory.constants import (
     INBOUND_TYPES,
-    MATERIAL_SORT_OPTIONS,
-    OUTBOUND_TYPES,
     PO_SORT_OPTIONS,
     TRANSACTION_SORT_OPTIONS,
 )
@@ -61,11 +60,22 @@ class SupplierRepository:
             conds.append(Supplier.is_active == is_active)
         if conds:
             stmt = stmt.where(and_(*conds))
-        return stmt.order_by(Supplier.name)
+        # Stable secondary sort prevents pagination drift on name ties.
+        return stmt.order_by(Supplier.name.asc(), Supplier.id.asc())
 
     async def next_code(self) -> str:
+        """
+        Generate SUP-YYYY-NNNN under an advisory lock. Serialises concurrent
+        creation so the unique constraint cannot collide.
+        """
         year = datetime.now(UTC).year
         prefix = f"SUP-{year}-"
+
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": prefix},
+        )
+
         stmt = (
             select(Supplier.code)
             .where(Supplier.code.like(f"{prefix}%"))
@@ -124,17 +134,19 @@ class MaterialRepository:
         if conds:
             stmt = stmt.where(and_(*conds))
 
-        # ── Sorting ──
+        # Stable secondary sort on id for all orders.
         if sort == "name_asc":
-            stmt = stmt.order_by(Material.name.asc())
+            stmt = stmt.order_by(Material.name.asc(), Material.id.asc())
         elif sort == "name_desc":
-            stmt = stmt.order_by(Material.name.desc())
+            stmt = stmt.order_by(Material.name.desc(), Material.id.asc())
         elif sort == "code_asc":
             stmt = stmt.order_by(Material.code.asc())
         elif sort == "created_desc":
-            stmt = stmt.order_by(Material.created_at.desc())
+            stmt = stmt.order_by(Material.created_at.desc(), Material.id.asc())
         else:  # category_name (default)
-            stmt = stmt.order_by(Material.category.asc(), Material.name.asc())
+            stmt = stmt.order_by(
+                Material.category.asc(), Material.name.asc(), Material.id.asc()
+            )
 
         return stmt
 
@@ -166,14 +178,22 @@ class MaterialRepository:
     async def current_stock_for_update(self, material_id: UUID) -> float:
         """
         Return current stock while holding a row-level lock on the material.
-        Use inside `with db.begin_nested()` or during a long transaction to
-        prevent concurrent consumption from racing past the stock check.
+        Use inside a transaction to prevent concurrent consumption from
+        racing past the stock check.
         """
-        # Lock the material row
         await self.db.execute(
             select(Material.id).where(Material.id == material_id).with_for_update()
         )
         return await self.current_stock(material_id)
+
+    async def has_transactions(self, material_id: UUID) -> bool:
+        """True if the material has at least one inventory transaction."""
+        stmt = (
+            select(func.count(InventoryTransaction.id))
+            .where(InventoryTransaction.material_id == material_id)
+            .limit(1)
+        )
+        return bool((await self.db.execute(stmt)).scalar_one())
 
     async def distinct_categories(self) -> list[str]:
         stmt = (
@@ -235,17 +255,23 @@ class InventoryTransactionRepository:
             conds.append(InventoryTransaction.transaction_type == transaction_type)
         if reference_type:
             conds.append(InventoryTransaction.reference_type == reference_type)
-        if reference_id:
+        if reference_id is not None:
             conds.append(InventoryTransaction.reference_id == reference_id)
         if since:
             conds.append(InventoryTransaction.created_at >= since)
         if conds:
             stmt = stmt.where(and_(*conds))
 
+        # Stable secondary sort on id prevents pagination drift when many
+        # transactions share a timestamp (bulk consumption / PO receive).
         if sort == "created_asc":
-            stmt = stmt.order_by(InventoryTransaction.created_at.asc())
+            stmt = stmt.order_by(
+                InventoryTransaction.created_at.asc(), InventoryTransaction.id.asc()
+            )
         else:
-            stmt = stmt.order_by(InventoryTransaction.created_at.desc())
+            stmt = stmt.order_by(
+                InventoryTransaction.created_at.desc(), InventoryTransaction.id.desc()
+            )
         return stmt
 
     async def add(self, tx: InventoryTransaction) -> InventoryTransaction:
@@ -280,7 +306,10 @@ class InventoryTransactionRepository:
     async def stats(self, *, material_id: UUID | None = None) -> dict[str, int]:
         """Counts per transaction type, optionally scoped to a material."""
         stmt = (
-            select(InventoryTransaction.transaction_type, func.count(InventoryTransaction.id))
+            select(
+                InventoryTransaction.transaction_type,
+                func.count(InventoryTransaction.id),
+            )
             .group_by(InventoryTransaction.transaction_type)
         )
         if material_id:
@@ -300,6 +329,15 @@ class PurchaseOrderRepository:
     async def get(self, po_id: UUID) -> PurchaseOrder | None:
         return await self.db.get(PurchaseOrder, po_id)
 
+    async def get_for_update(self, po_id: UUID) -> PurchaseOrder | None:
+        """Load the PO with a row-level lock for the duration of the tx."""
+        stmt = (
+            select(PurchaseOrder)
+            .where(PurchaseOrder.id == po_id)
+            .with_for_update()
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     async def by_code(self, code: str) -> PurchaseOrder | None:
         stmt = select(PurchaseOrder).where(PurchaseOrder.code == code)
         return (await self.db.execute(stmt)).scalar_one_or_none()
@@ -312,7 +350,9 @@ class PurchaseOrderRepository:
         q: str | None = None,
         sort: str = "created_desc",
     ) -> Select:
-        stmt = select(PurchaseOrder)
+        # `noload` prevents the selectin loader for items from firing —
+        # list view does not need them.
+        stmt = select(PurchaseOrder).options(noload(PurchaseOrder.items))
         conds = []
         if status:
             conds.append(PurchaseOrder.status == status)
@@ -329,20 +369,34 @@ class PurchaseOrderRepository:
         if conds:
             stmt = stmt.where(and_(*conds))
 
-        # ── Sorting ──
         if sort == "created_asc":
-            stmt = stmt.order_by(PurchaseOrder.created_at.asc())
+            stmt = stmt.order_by(PurchaseOrder.created_at.asc(), PurchaseOrder.id.asc())
         elif sort == "order_desc":
-            stmt = stmt.order_by(PurchaseOrder.order_date.desc())
+            stmt = stmt.order_by(PurchaseOrder.order_date.desc(), PurchaseOrder.id.asc())
         elif sort == "expected_asc":
-            stmt = stmt.order_by(PurchaseOrder.expected_date.asc().nulls_last())
+            stmt = stmt.order_by(
+                PurchaseOrder.expected_date.asc().nulls_last(),
+                PurchaseOrder.id.asc(),
+            )
         else:
-            stmt = stmt.order_by(PurchaseOrder.created_at.desc())
+            stmt = stmt.order_by(
+                PurchaseOrder.created_at.desc(), PurchaseOrder.id.asc()
+            )
         return stmt
 
     async def next_code(self) -> str:
+        """
+        Generate PO-YYYY-NNNNN under an advisory lock. Serialises concurrent
+        creation so the unique constraint cannot collide.
+        """
         year = datetime.now(UTC).year
         prefix = f"PO-{year}-"
+
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": prefix},
+        )
+
         stmt = (
             select(PurchaseOrder.code)
             .where(PurchaseOrder.code.like(f"{prefix}%"))
@@ -373,7 +427,10 @@ class PurchaseOrderRepository:
     async def recalc_total(self, po_id: UUID) -> None:
         """Update the PO's total_amount from its line items."""
         stmt = select(
-            func.coalesce(func.sum(PurchaseOrderItem.quantity * PurchaseOrderItem.unit_price), 0)
+            func.coalesce(
+                func.sum(PurchaseOrderItem.quantity * PurchaseOrderItem.unit_price),
+                0,
+            )
         ).where(PurchaseOrderItem.purchase_order_id == po_id)
         total = (await self.db.execute(stmt)).scalar_one()
         po = await self.get(po_id)

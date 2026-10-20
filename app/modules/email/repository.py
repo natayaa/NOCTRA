@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Select, and_, select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.email.models import EmailLog
@@ -26,7 +26,6 @@ class EmailLogRepository:
         related_id: UUID | None = None,
         to_email: str | None = None,
     ) -> Select:
-        stmt = select(EmailLog).order_by(EmailLog.created_at.desc())
         conds = []
         if template:
             conds.append(EmailLog.template == template)
@@ -34,12 +33,18 @@ class EmailLogRepository:
             conds.append(EmailLog.status == status)
         if related_type:
             conds.append(EmailLog.related_type == related_type)
-        if related_id:
+        if related_id is not None:
             conds.append(EmailLog.related_id == related_id)
         if to_email:
             conds.append(EmailLog.to_email == to_email)
+
+        # Stable secondary sort on `id` prevents pagination drift when
+        # multiple rows share the same created_at (e.g. bulk send).
+        stmt = select(EmailLog).order_by(
+            EmailLog.created_at.desc(), EmailLog.id.desc()
+        )
         if conds:
-            stmt = stmt.where(and_(*conds))
+            stmt = stmt.where(*conds)
         return stmt
 
     async def add(self, log: EmailLog) -> EmailLog:

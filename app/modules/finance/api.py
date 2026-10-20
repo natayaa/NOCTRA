@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -10,8 +10,8 @@ from sqlalchemy import select
 
 from app.core.constants import PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import NotFoundError
-from app.core.pagination import Page, PageParams, paginate, page_params
+from app.core.exceptions import NotFoundError, ValidationError
+from app.core.pagination import Page, PageParams, page_params, paginate
 from app.modules.auth.dependencies import CurrentUser, require_permission
 from app.modules.finance.constants import (
     ACCOUNT_TYPES,
@@ -22,6 +22,8 @@ from app.modules.finance.constants import (
     INVOICE_STATUS_LABELS,
     PAYMENT_METHODS,
     PAYMENT_METHOD_LABELS,
+    TERMINAL_INVOICE_STATUSES,
+    today_local,
 )
 from app.modules.finance.repository import (
     AccountRepository,
@@ -58,6 +60,28 @@ from app.modules.finance.service import (
 )
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+
+
+async def _invoice_detail(
+    db: DbSession, invoice, repo: InvoiceRepository
+) -> InvoiceDetail:
+    """Build InvoiceDetail with paid_amount, overdue flag, and customer name."""
+    detail = InvoiceDetail.model_validate(invoice)
+    detail.paid_amount = await repo.paid_amount(invoice.id)
+    detail.balance_due = float(invoice.total) - detail.paid_amount
+    detail.is_overdue = (
+        invoice.due_date is not None
+        and today_local() > invoice.due_date
+        and invoice.status not in TERMINAL_INVOICE_STATUSES
+    )
+
+    from app.modules.customers.models import Customer
+    customer = await db.get(Customer, invoice.customer_id)
+    if customer:
+        detail.customer_name = customer.name
+
+    detail.items = [InvoiceItemOut.model_validate(i) for i in invoice.items]
+    return detail
 
 
 # ════════════════════════════════════════════════════════════════
@@ -101,7 +125,7 @@ async def list_accounts(
 async def list_invoices(
     db: DbSession,
     params: PageParams = Depends(page_params),
-    q: str | None = Query(None),
+    q: str | None = Query(None, max_length=200),
     status_: str | None = Query(None, alias="status"),
     customer_id: UUID | None = Query(None),
     project_id: UUID | None = Query(None),
@@ -110,33 +134,40 @@ async def list_invoices(
     only_unpaid: bool = Query(False),
     _=Depends(require_permission(PermissionCode.FINANCE_READ)),
 ) -> Page[InvoiceListItem]:
-    stmt = InvoiceRepository(db).query(
+    if status_ is not None and status_ not in INVOICE_STATUSES:
+        raise ValidationError(
+            f"Invalid status {status_!r}. Choose from: {', '.join(INVOICE_STATUSES)}"
+        )
+
+    repo = InvoiceRepository(db)
+    stmt = repo.query(
         q=q, status=status_, customer_id=customer_id, project_id=project_id,
         from_date=from_date, to_date=to_date, only_unpaid=only_unpaid,
     )
     rows, meta = await paginate(db, stmt, params)
 
-    from app.modules.customers.models import Customer
-
+    # Batch-fetch customers + paid amounts in 2 queries total (not N+1).
     customer_ids = {r.customer_id for r in rows if r.customer_id}
     customers: dict = {}
     if customer_ids:
+        from app.modules.customers.models import Customer
         c_rows = await db.execute(select(Customer).where(Customer.id.in_(customer_ids)))
         customers = {c.id: c for c in c_rows.scalars().all()}
 
-    repo = InvoiceRepository(db)
-    today = datetime.now(UTC).date()
+    paid_map = await repo.batch_paid_amount([r.id for r in rows])
+    today = today_local()
+
     items: list[InvoiceListItem] = []
     for r in rows:
         item = InvoiceListItem.model_validate(r)
-        item.paid_amount = await repo.paid_amount(r.id)
+        item.paid_amount = paid_map.get(r.id, 0.0)
         item.balance_due = float(r.total) - item.paid_amount
         if r.customer_id in customers:
             item.customer_name = customers[r.customer_id].name
         item.is_overdue = (
             r.due_date is not None
             and today > r.due_date
-            and r.status not in ("PAID", "CANCELLED")
+            and r.status not in TERMINAL_INVOICE_STATUSES
         )
         items.append(item)
 
@@ -151,7 +182,7 @@ async def create_invoice(
     _=Depends(require_permission(PermissionCode.INVOICE_WRITE)),
 ) -> InvoiceDetail:
     inv = await InvoiceService(db).create(payload, actor=actor)
-    return InvoiceDetail.model_validate(inv)
+    return await _invoice_detail(db, inv, InvoiceRepository(db))
 
 
 @router.post("/invoices/from-project", response_model=InvoiceDetail, status_code=status.HTTP_201_CREATED)
@@ -162,7 +193,7 @@ async def create_invoice_from_project(
     _=Depends(require_permission(PermissionCode.INVOICE_WRITE)),
 ) -> InvoiceDetail:
     inv = await InvoiceService(db).create_from_project(payload, actor=actor)
-    return InvoiceDetail.model_validate(inv)
+    return await _invoice_detail(db, inv, InvoiceRepository(db))
 
 
 @router.get("/invoices/{invoice_id}", response_model=InvoiceDetail)
@@ -175,20 +206,7 @@ async def get_invoice(
     inv = await repo.get(invoice_id)
     if not inv:
         raise NotFoundError("Invoice not found")
-
-    detail = InvoiceDetail.model_validate(inv)
-    detail.paid_amount = await repo.paid_amount(invoice_id)
-    detail.balance_due = float(inv.total) - detail.paid_amount
-    detail.is_overdue = (
-        inv.due_date is not None
-        and datetime.now(UTC).date() > inv.due_date
-        and inv.status not in ("PAID", "CANCELLED")
-    )
-
-    # Invoice.items has lazy="selectin" so it's already loaded.
-    detail.items = [InvoiceItemOut.model_validate(i) for i in inv.items]
-
-    return detail
+    return await _invoice_detail(db, inv, repo)
 
 
 @router.patch("/invoices/{invoice_id}", response_model=InvoiceDetail)
@@ -200,7 +218,7 @@ async def update_invoice(
     _=Depends(require_permission(PermissionCode.INVOICE_WRITE)),
 ) -> InvoiceDetail:
     inv = await InvoiceService(db).update(invoice_id, payload, actor=actor)
-    return InvoiceDetail.model_validate(inv)
+    return await _invoice_detail(db, inv, InvoiceRepository(db))
 
 
 @router.post("/invoices/{invoice_id}/status", response_model=InvoiceDetail)
@@ -212,7 +230,7 @@ async def change_invoice_status(
     _=Depends(require_permission(PermissionCode.INVOICE_WRITE)),
 ) -> InvoiceDetail:
     inv = await InvoiceService(db).change_status(invoice_id, payload.status, actor=actor)
-    return InvoiceDetail.model_validate(inv)
+    return await _invoice_detail(db, inv, InvoiceRepository(db))
 
 
 # ════════════════════════════════════════════════════════════════
@@ -364,6 +382,11 @@ async def delete_expense(
 # REPORTS
 # ════════════════════════════════════════════════════════════════
 
+def _validate_range(from_date: date, to_date: date) -> None:
+    if from_date > to_date:
+        raise ValidationError("from_date must be <= to_date")
+
+
 @router.get("/reports/pnl", response_model=PnLReport)
 async def pnl_report(
     db: DbSession,
@@ -371,6 +394,7 @@ async def pnl_report(
     to_date: date = Query(...),
     _=Depends(require_permission(PermissionCode.FINANCE_REPORTS)),
 ) -> PnLReport:
+    _validate_range(from_date, to_date)
     return await FinanceReportService(db).pnl(from_date=from_date, to_date=to_date)
 
 
@@ -381,6 +405,7 @@ async def cash_flow_report(
     to_date: date = Query(...),
     _=Depends(require_permission(PermissionCode.FINANCE_REPORTS)),
 ) -> CashFlowSummary:
+    _validate_range(from_date, to_date)
     return await FinanceReportService(db).cash_flow(from_date=from_date, to_date=to_date)
 
 

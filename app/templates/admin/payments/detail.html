@@ -2,131 +2,150 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{{ payment.code }}</h1>
-    <p class="page-subtitle">
+    <div class="flex items-center gap-3 flex-wrap mb-1">
+      <h1 class="page-title mono">{{ payment.code }}</h1>
       <span class="badge {% if payment.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %}">
         {{ payment.direction }}
       </span>
-      {% if customer %}· {{ customer.name }}
-      {% elif supplier %}· {{ supplier.name }}{% endif %}
-      {% if reversal %}<span class="badge badge-warning ml-2">Reversed</span>{% endif %}
-      {% if is_reversal %}<span class="badge badge-info ml-2">Reversal entry</span>{% endif %}
+      {% if reversal %}<span class="badge badge-warning">Reversed</span>{% endif %}
+      {% if is_reversal %}<span class="badge badge-info">Reversal entry</span>{% endif %}
+    </div>
+    <p class="page-subtitle">
+      {% if customer %}Customer: <span class="text-noctra-text font-medium">{{ customer.name }}</span>
+      {% elif supplier %}Supplier: <span class="text-noctra-text font-medium">{{ supplier.name }}</span>{% endif %}
     </p>
   </div>
-  <div class="page-actions">
+  <div class="page-actions flex gap-2">
     <a href="/admin/payments" class="btn btn-secondary btn-sm">Back</a>
   </div>
 </div>
 
 {% if error %}
-<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">{{ error }}</div>
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
+  </div>
 </div>
 {% endif %}
 
 {% if reversal %}
-<div class="panel mb-4" style="border-color: rgba(234,179,8,0.4);">
-  <p class="text-sm">
-    This payment has been reversed by
-    <a href="/admin/payments/{{ reversal.id }}" class="mono hover:underline">{{ reversal.code }}</a>
-    on {{ reversal.created_at.strftime('%d %b %Y') }}.
-  </p>
+<div class="panel mb-4" style="border-color: rgba(234,179,8,0.4); background: rgba(234,179,8,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="text-sm text-amber-200">
+      This payment has been reversed by
+      <a href="/admin/payments/{{ reversal.id }}" class="mono hover:underline font-medium">{{ reversal.code }}</a>
+      on {{ reversal.created_at.strftime('%d %b %Y') }}.
+    </div>
+  </div>
 </div>
 {% endif %}
 
 {% if is_reversal and original %}
-<div class="panel mb-4" style="border-color: rgba(59,130,246,0.4);">
-  <p class="text-sm">
-    This is a reversal of
-    <a href="/admin/payments/{{ original.id }}" class="mono hover:underline">{{ original.code }}</a>.
-  </p>
+<div class="panel mb-4" style="border-color: rgba(59,130,246,0.4); background: rgba(59,130,246,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M12 16v-4M12 8h.01" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-blue-200">
+      This is a reversal of
+      <a href="/admin/payments/{{ original.id }}" class="mono hover:underline font-medium">{{ original.code }}</a>.
+    </div>
+  </div>
 </div>
 {% endif %}
 
 <div class="panel max-w-2xl">
-  <dl class="grid grid-cols-2 gap-4 text-sm">
+  <div class="panel-title mb-4">Payment Details</div>
+  <dl class="grid grid-cols-2 gap-6 text-sm">
     <div>
-      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Direction</dt>
+      <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Direction</dt>
       <dd><span class="badge {% if payment.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %}">{{ payment.direction }}</span></dd>
     </div>
     <div>
-      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Amount</dt>
-      <dd class="font-mono">{{ payment.amount | rupiah }}</dd>
+      <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Amount</dt>
+      <dd class="font-mono text-base font-semibold">{{ payment.amount | rupiah }}</dd>
     </div>
     <div>
-      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Date</dt>
+      <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Date</dt>
       <dd>{{ payment.payment_date.strftime('%d %b %Y') }}</dd>
     </div>
     <div>
-      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Method</dt>
+      <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Method</dt>
       <dd>{{ payment_method_labels.get(payment.method, payment.method) }}</dd>
     </div>
     <div>
-      <dt class="text-neutral-500 text-xs uppercase tracking-wider">
+      <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">
         {{ 'Customer' if payment.direction == 'IN' else 'Supplier' }}
       </dt>
       <dd>
         {% if customer %}
-          <a href="/admin/customers/{{ customer.id }}" class="hover:underline">{{ customer.name }}</a>
+          <a href="/admin/customers/{{ customer.id }}" class="hover:text-noctra-accent font-medium">{{ customer.name }}</a>
         {% elif supplier %}
-          <a href="/admin/suppliers/{{ supplier.id }}" class="hover:underline">{{ supplier.name }}</a>
+          <a href="/admin/suppliers/{{ supplier.id }}" class="hover:text-noctra-accent font-medium">{{ supplier.name }}</a>
         {% else %}
-          <span class="text-neutral-500">—</span>
+          <span class="text-noctra-dim">—</span>
         {% endif %}
       </dd>
     </div>
     <div>
-      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Account</dt>
+      <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Account</dt>
       <dd>
         {% if account %}{{ account.code }} — {{ account.name }}
-        {% else %}<span class="text-neutral-500">—</span>{% endif %}
+        {% else %}<span class="text-noctra-dim">—</span>{% endif %}
       </dd>
     </div>
     <div>
-      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Reference number</dt>
+      <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Reference number</dt>
       <dd>{{ payment.reference_number or '—' }}</dd>
     </div>
     <div>
-      <dt class="text-neutral-500 text-xs uppercase tracking-wider">Applied to</dt>
+      <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Applied to</dt>
       <dd>
         {% if invoice %}
-          <a href="/admin/invoices/{{ invoice.id }}" class="hover:underline">{{ invoice.code }}</a>
+          <a href="/admin/invoices/{{ invoice.id }}" class="hover:text-noctra-accent font-medium">{{ invoice.code }}</a>
         {% elif payment.reference_type %}
           {{ payment.reference_type }}
         {% else %}
-          <span class="text-neutral-500">—</span>
+          <span class="text-noctra-dim">—</span>
         {% endif %}
       </dd>
     </div>
   </dl>
 
   {% if payment.notes %}
-  <div class="mt-4">
-    <dt class="text-neutral-500 text-xs uppercase tracking-wider">Notes</dt>
-    <p class="text-neutral-300 mt-1 text-sm whitespace-pre-line">{{ payment.notes }}</p>
+  <div class="mt-6 pt-4 border-t border-noctra-border">
+    <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-2">Notes</dt>
+    <p class="text-noctra-muted text-sm whitespace-pre-line leading-relaxed">{{ payment.notes }}</p>
   </div>
   {% endif %}
 </div>
 
 {% if not reversal and not is_reversal %}
-<div class="panel max-w-2xl mt-6">
-  <div class="panel-title">Reverse this payment</div>
-  <p class="text-neutral-400 text-xs mt-1">
+<div class="panel max-w-2xl mt-6" style="border-color: rgba(239,68,68,0.3);">
+  <div class="panel-title text-red-400">Reverse this payment</div>
+  <p class="text-noctra-dim text-xs mt-1 mb-4">
     Creates a compensating entry in the opposite direction. The original
-    payment stays in the audit trail, and any linked invoice status is
-    re-evaluated.
+    payment stays in the audit trail, and any linked invoice status is re-evaluated.
   </p>
   <form method="post" action="/admin/payments/{{ payment.id }}/reverse"
-        class="mt-3 grid md:grid-cols-4 gap-3 items-end" data-guard
-        onsubmit="return confirm('Reverse this payment? This cannot be undone.');">
+        class="grid md:grid-cols-4 gap-3 items-end" data-guard
+        data-confirm="Reverse this payment? This cannot be undone.">
     <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
     <div class="form-row !mb-0 md:col-span-3">
-      <label class="form-label" for="reverse_reason">Reason</label>
+      <label class="form-label" for="reverse_reason">Reason <span class="req">*</span></label>
       <input class="input" id="reverse_reason" name="reason" required
              minlength="3" maxlength="500"
              placeholder="e.g. recorded against wrong invoice" />
     </div>
-    <button class="btn btn-danger">Reverse payment</button>
+    <button class="btn btn-danger h-10">Reverse payment</button>
   </form>
 </div>
 {% endif %}

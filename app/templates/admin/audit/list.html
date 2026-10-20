@@ -1,91 +1,203 @@
 {% extends "admin/base.html" %}
-{% include "components/pagination.html" %}
 
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Audit Log</h1>
-    <p class="page-subtitle">{{ page_meta.total }} entries</p>
+    <p class="page-subtitle">
+      {{ page_meta.total }} entr{% if page_meta.total == 1 %}y{% else %}ies{% endif %}
+      {% if action_filter or table_filter or since_days_filter or user_id_filter %}
+        · <a class="text-accent" href="/admin/audit">Clear filters</a>
+      {% endif %}
+    </p>
   </div>
 </div>
 
-<form method="get" class="panel mb-4 grid md:grid-cols-4 gap-4">
+<form method="get" action="/admin/audit" class="panel mb-4 grid md:grid-cols-5 gap-4">
   <div class="form-row !mb-0">
     <label class="form-label" for="action">Action</label>
     <select class="select" id="action" name="action">
-      <option value="">Any</option>
+      <option value="">Any action</option>
       {% for a in actions %}
-        <option value="{{ a }}" {% if action_filter == a %}selected{% endif %}>{{ a }}</option>
+        <option value="{{ a }}" {% if action_filter == a %}selected{% endif %}>
+          {{ a | replace('_', ' ') }}
+        </option>
       {% endfor %}
     </select>
   </div>
+
   <div class="form-row !mb-0">
     <label class="form-label" for="table_name">Table</label>
     <select class="select" id="table_name" name="table_name">
-      <option value="">Any</option>
+      <option value="">Any table</option>
       {% for t in tables %}
         <option value="{{ t }}" {% if table_filter == t %}selected{% endif %}>{{ t }}</option>
       {% endfor %}
     </select>
   </div>
+
+  <div class="form-row !mb-0">
+    <label class="form-label" for="user_id">User</label>
+    <select class="select" id="user_id" name="user_id">
+      <option value="">Any user</option>
+      {% for uid, uname in user_choices %}
+        <option value="{{ uid }}" {% if user_id_filter == uid %}selected{% endif %}>
+          {{ uname }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
   <div class="form-row !mb-0">
     <label class="form-label" for="since_days">Time range</label>
     <select class="select" id="since_days" name="since_days">
       <option value="">All time</option>
-      <option value="1" {% if since_days_filter == 1 %}selected{% endif %}>Last 24 hours</option>
-      <option value="7" {% if since_days_filter == 7 %}selected{% endif %}>Last 7 days</option>
-      <option value="30" {% if since_days_filter == 30 %}selected{% endif %}>Last 30 days</option>
-      <option value="90" {% if since_days_filter == 90 %}selected{% endif %}>Last 90 days</option>
+      {% for days, label in [(1, 'Last 24 hours'), (7, 'Last 7 days'), (30, 'Last 30 days'), (90, 'Last 90 days')] %}
+        <option value="{{ days }}" {% if since_days_filter == days %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
     </select>
   </div>
-  <div class="form-row !mb-0 flex items-end">
-    <button class="btn btn-secondary btn-block">Filter</button>
+
+  <div class="form-row !mb-0 flex items-end gap-2">
+    <button class="btn btn-secondary btn-block">Apply</button>
+    {% if action_filter or table_filter or since_days_filter or user_id_filter %}
+      <a href="/admin/audit" class="btn btn-ghost" title="Reset all filters">Reset</a>
+    {% endif %}
   </div>
 </form>
 
 {% if entries %}
 <div class="table-wrap">
-  <table class="table">
+  <table class="table w-full">
     <thead>
       <tr>
-        <th>When</th>
-        <th>Action</th>
-        <th>Table</th>
+        <th class="w-[150px]">When</th>
+        <th class="w-[150px]">Action</th>
+        <th class="w-[150px]">Table</th>
         <th>User</th>
-        <th>Record</th>
-        <th>IP</th>
+        <th class="w-[160px]">Record</th>
+        <th class="w-[120px]">IP</th>
       </tr>
     </thead>
     <tbody>
+      {# Badge tones — single map, easy to extend. #}
+      {% set action_tone = {
+        'CREATE': 'badge-success',
+        'UPDATE': 'badge-info',
+        'DELETE': 'badge-danger',
+        'LOGIN': 'badge-neutral',
+        'LOGIN_FAILED': 'badge-warning',
+        'LOGOUT': 'badge-neutral',
+        'EXPORT': 'badge-accent',
+        'STATUS_CHANGE': 'badge-accent',
+        'ASSIGN': 'badge-info',
+        'STOCK_IN': 'badge-success',
+        'STOCK_OUT': 'badge-warning',
+        'PRICE_CHANGE': 'badge-warning',
+        'COST_ENTRY': 'badge-accent',
+        'PAYMENT_RECEIVED': 'badge-success',
+        'PAYMENT_MADE': 'badge-info',
+        'INVOICE_SENT': 'badge-info',
+        'EXPENSE_RECORDED': 'badge-neutral',
+        'PROJECT_APPROVED': 'badge-success',
+        'PROJECT_COMPLETED': 'badge-success',
+      } %}
+
       {% for e in entries %}
-      <tr>
-        <td class="text-xs text-neutral-500 mono">{{ e.created_at | dt_id('%d %b %Y %H:%M') }}</td>
+      {% set has_diff = e.old_data or e.new_data %}
+      <tr class="align-top">
+        <td class="text-xs text-neutral-500 mono whitespace-nowrap">
+          {% if e.created_at %}
+            <span title="{{ e.created_at | dt_id('%A, %d %B %Y at %H:%M:%S %Z') }}">
+              {{ e.created_at | dt_id('%d %b %Y · %H:%M') }}
+            </span>
+          {% else %}—{% endif %}
+        </td>
+
         <td>
-          {% set badge = {
-            'CREATE':'badge-success','UPDATE':'badge-info','DELETE':'badge-danger',
-            'LOGIN':'badge-neutral','LOGIN_FAILED':'badge-warning','LOGOUT':'badge-neutral',
-            'STATUS_CHANGE':'badge-accent','ASSIGN':'badge-info',
-            'STOCK_IN':'badge-success','STOCK_OUT':'badge-warning','PRICE_CHANGE':'badge-warning',
-            'COST_ENTRY':'badge-accent','PAYMENT_RECEIVED':'badge-success','PAYMENT_MADE':'badge-info',
-            'INVOICE_SENT':'badge-info','EXPENSE_RECORDED':'badge-neutral',
-          }.get(e.action, 'badge-neutral') %}
-          <span class="badge {{ badge }}">{{ e.action }}</span>
+          <span class="badge {{ action_tone.get(e.action, 'badge-neutral') }} whitespace-nowrap">
+            {{ e.action | replace('_', ' ') }}
+          </span>
         </td>
-        <td class="mono text-xs">{{ e.table_name }}</td>
+
+        <td class="mono text-xs">{{ e.table_name or '—' }}</td>
+
         <td class="text-xs">
-          {% set u = users_by_id.get(e.user_id) if e.user_id else None %}
-          {% if u %}{{ u.full_name or u.username }}{% else %}<span class="text-neutral-500">system</span>{% endif %}
+          {% if e.user_id %}
+            {% set uname = users_by_id.get(e.user_id) %}
+            {% if uname %}
+              {# Handles both str (new audit.py) and User object (legacy) #}
+              {% if uname is string %}
+                {{ uname }}
+              {% else %}
+                {{ uname.full_name or uname.username }}
+              {% endif %}
+            {% else %}
+              <span class="text-neutral-400 mono" title="{{ e.user_id }}">
+                {{ e.user_id | string | truncate(8, True, '…') }}
+              </span>
+            {% endif %}
+          {% else %}
+            <span class="text-neutral-400">system</span>
+          {% endif %}
         </td>
-        <td class="mono text-xs text-neutral-500">{{ e.record_id[:12] }}</td>
-        <td class="mono text-xs text-neutral-500">{{ e.ip_address or '—' }}</td>
+
+        <td class="mono text-xs text-neutral-500">
+          {% if e.record_id %}
+            <span title="{{ e.record_id }}">
+              {{- e.record_id[:12] -}}{% if e.record_id | length > 12 %}…{% endif %}
+            </span>
+          {% else %}—{% endif %}
+        </td>
+
+        <td class="mono text-xs text-neutral-500 whitespace-nowrap">
+          {{ e.ip_address or '—' }}
+        </td>
       </tr>
+
+      {% if has_diff %}
+      <tr class="bg-neutral-50/50">
+        <td colspan="6" class="p-0 border-t-0">
+          <details class="group">
+            <summary class="cursor-pointer select-none px-3 py-1.5 text-xs text-accent hover:underline list-none [&::-webkit-details-marker]:hidden">
+              <span class="group-open:hidden">▸ Show changes</span>
+              <span class="hidden group-open:inline">▾ Hide changes</span>
+            </summary>
+            <div class="px-3 pb-3 space-y-2">
+              {% if e.old_data %}
+              <div>
+                <div class="text-[11px] uppercase tracking-wide text-red-700 font-semibold mb-1">
+                  Before
+                </div>
+                <pre class="text-[11px] leading-snug bg-white border border-neutral-200 rounded p-2 overflow-x-auto max-h-64 whitespace-pre-wrap break-all">{{ e.old_data | tojson(indent=2) }}</pre>
+              </div>
+              {% endif %}
+              {% if e.new_data %}
+              <div>
+                <div class="text-[11px] uppercase tracking-wide text-green-700 font-semibold mb-1">
+                  After
+                </div>
+                <pre class="text-[11px] leading-snug bg-white border border-neutral-200 rounded p-2 overflow-x-auto max-h-64 whitespace-pre-wrap break-all">{{ e.new_data | tojson(indent=2) }}</pre>
+              </div>
+              {% endif %}
+            </div>
+          </details>
+        </td>
+      </tr>
+      {% endif %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+{% include "components/pagination.html" %}
+
 {% else %}
 <div class="panel text-center py-16">
-  <p class="text-neutral-400">No audit entries match these filters.</p>
+  <p class="text-neutral-400 mb-2">No audit entries match these filters.</p>
+  {% if action_filter or table_filter or since_days_filter or user_id_filter %}
+    <a href="/admin/audit" class="text-accent text-sm">Clear all filters</a>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

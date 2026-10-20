@@ -1,14 +1,17 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
 
+{% set has_filters = q or status_filter or is_active_filter is not none or source_filter %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
+
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Customers</h1>
     <p class="page-subtitle">
       {{ page_meta.total }} total
-      {% if stats.status_LEAD %}· <span class="text-neutral-400">{{ stats.status_LEAD }} lead</span>{% endif %}
-      {% if stats.status_ACTIVE %}· <span class="text-neutral-400">{{ stats.status_ACTIVE }} active</span>{% endif %}
+      {% if stats.get('status_LEAD') %}· <span class="text-noctra-muted">{{ stats.get('status_LEAD') }} lead</span>{% endif %}
+      {% if stats.get('status_ACTIVE') %}· <span class="text-noctra-muted">{{ stats.get('status_ACTIVE') }} active</span>{% endif %}
     </p>
   </div>
   <div class="page-actions flex gap-2">
@@ -17,36 +20,72 @@
   </div>
 </div>
 
-{# Status quick-filter chips #}
-<div class="mb-4 flex flex-wrap gap-2 items-center">
-  <a href="/admin/customers{{ qs(status='') }}"
-     class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-    All
-  </a>
-  {% for s in statuses %}
-    <a href="/admin/customers{{ qs(status=s) }}"
-       class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
-      {{ status_labels.get(s, s) }}
-      {% if stats['status_' ~ s] %}<span class="opacity-70">· {{ stats['status_' ~ s] }}</span>{% endif %}
+{# ── Status chips ────────────────────────────────── #}
+<div class="mb-4 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
+    {# FIX (T8): "All" now clears BOTH status and is_active #}
+    <a href="/admin/customers{{ qs(status='', is_active='') }}"
+       class="badge whitespace-nowrap {% if not status_filter and is_active_filter is none %}badge-accent{% else %}badge-neutral{% endif %}">
+      All
     </a>
-  {% endfor %}
-  <a href="/admin/customers{{ qs(status='', is_active='false') }}"
-     class="badge {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
-    Disabled only
-  </a>
+
+    {% for s in statuses %}
+      <a href="/admin/customers{{ qs(status=s) }}"
+         class="badge whitespace-nowrap {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
+        {{ status_labels.get(s, s) }}
+        {% if stats.get('status_' ~ s) %}
+          <span class="opacity-70">· {{ stats.get('status_' ~ s) }}</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+
+    {# FIX (T9): explicit "Active only" chip #}
+    <a href="/admin/customers{{ qs(status='', is_active='true') }}"
+       class="badge whitespace-nowrap {% if is_active_filter is sameas true %}badge-accent{% else %}badge-neutral{% endif %}">
+      Active only
+      {% if stats.get('active_records') %}
+        <span class="opacity-70">· {{ stats.get('active_records') }}</span>
+      {% endif %}
+    </a>
+
+    <a href="/admin/customers{{ qs(status='', is_active='false') }}"
+       class="badge whitespace-nowrap {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
+      Disabled only
+    </a>
+  </div>
 </div>
 
+{# ── Filter form ──────────────────────────────────── #}
 <form method="get" class="panel mb-4">
-  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
-  {% if is_active_filter is not none %}
-    <input type="hidden" name="is_active" value="{{ 'true' if is_active_filter else 'false' }}" />
-  {% endif %}
+  <input type="hidden" name="per_page" value="{{ current_per_page }}" />
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
     <div class="form-row !mb-0 lg:col-span-2">
       <label class="form-label" for="q">Search</label>
       <input class="input" id="q" name="q" value="{{ q }}"
              placeholder="Name, email, phone, code…" data-search-input />
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="status_filter">Status</label>
+      <select class="select" id="status_filter" name="status">
+        <option value="">Any status</option>
+        {% for s in statuses %}
+          <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>
+            {{ status_labels.get(s, s) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# FIX (T10): explicit is_active select in the form #}
+    <div class="form-row !mb-0">
+      <label class="form-label" for="is_active_filter">Active</label>
+      <select class="select" id="is_active_filter" name="is_active">
+        <option value="" {% if is_active_filter is none %}selected{% endif %}>All</option>
+        <option value="true" {% if is_active_filter is sameas true %}selected{% endif %}>Active only</option>
+        <option value="false" {% if is_active_filter is sameas false %}selected{% endif %}>Disabled only</option>
+      </select>
     </div>
 
     <div class="form-row !mb-0">
@@ -77,59 +116,143 @@
   </div>
 </form>
 
+{# ── Toolbar ──────────────────────────────────────── #}
 {% if customers %}
-<div class="table-wrap">
-  <table class="table">
-    <thead>
-      <tr>
-        <th>Code</th>
-        <th>Name</th>
-        <th>Contact</th>
-        <th>City</th>
-        <th>Source</th>
-        <th>Status</th>
-        <th class="text-right"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for c in customers %}
-      <tr class="{% if not c.is_active %}opacity-60{% endif %}">
-        <td class="mono text-xs">{{ c.code }}</td>
-        <td class="font-medium">
-          {{ c.name }}
-          {% if not c.is_active %}
-            <span class="badge badge-neutral ml-1 text-[10px]">Disabled</span>
-          {% endif %}
-        </td>
-        <td class="text-neutral-400 text-sm">
-          {% if c.phone %}<div>{{ c.phone }}</div>{% endif %}
-          {% if c.email %}<div class="text-xs">{{ c.email }}</div>{% endif %}
-        </td>
-        <td class="text-neutral-400 text-sm">{{ c.city or '—' }}</td>
-        <td class="text-xs text-neutral-500">{{ source_labels.get(c.source, c.source or '—') }}</td>
-        <td>
-          <span class="badge {{ status_tone.get(c.status, 'badge-neutral') }}">
-            {{ status_labels.get(c.status, c.status) }}
-          </span>
-        </td>
-        <td class="text-right">
-          <a href="/admin/customers/{{ c.id }}" class="btn btn-ghost btn-sm">View</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+    {% if has_filters %}· <span class="text-noctra-muted">filtered</span>{% endif %}
+  </div>
+
+  <form method="get" class="per-page-form">
+    {% for k, v in request.query_params.items() %}
+      {% if k not in ('per_page', 'page') and v %}
+        <input type="hidden" name="{{ k }}" value="{{ v }}" />
+      {% endif %}
+    {% endfor %}
+    <label for="per_page_cust">Show</label>
+    <select id="per_page_cust" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
+</div>
+{% endif %}
+
+{% if customers %}
+
+{# ── Desktop table ──────────────────────────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Contact</th>
+          <th>City</th>
+          <th>Source</th>
+          <th>Status</th>
+          <th class="text-right"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in customers %}
+        <tr class="{% if not c.is_active %}opacity-60{% endif %}">
+          <td class="mono text-xs whitespace-nowrap">{{ c.code }}</td>
+          <td class="font-medium">
+            {{ c.name }}
+            {% if not c.is_active %}
+              <span class="badge badge-neutral badge-xs ml-1">Disabled</span>
+            {% endif %}
+          </td>
+          <td class="text-noctra-muted text-sm">
+            {% if c.phone %}<div>{{ c.phone }}</div>{% endif %}
+            {% if c.email %}<div class="text-xs text-noctra-dim">{{ c.email }}</div>{% endif %}
+            {% if not c.phone and not c.email %}—{% endif %}
+          </td>
+          <td class="text-noctra-muted text-sm">{{ c.city or '—' }}</td>
+          <td class="text-xs text-noctra-dim">{{ source_labels.get(c.source, c.source or '—') }}</td>
+          <td>
+            <span class="badge {{ status_tone.get(c.status, 'badge-neutral') }} whitespace-nowrap">
+              <span class="badge-dot"></span>
+              {{ status_labels.get(c.status, c.status) }}
+            </span>
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/customers/{{ c.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Mobile cards ───────────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for c in customers %}
+  <a href="/admin/customers/{{ c.id }}"
+     class="block panel !p-4 active:scale-[0.995] transition
+            {% if not c.is_active %}opacity-60{% endif %}">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <span class="mono text-xs text-noctra-dim">{{ c.code }}</span>
+      <span class="badge {{ status_tone.get(c.status, 'badge-neutral') }} shrink-0">
+        <span class="badge-dot"></span>
+        {{ status_labels.get(c.status, c.status) }}
+      </span>
+    </div>
+
+    <div class="font-medium text-sm">
+      {{ c.name }}
+      {% if not c.is_active %}
+        <span class="badge badge-neutral badge-xs ml-1">Disabled</span>
+      {% endif %}
+    </div>
+
+    {% if c.phone or c.email %}
+      <div class="text-xs text-noctra-dim mt-1 space-y-0.5">
+        {% if c.phone %}<div>{{ c.phone }}</div>{% endif %}
+        {% if c.email %}<div>{{ c.email }}</div>{% endif %}
+      </div>
+    {% endif %}
+
+    {% if c.city or c.source %}
+      <div class="text-xs text-noctra-muted mt-2 flex items-center gap-2">
+        {% if c.city %}<span>{{ c.city }}</span>{% endif %}
+        {% if c.source %}· <span>{{ source_labels.get(c.source, c.source) }}</span>{% endif %}
+      </div>
+    {% endif %}
+  </a>
+  {% endfor %}
 </div>
 
 {% include "components/pagination.html" %}
 
 {% else %}
-{{ empty_state(
-  title='No customers match your filters',
-  message='Try adjusting filters or add a new customer.',
-  action_url='/admin/customers/new',
-  action_label='New Customer',
-  icon='plus'
-) }}
+
+{% if has_filters %}
+  {{ empty_state(
+    title='No customers match your filters',
+    message='Try adjusting filters or clear them to see all customers.',
+    action_url='/admin/customers',
+    action_label='Clear filters',
+    icon='search'
+  ) }}
+{% else %}
+  {{ empty_state(
+    title='No customers yet',
+    message='Add your first customer to start building your database.',
+    action_url='/admin/customers/new',
+    action_label='New Customer',
+    icon='plus'
+  ) }}
+{% endif %}
+
 {% endif %}
 {% endblock %}

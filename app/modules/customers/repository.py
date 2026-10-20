@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
-from app.modules.customers.constants import CustomerStatus
 from app.modules.customers.models import Customer, CustomerContact
 
 
@@ -44,7 +44,10 @@ class CustomerRepository:
         source: str | None = None,
         sort: str = "created_desc",
     ) -> Select:
-        stmt = select(Customer)
+        # `noload` prevents selectin from firing for `contacts` — list view
+        # does not need them. Detail paths (get / create / update) load
+        # contacts explicitly via the model's `selectin` lazy strategy.
+        stmt = select(Customer).options(noload(Customer.contacts))
         conds = []
         if q:
             like = f"%{q.strip()}%"
@@ -68,17 +71,18 @@ class CustomerRepository:
         if conds:
             stmt = stmt.where(and_(*conds))
 
-        # ── Sorting ──
+        # Stable secondary sort on id prevents pagination drift
+        # when primary key ties (e.g. same created_at).
         if sort == "created_asc":
-            stmt = stmt.order_by(Customer.created_at.asc())
+            stmt = stmt.order_by(Customer.created_at.asc(), Customer.id.asc())
         elif sort == "name_asc":
-            stmt = stmt.order_by(Customer.name.asc())
+            stmt = stmt.order_by(Customer.name.asc(), Customer.id.asc())
         elif sort == "name_desc":
-            stmt = stmt.order_by(Customer.name.desc())
+            stmt = stmt.order_by(Customer.name.desc(), Customer.id.asc())
         elif sort == "updated_desc":
-            stmt = stmt.order_by(Customer.updated_at.desc())
-        else:
-            stmt = stmt.order_by(Customer.created_at.desc())
+            stmt = stmt.order_by(Customer.updated_at.desc(), Customer.id.asc())
+        else:  # created_desc
+            stmt = stmt.order_by(Customer.created_at.desc(), Customer.id.asc())
 
         return stmt
 
@@ -90,8 +94,10 @@ class CustomerRepository:
         )
         return list((await self.db.execute(stmt)).scalars().all())
 
+    async def get_contact(self, contact_id: UUID) -> CustomerContact | None:
+        return await self.db.get(CustomerContact, contact_id)
+
     async def stats(self) -> dict[str, int]:
-        """Aggregate counts per status + active totals."""
         rows = await self.db.execute(
             select(Customer.status, func.count(Customer.id)).group_by(Customer.status)
         )
@@ -110,11 +116,6 @@ class CustomerRepository:
         }
 
     async def next_code(self) -> str:
-        """
-        Generate NOCTRA-C-YYYY-NNNNNN.
-        Fine for the volume NOCTRA does. If you ever need high concurrency,
-        swap for a Postgres sequence or an advisory lock.
-        """
         year = datetime.now(UTC).year
         prefix = f"NOCTRA-C-{year}-"
         stmt = (
@@ -126,6 +127,21 @@ class CustomerRepository:
         last = (await self.db.execute(stmt)).scalar_one_or_none()
         next_n = 1 if last is None else int(last.rsplit("-", 1)[-1]) + 1
         return f"{prefix}{next_n:06d}"
+
+    async def next_code_locked(self) -> str:
+        """
+        Generate the next customer code under a transaction-scoped advisory
+        lock, serialising concurrent `create` calls. Prevents two parallel
+        requests from picking the same code and colliding on the unique
+        constraint (which would otherwise surface as a 500).
+        """
+        year = datetime.now(UTC).year
+        # Two-int form: namespace + year → unique lock per calendar year.
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(:ns, :yr)"),
+            {"ns": 900, "yr": year},
+        )
+        return await self.next_code()
 
     # ── Writes ────────────────────────────────────────
     async def add(self, customer: Customer) -> Customer:

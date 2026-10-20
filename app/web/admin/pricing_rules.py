@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import ValidationError as PydanticValidationError
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
@@ -15,13 +18,17 @@ from app.modules.inquiries.constants import (
     SERVICE_INTEREST_LABELS,
     SERVICE_INTERESTS,
 )
+from app.modules.pricing.constants import rule_specificity
 from app.modules.pricing.repository import PricingRuleRepository
 from app.modules.pricing.schemas import PricingRuleCreate, PricingRuleUpdate
 from app.modules.pricing.service import PricingService
 from app.modules.vehicles.constants import VEHICLE_CATEGORIES
+from app.web.admin._perms import read, write
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin/pricing-rules", tags=["admin-pricing-rules"])
+
+_FORM_ERRORS = (AppError, PydanticValidationError, ValueError, KeyError)
 
 
 def _catalog() -> dict:
@@ -32,12 +39,43 @@ def _catalog() -> dict:
     }
 
 
+def _form_error(exc: Exception) -> str:
+    return (getattr(exc, "message", None) or str(exc) or "Invalid input").strip()
+
+
+def _clean_optional(form, key: str) -> str | None:
+    v = form.get(key)
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s or s.lower() in ("none", "null", "undefined", "nil"):
+        return None
+    return s
+
+
+def _safe_float(raw) -> float | None:
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+# ════════════════════════════════════════════════════════════════
+# LIST
+# ════════════════════════════════════════════════════════════════
+
 @router.get("", response_class=HTMLResponse)
 async def list_view(
     request: Request,
     db: DbSession,
     params: PageParams = Depends(page_params),
     q: str | None = Query(None, max_length=200),
+    _=read(PermissionCode.PRICING_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     stmt = PricingRuleRepository(db).query(q=q)
@@ -55,8 +93,16 @@ async def list_view(
     )
 
 
+# ════════════════════════════════════════════════════════════════
+# NEW / CREATE
+# ════════════════════════════════════════════════════════════════
+
 @router.get("/new", response_class=HTMLResponse)
-async def new_view(request: Request, current=Depends(get_current_user)) -> HTMLResponse:
+async def new_view(
+    request: Request,
+    _=write(PermissionCode.PRICING_WRITE),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
     return templates.render(
         request,
         "admin/pricing_rules/form.html",
@@ -65,32 +111,15 @@ async def new_view(request: Request, current=Depends(get_current_user)) -> HTMLR
 
 
 @router.post("")
-async def create_submit(request: Request, db: DbSession, current=Depends(get_current_user)):
+async def create_submit(
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PRICING_WRITE),
+    current=Depends(get_current_user),
+):
     form = await request.form()
 
-    def clean(k):
-        v = form.get(k)
-        if v is None:
-            return None
-        s = str(v).strip()
-        if not s or s.lower() in ("none", "null", "undefined", "nil"):
-            return None
-        return s
-
-    payload = PricingRuleCreate(
-        name=(form.get("name") or "").strip(),
-        notes=clean("notes"),
-        service_interest=clean("service_interest"),
-        vehicle_category=clean("vehicle_category"),
-        target_margin_pct=float(form.get("target_margin_pct") or 50),
-        min_margin_pct=float(form.get("min_margin_pct") or 30),
-        complexity_factor=float(form.get("complexity_factor") or 1.0),
-        min_price_floor=(float(form["min_price_floor"]) if form.get("min_price_floor") else None),
-    )
-    try:
-        rule = await PricingService(db).create_rule(payload, actor=current)
-    except AppError as exc:
-        await db.rollback()
+    def _render_error(msg: str, status_code: int = 400):
         return templates.render(
             request,
             "admin/pricing_rules/form.html",
@@ -98,40 +127,78 @@ async def create_submit(request: Request, db: DbSession, current=Depends(get_cur
                 "title": "New Pricing Rule",
                 "mode": "create",
                 "rule": None,
-                "error": exc.message,
+                "error": msg,
                 "form_values": dict(form),
                 **_catalog(),
             },
-            status_code=exc.status_code,
+            status_code=status_code,
         )
-    await db.commit()
+
+    try:
+        payload = PricingRuleCreate(
+            name=(form.get("name") or "").strip(),
+            notes=_clean_optional(form, "notes"),
+            service_interest=_clean_optional(form, "service_interest"),
+            vehicle_category=_clean_optional(form, "vehicle_category"),
+            target_margin_pct=_safe_float(form.get("target_margin_pct")) or 50.0,
+            min_margin_pct=_safe_float(form.get("min_margin_pct")) or 30.0,
+            complexity_factor=_safe_float(form.get("complexity_factor")) or 1.0,
+            min_price_floor=_safe_float(form.get("min_price_floor")),
+        )
+        rule = await PricingService(db).create_rule(payload, actor=current)
+        await db.commit()
+    except _FORM_ERRORS as exc:
+        await db.rollback()
+        return _render_error(
+            _form_error(exc), getattr(exc, "status_code", 400)
+        )
+
     return RedirectResponse(url=f"/admin/pricing-rules/{rule.id}", status_code=303)
 
 
+# ════════════════════════════════════════════════════════════════
+# DETAIL
+# ════════════════════════════════════════════════════════════════
+
 @router.get("/{rule_id}", response_class=HTMLResponse)
 async def detail_view(
-    rule_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    rule_id: UUID,
+    request: Request,
+    db: DbSession,
+    error: str | None = Query(None),
+    _=read(PermissionCode.PRICING_READ),
+    current=Depends(get_current_user),
 ) -> HTMLResponse:
     rule = await PricingRuleRepository(db).get(rule_id)
     if not rule:
         raise NotFoundError("Pricing rule not found")
 
-    spec = 0
-    if rule.service_interest:
-        spec += 2
-    if rule.vehicle_category:
-        spec += 1
+    spec = rule_specificity(rule.service_interest, rule.vehicle_category)
 
     return templates.render(
         request,
         "admin/pricing_rules/detail.html",
-        {"title": rule.name, "rule": rule, "specificity": spec, **_catalog()},
+        {
+            "title": rule.name,
+            "rule": rule,
+            "specificity": spec,
+            "error": error,
+            **_catalog(),
+        },
     )
 
 
+# ════════════════════════════════════════════════════════════════
+# EDIT
+# ════════════════════════════════════════════════════════════════
+
 @router.get("/{rule_id}/edit", response_class=HTMLResponse)
 async def edit_view(
-    rule_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    rule_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PRICING_WRITE),
+    current=Depends(get_current_user),
 ) -> HTMLResponse:
     rule = await PricingRuleRepository(db).get(rule_id)
     if not rule:
@@ -139,51 +206,70 @@ async def edit_view(
     return templates.render(
         request,
         "admin/pricing_rules/form.html",
-        {"title": f"Edit {rule.name}", "mode": "edit", "rule": rule, **_catalog()},
+        {
+            "title": f"Edit {rule.name}",
+            "mode": "edit",
+            "rule": rule,
+            **_catalog(),
+        },
     )
 
 
 @router.post("/{rule_id}")
 async def update_submit(
-    rule_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    rule_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PRICING_WRITE),
+    current=Depends(get_current_user),
 ):
     form = await request.form()
 
-    def clean(k):
-        v = form.get(k)
-        if v is None:
-            return None
-        s = str(v).strip()
-        if not s or s.lower() in ("none", "null", "undefined", "nil"):
-            return None
-        return s
-
-    payload = PricingRuleUpdate(
-        name=(form.get("name") or "").strip() or None,
-        notes=clean("notes"),
-        service_interest=clean("service_interest"),
-        vehicle_category=clean("vehicle_category"),
-        target_margin_pct=(float(form["target_margin_pct"]) if form.get("target_margin_pct") else None),
-        min_margin_pct=(float(form["min_margin_pct"]) if form.get("min_margin_pct") else None),
-        complexity_factor=(float(form["complexity_factor"]) if form.get("complexity_factor") else None),
-        min_price_floor=(float(form["min_price_floor"]) if form.get("min_price_floor") else None),
-        is_active=form.get("is_active") == "true",
-    )
     try:
+        payload = PricingRuleUpdate(
+            name=(form.get("name") or "").strip() or None,
+            notes=_clean_optional(form, "notes"),
+            service_interest=_clean_optional(form, "service_interest"),
+            vehicle_category=_clean_optional(form, "vehicle_category"),
+            target_margin_pct=_safe_float(form.get("target_margin_pct")),
+            min_margin_pct=_safe_float(form.get("min_margin_pct")),
+            complexity_factor=_safe_float(form.get("complexity_factor")),
+            min_price_floor=_safe_float(form.get("min_price_floor")),
+            is_active=("is_active" in form and form.get("is_active") == "true"),
+        )
         await PricingService(db).update_rule(rule_id, payload, actor=current)
         await db.commit()
-    except AppError as exc:
+    except _FORM_ERRORS as exc:
         await db.rollback()
         return RedirectResponse(
-            url=f"/admin/pricing-rules/{rule_id}?error={exc.message}", status_code=303
+            url=f"/admin/pricing-rules/{rule_id}?error="
+                f"{quote(_form_error(exc), safe='')}",
+            status_code=303,
         )
+
     return RedirectResponse(url=f"/admin/pricing-rules/{rule_id}", status_code=303)
 
 
+# ════════════════════════════════════════════════════════════════
+# DEACTIVATE
+# ════════════════════════════════════════════════════════════════
+
 @router.post("/{rule_id}/deactivate")
 async def deactivate_submit(
-    rule_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    rule_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PRICING_WRITE),
+    current=Depends(get_current_user),
 ):
-    await PricingService(db).delete_rule(rule_id, actor=current)
-    await db.commit()
+    try:
+        await PricingService(db).delete_rule(rule_id, actor=current)
+        await db.commit()
+    except _FORM_ERRORS as exc:
+        await db.rollback()
+        return RedirectResponse(
+            url=f"/admin/pricing-rules/{rule_id}?error="
+                f"{quote(_form_error(exc), safe='')}",
+            status_code=303,
+        )
     return RedirectResponse(url=f"/admin/pricing-rules/{rule_id}", status_code=303)

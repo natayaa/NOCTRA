@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
     Numeric,
     String,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -29,17 +32,19 @@ from app.modules.projects.constants import ProjectStatus
 class Employee(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "employees"
 
-    code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     position: Mapped[str | None] = mapped_column(String(100))
-    hourly_rate: Mapped[float] = mapped_column(
+    hourly_rate: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), nullable=False, default=0, server_default="0",
     )
-    monthly_salary: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    monthly_salary: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     joined_at: Mapped[date | None] = mapped_column(Date)
     phone: Mapped[str | None] = mapped_column(String(32))
     notes: Mapped[str | None] = mapped_column(Text)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False,
+    )
 
     def __repr__(self) -> str:
         return f"<Employee {self.code} {self.name}>"
@@ -57,12 +62,10 @@ class Project(Base, UUIDMixin, TimestampMixin):
         Index("ix_projects_vehicle", "vehicle_id"),
     )
 
-    # ── Identity ────────────────────────────────────────
-    code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     title: Mapped[str | None] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
 
-    # ── Relationships ───────────────────────────────────
     inquiry_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("inquiries.id", ondelete="SET NULL"),
@@ -83,46 +86,68 @@ class Project(Base, UUIDMixin, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"),
     )
 
-    # ── Workflow ────────────────────────────────────────
     status: Mapped[str] = mapped_column(
         String(24),
         default=ProjectStatus.DRAFT.value,
+        server_default=ProjectStatus.DRAFT.value,
         nullable=False,
         index=True,
     )
-    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    priority: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False,
+    )
 
-    # ── Pricing ────────────────────────────────────────
-    quoted_price: Mapped[float | None] = mapped_column(Numeric(14, 2))
-    approved_price: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    quoted_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    approved_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
 
-    # ── Denormalized costing totals ────────────────────
-    estimated_hpp: Mapped[float] = mapped_column(
+    estimated_hpp: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
-    actual_hpp: Mapped[float] = mapped_column(
+    actual_hpp: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
-    estimated_materials: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    estimated_parts: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    estimated_labor: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    estimated_outsource: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    estimated_overhead: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    estimated_misc: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
+    estimated_materials: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    estimated_parts: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    estimated_labor: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    estimated_outsource: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    estimated_overhead: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    estimated_misc: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
 
-    actual_materials: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    actual_parts: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    actual_labor: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    actual_outsource: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    actual_overhead: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
-    actual_misc: Mapped[float] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
+    actual_materials: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    actual_parts: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    actual_labor: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    actual_outsource: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    actual_overhead: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
+    actual_misc: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False,
+    )
 
-    # ── Timeline ────────────────────────────────────────
     start_date: Mapped[date | None] = mapped_column(Date)
     target_end_date: Mapped[date | None] = mapped_column(Date)
     actual_end_date: Mapped[date | None] = mapped_column(Date)
 
-    # ── Notes ───────────────────────────────────────────
     internal_notes: Mapped[str | None] = mapped_column(Text)
     closing_note: Mapped[str | None] = mapped_column(Text)
 
@@ -141,7 +166,7 @@ class Project(Base, UUIDMixin, TimestampMixin):
     # ── Derived properties ─────────────────────────────
     @property
     def hpp_variance(self) -> float:
-        """Positive = we spent less than estimated. Negative = overrun."""
+        """Positive = spent less than estimated. Negative = overrun."""
         return float(self.estimated_hpp) - float(self.actual_hpp)
 
     @property
@@ -161,6 +186,50 @@ class Project(Base, UUIDMixin, TimestampMixin):
         if self.approved_price is None:
             return 0.0
         return float(self.approved_price) - float(self.estimated_hpp)
+
+    # ── Float-safe views (for templates & arithmetic) ──
+    # These were previously (incorrectly) on ProjectItem — moved here
+    # where the underlying columns actually live.
+
+    @property
+    def est_hpp(self) -> float:
+        return float(self.estimated_hpp or 0)
+
+    @property
+    def act_hpp(self) -> float:
+        return float(self.actual_hpp or 0)
+
+    @property
+    def quoted_price_f(self) -> float:
+        return float(self.quoted_price or 0)
+
+    @property
+    def approved_price_f(self) -> float:
+        return float(self.approved_price or 0)
+
+    @property
+    def estimated_materials_f(self) -> float:
+        return float(self.estimated_materials or 0)
+
+    @property
+    def actual_materials_f(self) -> float:
+        return float(self.actual_materials or 0)
+
+    @property
+    def estimated_labor_f(self) -> float:
+        return float(self.estimated_labor or 0)
+
+    @property
+    def actual_labor_f(self) -> float:
+        return float(self.actual_labor or 0)
+
+    @property
+    def estimated_overhead_f(self) -> float:
+        return float(self.estimated_overhead or 0)
+
+    @property
+    def actual_overhead_f(self) -> float:
+        return float(self.actual_overhead or 0)
 
     def __repr__(self) -> str:
         return f"<Project {self.code} {self.status}>"
@@ -185,11 +254,9 @@ class ProjectItem(Base, UUIDMixin, TimestampMixin):
         nullable=False,
     )
 
-    # ── Classification ──────────────────────────────────
     category: Mapped[str] = mapped_column(String(16), nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
 
-    # Optional links
     material_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("materials.id", ondelete="RESTRICT"),
@@ -199,28 +266,33 @@ class ProjectItem(Base, UUIDMixin, TimestampMixin):
         ForeignKey("employees.id", ondelete="RESTRICT"),
     )
 
-    # ── Units ───────────────────────────────────────────
     unit: Mapped[str | None] = mapped_column(String(16))
 
-    # ── Estimated (planning) ────────────────────────────
-    estimated_quantity: Mapped[float | None] = mapped_column(Numeric(14, 4))
-    estimated_unit_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
-    estimated_cost: Mapped[float] = mapped_column(
+    estimated_quantity: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    estimated_unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    estimated_cost: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
 
-    # ── Actual (execution) ──────────────────────────────
-    actual_quantity: Mapped[float | None] = mapped_column(Numeric(14, 4))
-    actual_unit_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
-    actual_cost: Mapped[float] = mapped_column(
+    actual_quantity: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    actual_unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    actual_cost: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
 
-    # ── Progress ────────────────────────────────────────
     status: Mapped[str] = mapped_column(
-        String(16), default="PLANNED", nullable=False,
+        String(16), default="PLANNED", server_default="PLANNED", nullable=False,
     )
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # Business date for finance COGS periodization. Backfilled from
+    # created_at for legacy rows; not updated on item edits.
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
 
     project: Mapped[Project] = relationship(back_populates="items")
 

@@ -13,23 +13,26 @@
     - 'error'   (something went wrong)
 #}
 {% set icons = {
-  'list':   'M4 7h16M4 12h16M4 17h10',
-  'search': 'M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14Zm5-2 5 5',
+  'list':   'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  'search': 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm10 2-4.35-4.35',
   'plus':   'M12 5v14M5 12h14',
-  'error':  'M12 8v5m0 3h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z',
+  'error':  'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01',
 } %}
 
-<div class="border border-noctra-border rounded-xl bg-noctra-surface text-center py-16 px-6">
-  <div class="mx-auto w-12 h-12 rounded-full bg-noctra-surface2 grid place-items-center mb-4">
-    <svg viewBox="0 0 24 24" fill="none" class="w-6 h-6 text-neutral-500" aria-hidden="true">
+<div class="empty-state" role="status">
+  <div class="empty-state-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none">
       <path d="{{ icons.get(icon, icons['list']) }}"
-            stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            stroke="currentColor" stroke-width="1.6"
+            stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </div>
-  <h3 class="text-lg font-semibold">{{ title }}</h3>
-  <p class="text-neutral-400 mt-1 max-w-md mx-auto text-sm">{{ message }}</p>
+  <h3 class="empty-state-title">{{ title }}</h3>
+  <p class="empty-state-message">{{ message }}</p>
   {% if action_url and action_label %}
-    <a href="{{ action_url }}" class="btn btn-primary mt-6 inline-flex">{{ action_label }}</a>
+    <a href="{{ action_url }}" class="btn btn-primary empty-state-action">
+      {{ action_label }}
+    </a>
   {% endif %}
 </div>
 {% endmacro %}

@@ -1,6 +1,16 @@
 """Inquiry workflow and customer-request vocabulary."""
 from __future__ import annotations
+
+from datetime import date, datetime
 from enum import StrEnum
+from zoneinfo import ZoneInfo
+
+from app.core.config import settings
+
+
+def today_local() -> date:
+    """Today's date in the app's configured timezone (not UTC)."""
+    return datetime.now(ZoneInfo(settings.APP_TIMEZONE)).date()
 
 
 # ════════════════════════════════════════════════════════════════
@@ -48,7 +58,6 @@ SOURCE_LABELS: dict[str, str] = {
     "ADMIN": "Admin Entry",
 }
 
-# Badge tone per status — single source of truth for templates
 STATUS_TONE: dict[str, str] = {
     InquiryStatus.NEW.value: "badge-info",
     InquiryStatus.CONTACTED.value: "badge-neutral",
@@ -59,7 +68,7 @@ STATUS_TONE: dict[str, str] = {
     InquiryStatus.LOST.value: "badge-danger",
 }
 
-# Grouping used for dashboard/statistics
+# OPEN_STATUSES = pre-approval states (still need active follow-up).
 OPEN_STATUSES: frozenset[str] = frozenset({
     InquiryStatus.NEW.value,
     InquiryStatus.CONTACTED.value,
@@ -72,19 +81,56 @@ TERMINAL_STATUSES: frozenset[str] = frozenset({
     InquiryStatus.LOST.value,
 })
 
+# NON_TERMINAL_STATUSES = everything still actionable (includes APPROVED).
+# Used by the `only_open=true` filter so the list and dashboard agree.
+NON_TERMINAL_STATUSES: frozenset[str] = frozenset(INQUIRY_STATUSES) - TERMINAL_STATUSES
+
+# Statuses that imply the customer was actually contacted by sales.
+# Used to refresh `last_contacted_at` on workflow transitions.
+CONTACT_IMPLYING_STATUSES: frozenset[str] = frozenset({
+    InquiryStatus.CONTACTED.value,
+    InquiryStatus.QUOTED.value,
+    InquiryStatus.NEGOTIATING.value,
+    InquiryStatus.APPROVED.value,
+})
+
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    InquiryStatus.NEW.value: frozenset({InquiryStatus.CONTACTED.value, InquiryStatus.LOST.value}),
-    InquiryStatus.CONTACTED.value: frozenset({InquiryStatus.QUOTED.value, InquiryStatus.LOST.value}),
+    InquiryStatus.NEW.value: frozenset({
+        InquiryStatus.CONTACTED.value,
+        InquiryStatus.LOST.value,
+    }),
+    InquiryStatus.CONTACTED.value: frozenset({
+        InquiryStatus.QUOTED.value,
+        InquiryStatus.LOST.value,
+    }),
     InquiryStatus.QUOTED.value: frozenset({
         InquiryStatus.NEGOTIATING.value,
         InquiryStatus.APPROVED.value,
         InquiryStatus.LOST.value,
     }),
-    InquiryStatus.NEGOTIATING.value: frozenset({InquiryStatus.APPROVED.value, InquiryStatus.LOST.value}),
-    InquiryStatus.APPROVED.value: frozenset({InquiryStatus.CONVERTED.value, InquiryStatus.LOST.value}),
+    InquiryStatus.NEGOTIATING.value: frozenset({
+        InquiryStatus.APPROVED.value,
+        InquiryStatus.LOST.value,
+    }),
+    InquiryStatus.APPROVED.value: frozenset({
+        InquiryStatus.CONVERTED.value,
+        InquiryStatus.LOST.value,
+    }),
     InquiryStatus.CONVERTED.value: frozenset(),
     InquiryStatus.LOST.value: frozenset(),
 }
+
+# Sort keys exposed to the UI — validated in the API layer.
+SORT_OPTIONS: dict[str, str] = {
+    "created_desc": "Newest first",
+    "created_asc": "Oldest first",
+    "updated_desc": "Recently updated",
+    "follow_up_asc": "Follow-up (soonest)",
+    "status_asc": "Status (A→Z)",
+}
+
+# Upper bound on photos per inquiry — enforced in the service.
+MAX_PHOTOS_PER_INQUIRY: int = 20
 
 
 # ════════════════════════════════════════════════════════════════
@@ -236,7 +282,6 @@ PREFERENCE_KEYS: list[dict] = [
     {"key": "custom_notes", "label": "Other special requests", "type": "text"},
 ]
 
-# Convenience: list of preference keys that should render as multi-select
 PREFERENCE_LIST_KEYS: frozenset[str] = frozenset(
     p["key"] for p in PREFERENCE_KEYS if p["type"] == "list"
 )

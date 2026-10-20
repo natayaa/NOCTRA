@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.vehicles.constants import VEHICLE_CATEGORIES
 
@@ -26,14 +26,17 @@ def _check_category(v: str | None) -> str | None:
 
 
 def _normalize_plate(v: str | None) -> str | None:
-    """Uppercase + strip whitespace internal."""
+    """Uppercase + collapse internal whitespace."""
     if v is None:
         return None
     s = v.strip().upper()
-    # collapse multiple spaces
     s = " ".join(s.split())
     return s or None
 
+
+# ════════════════════════════════════════════════════════════════
+# CREATE
+# ════════════════════════════════════════════════════════════════
 
 class VehicleCreate(BaseModel):
     plate_number: str | None = Field(None, max_length=20)
@@ -68,6 +71,20 @@ class VehicleCreate(BaseModel):
     def _validate_category(cls, v):
         return _check_category(v)
 
+    @model_validator(mode="after")
+    def _check_model_brand_consistency(self):
+        # Structural check only — existence + FK consistency is enforced
+        # in the service layer (needs DB access).
+        if self.model_id and not self.brand_id:
+            raise ValueError(
+                "brand_id is required when model_id is provided"
+            )
+        return self
+
+
+# ════════════════════════════════════════════════════════════════
+# UPDATE
+# ════════════════════════════════════════════════════════════════
 
 class VehicleUpdate(BaseModel):
     plate_number: str | None = Field(None, max_length=20)
@@ -102,6 +119,18 @@ class VehicleUpdate(BaseModel):
     def _validate_category(cls, v):
         return _check_category(v)
 
+    # brand and model are NOT NULL in the DB — reject explicit null.
+    @field_validator("brand", "model")
+    @classmethod
+    def _non_nullable_brand_model(cls, v):
+        if v is None:
+            raise ValueError("field cannot be null")
+        return v
+
+
+# ════════════════════════════════════════════════════════════════
+# READ
+# ════════════════════════════════════════════════════════════════
 
 class VehicleListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -138,3 +167,12 @@ class VehicleModelOut(BaseModel):
     brand_id: UUID
     name: str
     category: str | None
+
+
+class VehicleSearchResult(BaseModel):
+    """Lightweight result for autocomplete pickers."""
+    id: UUID
+    label: str
+    sublabel: str
+    customer_id: UUID | None = None
+    customer_name: str | None = None

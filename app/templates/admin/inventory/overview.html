@@ -1,14 +1,24 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
 
+{% set has_filters = q or category_filter or low_stock_filter %}
+{% set filtered_count = items | length %}
+{% set filtered_value = items | map(attribute='stock_value') | sum %}
+
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Inventory</h1>
     <p class="page-subtitle">
-      {{ items | length }} shown
-      {% if low_stock_count %}· <span class="text-red-400">{{ low_stock_count }} below reorder</span>{% endif %}
-      {% if below_min_count %}· <span class="text-red-300 font-medium">{{ below_min_count }} below min</span>{% endif %}
+      {% if has_filters %}
+        {{ filtered_count }} material{% if filtered_count != 1 %}s{% endif %} in view
+        {% if low_stock_count %}· <span class="text-red-400 font-medium">{{ low_stock_count }} below reorder (all)</span>{% endif %}
+        {% if below_min_count %}· <span class="text-red-300 font-medium">{{ below_min_count }} below min (all)</span>{% endif %}
+      {% else %}
+        {{ filtered_count }} material{% if filtered_count != 1 %}s{% endif %}
+        {% if low_stock_count %}· <span class="text-red-400 font-medium">{{ low_stock_count }} below reorder</span>{% endif %}
+        {% if below_min_count %}· <span class="text-red-300 font-medium">{{ below_min_count }} below min</span>{% endif %}
+      {% endif %}
     </p>
   </div>
   <div class="page-actions flex gap-2">
@@ -18,52 +28,112 @@
   </div>
 </div>
 
-{# ── Stats ──────────────────────────────────────────── #}
+{# ── Stats ──────────────────────────────────────── #}
+{% set stat_icons = {
+  'value':    'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  'tracked':  'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  'low':      'M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z',
+  'critical': 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 8v4M12 16h.01',
+} %}
+
 <div class="stat-grid">
   <div class="stat">
-    <div class="stat-label">Total stock value</div>
-    <div class="stat-value">{{ total_value | rupiah }}</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">Materials tracked</div>
-    <div class="stat-value">{{ items | length }}</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">Low stock alerts</div>
-    <div class="stat-value {% if low_stock_count > 0 %}text-noctra-danger{% endif %}">
-      {{ low_stock_count }}
+    <div class="stat-icon tone-blue" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="{{ stat_icons.value }}" stroke="currentColor" stroke-width="1.9"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="stat-content">
+      <div class="stat-label">
+        {% if has_filters %}Value in view{% else %}Total stock value{% endif %}
+      </div>
+      <div class="stat-value">{{ filtered_value | rupiah }}</div>
     </div>
   </div>
+
   <div class="stat">
-    <div class="stat-label">Critical (below min)</div>
-    <div class="stat-value {% if below_min_count > 0 %}text-noctra-danger{% endif %}">
-      {{ below_min_count }}
+    <div class="stat-icon tone-purple" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="{{ stat_icons.tracked }}" stroke="currentColor" stroke-width="1.9"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="stat-content">
+      <div class="stat-label">
+        {% if has_filters %}Materials in view{% else %}Materials tracked{% endif %}
+      </div>
+      <div class="stat-value">{{ filtered_count }}</div>
+    </div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-icon tone-orange" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="{{ stat_icons.low }}" stroke="currentColor" stroke-width="1.9"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="stat-content">
+      <div class="stat-label">Low stock alerts{% if has_filters %} (all){% endif %}</div>
+      <div class="stat-value {% if low_stock_count %}text-red-400{% endif %}">{{ low_stock_count }}</div>
+    </div>
+  </div>
+
+  <div class="stat">
+    <div class="stat-icon tone-pink" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="{{ stat_icons.critical }}" stroke="currentColor" stroke-width="1.9"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="stat-content">
+      <div class="stat-label">Critical (below min){% if has_filters %} (all){% endif %}</div>
+      <div class="stat-value {% if below_min_count %}text-red-400{% endif %}">{{ below_min_count }}</div>
     </div>
   </div>
 </div>
 
-{# ── Category chips ─────────────────────────────────── #}
-<div class="mb-4 flex flex-wrap gap-2 items-center">
-  <a href="/admin/inventory{{ qs(category='') }}"
-     class="badge {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-    All
-  </a>
-  {% for c in all_categories %}
-    {% set bucket = by_category.get(c) %}
-    <a href="/admin/inventory{{ qs(category=c) }}"
-       class="badge {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
-      {{ category_labels.get(c, c) }}
-      {% if bucket %}<span class="opacity-70">· {{ bucket.count }}</span>{% endif %}
-    </a>
-  {% endfor %}
-  <a href="/admin/inventory{{ qs(low_stock='true') }}"
-     class="badge {% if low_stock_filter %}badge-danger{% else %}badge-neutral{% endif %}">
-    ⚠ Low stock only
-  </a>
+{# ── Chips + per-page selector ──────────────────────── #}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <div class="-mx-1 px-1 overflow-x-auto md:overflow-visible min-w-0 flex-1">
+    <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
+      <a href="/admin/inventory{{ qs(category='') }}"
+         class="badge whitespace-nowrap {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+        All
+      </a>
+      {% for c in all_categories %}
+        {% set bucket = by_category.get(c) %}
+        <a href="/admin/inventory{{ qs(category=c) }}"
+           class="badge whitespace-nowrap {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
+          {{ category_labels.get(c, c) }}
+          {% if bucket %}<span class="opacity-70">· {{ bucket.count }}</span>{% endif %}
+        </a>
+      {% endfor %}
+      <a href="/admin/inventory{{ qs(low_stock='true' if not low_stock_filter else '', category='' if low_stock_filter else category_filter) }}"
+         class="badge whitespace-nowrap {% if low_stock_filter %}badge-danger{% else %}badge-neutral{% endif %}">
+        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Low stock only
+      </a>
+    </div>
+  </div>
+
+  <div class="per-page-form shrink-0" data-paginate-control>
+    <label for="per_page_overview">Show</label>
+    <select id="per_page_overview" data-paginate-select>
+      <option value="25">25</option>
+      <option value="50" selected>50</option>
+      <option value="100">100</option>
+      <option value="all">All</option>
+    </select>
+  </div>
 </div>
 
-{# ── Filter form ────────────────────────────────────── #}
-<form method="get" class="panel mb-4">
+{# ── Filter form ────────────────────────────────── #}
+<form method="get" action="/admin/inventory" class="panel mb-4">
   {% if category_filter %}<input type="hidden" name="category" value="{{ category_filter }}" />{% endif %}
   {% if low_stock_filter %}<input type="hidden" name="low_stock" value="true" />{% endif %}
 
@@ -91,72 +161,296 @@
 </form>
 
 {% if items %}
-<div class="table-wrap">
-  <table class="table">
-    <thead>
-      <tr>
-        <th class="w-12 text-right">#</th>
-        <th>Code</th>
-        <th>Name</th>
-        <th>Category</th>
-        <th class="text-right">Stock</th>
-        <th class="text-right">Cost / unit</th>
-        <th class="text-right">Value</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in items %}
-      {% set m = r.material %}
-      {% set stock_status_class = 'text-noctra-danger font-medium' if r.below_min
-                                 else ('text-noctra-warning' if r.below_reorder
-                                 else '') %}
-      <tr class="{% if r.below_min %}bg-red-500/5{% elif r.below_reorder %}bg-amber-500/5{% endif %}">
-        <!--td class="text-right text-xs text-neutral-500 tabular-nums">{{ loop.index }}</td-->
-        <td class="mono text-xs">{{ m.code }}</td>
-        <td>
-          <div class="font-medium">{{ m.name }}</div>
-          {% if m.brand %}<div class="text-xs text-neutral-500">{{ m.brand }}</div>{% endif %}
-          {% if m.location %}<div class="text-xs text-neutral-600">{{ m.location }}</div>{% endif %}
-        </td>
-        <td>
-          <span class="badge {{ category_tone.get(m.category, 'badge-neutral') }}">
-            {{ category_labels.get(m.category, m.category) }}
-          </span>
-        </td>
-        <td class="text-right font-mono text-sm {{ stock_status_class }}">
-          {{ '%.2f'|format(r.current_stock) }}
-          <span class="text-xs text-neutral-500">{{ m.stock_unit }}</span>
-          {% if r.below_min %}
-            <div class="text-[10px] text-noctra-danger">below min ({{ '%.2f'|format(m.min_stock) }})</div>
-          {% elif r.below_reorder %}
-            <div class="text-[10px] text-noctra-warning">below reorder ({{ '%.2f'|format(m.reorder_point) }})</div>
-          {% endif %}
-        </td>
-        <td class="text-right font-mono text-xs">{{ r.cost_per_stock_unit | rupiah }}</td>
-        <td class="text-right font-mono text-sm">{{ r.stock_value | rupiah }}</td>
-        <td class="text-right">
-          <a href="/admin/materials/{{ m.id }}" class="btn btn-ghost btn-sm">View</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    <tfoot>
-      <tr style="border-top: 2px solid var(--noctra-border);">
-        <td colspan="6" class="text-right font-semibold">Total value shown</td>
-        <td class="text-right font-mono font-semibold">{{ total_value | rupiah }}</td>
-        <td></td>
-      </tr>
-    </tfoot>
-  </table>
+
+{# ── Desktop table ──────────────────────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table" id="inventory-table" data-paginate-table>
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Category</th>
+          <th class="text-right">Stock</th>
+          <th class="text-right">Cost / unit</th>
+          <th class="text-right">Value</th>
+          <th class="text-right"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in items %}
+        {% set m = r.material %}
+        {% set stock_status_class = 'text-red-400 font-medium' if r.below_min
+                                   else ('text-amber-400' if r.below_reorder else '') %}
+        {% set pct = 100 if (m.reorder_point or 0) <= 0
+                     else ((r.current_stock / m.reorder_point * 100) | round | int) %}
+        {% set pct = 100 if pct > 100 else (0 if pct < 0 else pct) %}
+        <tr class="{% if r.below_min %}bg-red-500/[0.04]{% elif r.below_reorder %}bg-amber-500/[0.04]{% endif %}"
+            data-row>
+          <td class="mono text-xs whitespace-nowrap">{{ m.code }}</td>
+          <td>
+            <div class="font-medium">{{ m.name }}</div>
+            {% if m.brand %}<div class="text-xs text-noctra-dim">{{ m.brand }}</div>{% endif %}
+            {% if m.location %}<div class="text-xs text-noctra-faint">{{ m.location }}</div>{% endif %}
+          </td>
+          <td>
+            <span class="badge {{ category_tone.get(m.category, 'badge-neutral') }} whitespace-nowrap">
+              {{ category_labels.get(m.category, m.category) }}
+            </span>
+          </td>
+          <td class="text-right">
+            <div class="font-mono text-sm {{ stock_status_class }} whitespace-nowrap">
+              {{ r.current_stock | qty }}
+              <span class="text-xs text-noctra-dim">{{ m.stock_unit }}</span>
+            </div>
+            <div class="mt-1.5 ml-auto w-24 h-1 rounded-full bg-noctra-surface3 overflow-hidden">
+              <div class="h-full rounded-full
+                {% if r.below_min %}bg-red-500
+                {% elif r.below_reorder %}bg-amber-500
+                {% else %}bg-emerald-500{% endif %}"
+                style="width: {{ pct }}%"></div>
+            </div>
+            {% if r.below_min %}
+              <div class="text-[10px] text-red-400 mt-0.5">min {{ m.min_stock | qty }}</div>
+            {% elif r.below_reorder %}
+              <div class="text-[10px] text-amber-400 mt-0.5">reorder {{ m.reorder_point | qty }}</div>
+            {% endif %}
+          </td>
+          <td class="text-right font-mono text-xs whitespace-nowrap">
+            {{ r.cost_per_stock_unit | rupiah(decimals=2) }}
+          </td>
+          <td class="text-right font-mono text-sm whitespace-nowrap">
+            {{ r.stock_value | rupiah }}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/materials/{{ m.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5" class="text-right font-semibold">
+            {% if has_filters %}Filtered value{% else %}Total value{% endif %}
+            <span class="text-xs text-noctra-dim font-normal ml-1">
+              ({{ filtered_count }} material{% if filtered_count != 1 %}s{% endif %})
+            </span>
+          </td>
+          <td class="text-right font-mono font-semibold">{{ filtered_value | rupiah }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="mt-3 flex flex-wrap items-center justify-between gap-3" data-paginate-footer>
+    <div class="text-xs text-noctra-dim" data-paginate-counter></div>
+    <nav class="flex items-center gap-1" data-paginate-nav aria-label="Pagination"></nav>
+  </div>
 </div>
+
+{# ── Mobile cards ──────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for r in items %}
+  {% set m = r.material %}
+  {% set pct = 100 if (m.reorder_point or 0) <= 0
+               else ((r.current_stock / m.reorder_point * 100) | round | int) %}
+  {% set pct = 100 if pct > 100 else (0 if pct < 0 else pct) %}
+  <a href="/admin/materials/{{ m.id }}"
+     class="block panel !p-4 active:scale-[0.995] transition
+            {% if r.below_min %}!border-l-2 !border-l-red-500
+            {% elif r.below_reorder %}!border-l-2 !border-l-amber-500{% endif %}">
+    <div class="flex items-start justify-between gap-2">
+      <div class="min-w-0">
+        <div class="font-medium truncate">{{ m.name }}</div>
+        <div class="mono text-xs text-noctra-dim mt-0.5">
+          {{ m.code }}{% if m.brand %} · {{ m.brand }}{% endif %}
+        </div>
+      </div>
+      <span class="badge {{ category_tone.get(m.category, 'badge-neutral') }} shrink-0">
+        {{ category_labels.get(m.category, m.category) }}
+      </span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 mt-3 text-sm">
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-noctra-dim">Stock</div>
+        <div class="font-mono whitespace-nowrap
+          {% if r.below_min %}text-red-400 font-medium
+          {% elif r.below_reorder %}text-amber-400
+          {% else %}text-noctra-text{% endif %}">
+          {{ r.current_stock | qty }}
+          <span class="text-xs text-noctra-dim">{{ m.stock_unit }}</span>
+        </div>
+        <div class="mt-1 w-full h-1 rounded-full bg-noctra-surface3 overflow-hidden">
+          <div class="h-full rounded-full
+            {% if r.below_min %}bg-red-500
+            {% elif r.below_reorder %}bg-amber-500
+            {% else %}bg-emerald-500{% endif %}"
+            style="width: {{ pct }}%"></div>
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="text-[10px] uppercase tracking-wider text-noctra-dim">Value</div>
+        <div class="font-mono">{{ r.stock_value | rupiah }}</div>
+      </div>
+    </div>
+
+    {% if r.below_min or r.below_reorder %}
+    <div class="mt-2 text-xs {% if r.below_min %}text-red-400{% else %}text-amber-400{% endif %}">
+      {% if r.below_min %}
+        ⚠ Below minimum ({{ m.min_stock | qty }})
+      {% else %}
+        Below reorder ({{ m.reorder_point | qty }})
+      {% endif %}
+    </div>
+    {% endif %}
+  </a>
+  {% endfor %}
+
+  <div class="panel !p-3 text-right text-sm">
+    <span class="text-noctra-dim">{% if has_filters %}Filtered value{% else %}Total value{% endif %}:</span>
+    <span class="font-mono font-semibold ml-2">{{ filtered_value | rupiah }}</span>
+  </div>
+</div>
+
 {% else %}
-{{ empty_state(
-  'No materials match your filters',
-  'Try adjusting filters or add a new material.',
-  '/admin/materials/new',
-  'New Material',
-  'plus'
-) }}
+
+{% if has_filters %}
+  {{ empty_state(
+    title='No materials match your filters',
+    message='Try adjusting or clearing filters to see all tracked materials.',
+    action_url='/admin/inventory',
+    action_label='Clear filters',
+    icon='search'
+  ) }}
+{% else %}
+  {{ empty_state(
+    title='No materials tracked yet',
+    message='Add your first material to start tracking stock levels and value.',
+    action_url='/admin/materials/new',
+    action_label='New Material',
+    icon='plus'
+  ) }}
 {% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const table = document.getElementById('inventory-table');
+  if (!table) return;
+
+  const tbody = table.querySelector('tbody');
+  const allRows = Array.from(tbody.querySelectorAll('tr[data-row]'));
+  if (allRows.length === 0) return;
+
+  const select   = document.getElementById('per_page_overview');
+  const footer   = document.querySelector('[data-paginate-footer]');
+  const counter  = footer?.querySelector('[data-paginate-counter]');
+  const nav      = footer?.querySelector('[data-paginate-nav]');
+  if (!select || !nav || !counter) return;
+
+  const url = new URL(window.location.href);
+  const storedPer = url.searchParams.get('per_page') || '50';
+  if (['25', '50', '100', 'all'].includes(storedPer)) {
+    select.value = storedPer;
+  }
+
+  let perPage = select.value === 'all' ? allRows.length : parseInt(select.value, 10) || 50;
+  let current = 1;
+
+  function totalPages() {
+    return perPage >= allRows.length ? 1 : Math.ceil(allRows.length / perPage);
+  }
+
+  function svgChevron(dir) {
+    return dir === 'prev'
+      ? '<svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only">Previous page</span>'
+      : '<svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only">Next page</span>';
+  }
+
+  function makeBtn(label, opts = {}) {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'pg-btn'
+      + (opts.active ? ' pg-btn-active' : '')
+      + (opts.disabled ? ' pg-btn-disabled' : '');
+    el.innerHTML = label;
+    if (opts.disabled) el.setAttribute('aria-disabled', 'true');
+    if (opts.active) el.setAttribute('aria-current', 'page');
+    if (opts.onClick) el.addEventListener('click', opts.onClick);
+    return el;
+  }
+
+  function renderNav(pages) {
+    nav.innerHTML = '';
+    if (pages <= 1) return;
+
+    nav.appendChild(makeBtn(svgChevron('prev'), {
+      disabled: current === 1,
+      onClick: () => { current--; render(); }
+    }));
+
+    const visible = [];
+    for (let p = 1; p <= pages; p++) {
+      if (p === 1 || p === pages || (p >= current - 1 && p <= current + 1)) {
+        visible.push(p);
+      }
+    }
+    let prevP = 0;
+    for (const p of visible) {
+      if (p - prevP > 1) {
+        const ell = document.createElement('span');
+        ell.className = 'pg-ellipsis';
+        ell.textContent = '…';
+        nav.appendChild(ell);
+      }
+      nav.appendChild(makeBtn(String(p), {
+        active: p === current,
+        onClick: () => { current = p; render(); }
+      }));
+      prevP = p;
+    }
+
+    nav.appendChild(makeBtn(svgChevron('next'), {
+      disabled: current === pages,
+      onClick: () => { current++; render(); }
+    }));
+  }
+
+  function render() {
+    const pages = totalPages();
+    if (current > pages) current = pages;
+    if (current < 1) current = 1;
+
+    const start = (current - 1) * perPage;
+    const end = Math.min(start + perPage, allRows.length);
+
+    allRows.forEach((row, i) => {
+      row.style.display = (i >= start && i < end) ? '' : 'none';
+    });
+
+    if (allRows.length <= perPage) {
+      counter.innerHTML = `Showing all <strong class="text-noctra-text">${allRows.length}</strong> material${allRows.length !== 1 ? 's' : ''}`;
+    } else {
+      counter.innerHTML = `Showing <strong class="text-noctra-text">${start + 1}–${end}</strong> of <strong class="text-noctra-text">${allRows.length}</strong>`;
+    }
+
+    renderNav(pages);
+  }
+
+  select.addEventListener('change', () => {
+    perPage = select.value === 'all' ? allRows.length : parseInt(select.value, 10);
+    current = 1;
+    url.searchParams.set('per_page', select.value);
+    window.history.replaceState({}, '', url.toString());
+    render();
+  });
+
+  render();
+})();
+</script>
 {% endblock %}

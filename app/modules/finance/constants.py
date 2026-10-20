@@ -2,7 +2,31 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
+from zoneinfo import ZoneInfo
+
+from app.core.config import settings
+
+
+# ════════════════════════════════════════════════════════════════
+# DATE HELPERS
+# ════════════════════════════════════════════════════════════════
+
+def today_local() -> date:
+    """Today's date in the app's configured timezone (not UTC)."""
+    return datetime.now(ZoneInfo(settings.APP_TIMEZONE)).date()
+
+
+def day_range_bounds(from_date: date, to_date: date) -> tuple[datetime, datetime]:
+    """
+    Half-open [start_of_first, start_of_next_after_last) in UTC.
+    Index-friendly alternative to `func.date(col) BETWEEN ...`.
+    """
+    return (
+        datetime.combine(from_date, time.min, tzinfo=UTC),
+        datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=UTC),
+    )
 
 
 # ════════════════════════════════════════════════════════════════

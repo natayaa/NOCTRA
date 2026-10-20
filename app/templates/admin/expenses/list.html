@@ -1,47 +1,186 @@
 {% extends "admin/base.html" %}
-{% include "components/pagination.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% set has_filters = q or category_filter %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
 
 {% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">Expenses</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
-  <div class="page-actions"><a href="/admin/expenses/new" class="btn btn-primary btn-sm">New Expense</a></div>
+  <div>
+    <h1 class="page-title">Expenses</h1>
+    <p class="page-subtitle">
+      {{ page_meta.total }} total
+      {% if has_filters %}
+        · <a class="text-accent" href="/admin/expenses">Clear filters</a>
+      {% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/expenses/new" class="btn btn-primary btn-sm">New Expense</a>
+  </div>
 </div>
 
-<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
-  <div class="form-row !mb-0 flex-1 min-w-[240px]">
-    <label class="form-label" for="q">Search</label>
-    <input class="input" id="q" name="q" value="{{ q }}" data-search-input />
+{# ── Category chips ────────────────────────────── #}
+<div class="mb-4 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
+    <a href="/admin/expenses{{ qs(category='') }}"
+       class="badge whitespace-nowrap {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+      All
+    </a>
+    {% for c in categories %}
+      <a href="/admin/expenses{{ qs(category=c) }}"
+         class="badge whitespace-nowrap {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
+        {{ category_labels.get(c, c) }}
+      </a>
+    {% endfor %}
   </div>
-  <div class="form-row !mb-0 min-w-[160px]">
-    <label class="form-label" for="category">Category</label>
-    <select class="select" id="category" name="category">
-      <option value="">Any</option>
-      {% for c in categories %}<option value="{{ c }}" {% if category_filter == c %}selected{% endif %}>{{ category_labels.get(c, c) }}</option>{% endfor %}
-    </select>
+</div>
+
+{# ── Filter form ──────────────────────────────────── #}
+<form method="get" action="/admin/expenses" class="panel mb-4">
+  <input type="hidden" name="per_page" value="{{ current_per_page }}" />
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+    <div class="form-row !mb-0 md:col-span-2">
+      <label class="form-label" for="q">Search</label>
+      <input class="input" id="q" name="q" value="{{ q }}"
+             placeholder="Description, code, reference…" data-search-input />
+    </div>
+
+    <div class="form-row !mb-0">
+      <label class="form-label" for="category_filter">Category</label>
+      <select class="select" id="category_filter" name="category">
+        <option value="">Any category</option>
+        {% for c in categories %}
+          <option value="{{ c }}" {% if category_filter == c %}selected{% endif %}>
+            {{ category_labels.get(c, c) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="flex gap-2 md:col-span-3">
+      <button class="btn btn-secondary">Filter</button>
+      <a href="/admin/expenses" class="btn btn-ghost">Reset</a>
+    </div>
   </div>
-  <button class="btn btn-secondary">Filter</button>
 </form>
 
+{# ── Toolbar ──────────────────────────────────────── #}
 {% if expenses %}
-<div class="table-wrap">
-  <table class="table">
-    <thead><tr><th>Code</th><th>Date</th><th>Category</th><th>Description</th><th>Reference</th><th class="text-right">Amount</th><th></th></tr></thead>
-    <tbody>
-      {% for e in expenses %}
-      <tr>
-        <td class="mono text-xs">{{ e.code }}</td>
-        <td class="text-xs">{{ e.expense_date.strftime('%d %b %Y') }}</td>
-        <td><span class="badge badge-neutral">{{ category_labels.get(e.category, e.category) }}</span></td>
-        <td class="text-sm">{{ e.description }}</td>
-        <td class="text-xs text-neutral-500">{{ e.reference_number or '—' }}</td>
-        <td class="text-right font-mono text-sm text-noctra-danger">{{ e.amount | rupiah }}</td>
-        <td class="text-right"><a href="/admin/expenses/{{ e.id }}/edit" class="btn btn-ghost btn-sm">Edit</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+    {% if has_filters %}· <span class="text-noctra-muted">filtered</span>{% endif %}
+  </div>
+
+  <form method="get" class="per-page-form">
+    {% for k, v in request.query_params.items() %}
+      {% if k not in ('per_page', 'page') and v %}
+        <input type="hidden" name="{{ k }}" value="{{ v }}" />
+      {% endif %}
+    {% endfor %}
+    <label for="per_page_exp">Show</label>
+    <select id="per_page_exp" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
 </div>
+{% endif %}
+
+{% if expenses %}
+
+{# ── Desktop table ──────────────────────────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Date</th>
+          <th>Category</th>
+          <th>Description</th>
+          <th>Reference</th>
+          <th class="text-right">Amount</th>
+          <th class="text-right"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in expenses %}
+        <tr>
+          <td class="mono text-xs whitespace-nowrap">{{ e.code }}</td>
+          <td class="text-xs whitespace-nowrap">{{ e.expense_date | date_id }}</td>
+          <td>
+            <span class="badge badge-neutral whitespace-nowrap">
+              {{ category_labels.get(e.category, e.category) }}
+            </span>
+          </td>
+          <td class="text-sm">
+            <div class="truncate max-w-[300px]" title="{{ e.description }}">
+              {{ e.description }}
+            </div>
+          </td>
+          <td class="text-xs text-noctra-dim whitespace-nowrap">
+            {{ e.reference_number or '—' }}
+          </td>
+          <td class="text-right font-mono text-sm whitespace-nowrap">
+            {{ e.amount | rupiah }}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/expenses/{{ e.id }}/edit" class="btn btn-ghost btn-sm">Edit</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Mobile cards ───────────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for e in expenses %}
+  <a href="/admin/expenses/{{ e.id }}/edit"
+     class="block panel !p-4 active:scale-[0.995] transition">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <span class="mono text-xs text-noctra-dim">{{ e.code }}</span>
+      <span class="badge badge-neutral shrink-0">{{ category_labels.get(e.category, e.category) }}</span>
+    </div>
+    <div class="font-medium text-sm">{{ e.description | truncate(80) }}</div>
+    <div class="flex items-baseline justify-between mt-2">
+      <div class="text-xs text-noctra-dim">{{ e.expense_date | date_id }}</div>
+      <div class="font-mono text-sm">{{ e.amount | rupiah }}</div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+{% include "components/pagination.html" %}
+
 {% else %}
-<div class="panel text-center py-16"><p class="text-neutral-400">No expenses recorded yet.</p></div>
+
+{% if has_filters %}
+  {{ empty_state(
+    title='No expenses match your filters',
+    message='Try adjusting filters or clear them to see all expenses.',
+    action_url='/admin/expenses',
+    action_label='Clear filters',
+    icon='search'
+  ) }}
+{% else %}
+  {{ empty_state(
+    title='No expenses recorded yet',
+    message='Record your first expense to track operational spend.',
+    action_url='/admin/expenses/new',
+    action_label='New Expense',
+    icon='plus'
+  ) }}
+{% endif %}
+
 {% endif %}
 {% endblock %}

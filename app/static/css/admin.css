@@ -1,5 +1,6 @@
 /* ============================================================
    NOCTRA Admin Shell — Navy Dashboard
+   Loaded after main.css. Scoped to .admin-body / .admin-shell.
    ============================================================ */
 
 .admin-shell {
@@ -318,6 +319,33 @@
   margin-bottom: 24px;
 }
 
+/* ── Two-column layout helper ─────────────────────── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+@media (min-width: 1024px) {
+  .dash-grid { grid-template-columns: 1.6fr 1fr; }
+}
+
+/* ── Filter bar (index pages) ─────────────────────── */
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.filter-bar .input,
+.filter-bar .select {
+  width: auto;
+  min-width: 180px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.filter-bar .spacer { flex: 1; }
+
 /* ── Mobile scrim ─────────────────────────────────── */
 .sidebar-scrim {
   display: none;
@@ -329,6 +357,17 @@
   -webkit-backdrop-filter: blur(4px);
 }
 .sidebar-scrim.open { display: block; }
+
+/* Body scroll lock saat drawer terbuka */
+body.sidebar-open { overflow: hidden; }
+
+/* ── Sidebar toggle visibility ────────────────────── */
+@media (min-width: 901px) {
+  .admin-header [data-sidebar-toggle] { display: none; }
+}
+@media (max-width: 900px) {
+  .admin-header [data-sidebar-toggle] { display: inline-flex; }
+}
 
 /* ── Responsive ───────────────────────────────────── */
 @media (max-width: 900px) {

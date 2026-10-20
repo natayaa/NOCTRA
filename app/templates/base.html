@@ -3,9 +3,9 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="color-scheme" content="dark" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#070b16" />
   <meta name="format-detection" content="telephone=no, address=no, email=no" />
 
   <meta name="csrf-token" content="{{ csrf_token or '' }}" />
@@ -16,7 +16,7 @@
 
   <meta name="description"
     content="{% block meta_description %}NOCTRA Autoworks — precision motorcycle refinishing, restoration, and custom paint.{% endblock %}" />
-  <meta name="robots" content="{% block meta_robots %}index, follow{% endblock %}" />
+  <meta name="robots" content="{% block meta_robots %}noindex, nofollow{% endblock %}" />
 
   <meta property="og:type" content="{% block og_type %}website{% endblock %}" />
   <meta property="og:site_name" content="{{ app_name }}" />
@@ -35,10 +35,15 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+
+  <link rel="stylesheet" href="/static/css/main.css" />
+  {% block shell_css %}{% endblock %}
+  {% block extra_css %}{% endblock %}
 
   <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin />
-  <script src="https://cdn.tailwindcss.com/3.4.5?plugins=forms,typography" defer></script>
+  <script src="https://cdn.tailwindcss.com/3.4.5"></script>
   <script>
     window.tailwind = window.tailwind || {};
     window.tailwind.config = {
@@ -46,26 +51,36 @@
       theme: {
         extend: {
           colors: {
+            bg: '#070b16',
+            surface: { DEFAULT: '#0d1220', 2: '#111827', 3: '#1a2030' },
+            accent: { DEFAULT: '#0ea5e9', bright: '#38bdf8', deep: '#0284c7' },
+
+            /* ── Dipakai oleh dashboard.html & login.html ── */
             noctra: {
-              bg: '#0a0a0a',
-              surface: '#141414',
-              surface2: '#1c1c1c',
-              border: '#262626',
-              muted: '#a3a3a3',
-              accent: '#f97316',
-              accent2: '#ea580c',
+              bg: '#070b16',
+              surface: '#0d1220',
+              surface2: '#111827',
+              surface3: '#1a2030',
+              border: 'rgba(148,163,184,0.08)',
+              accent: '#0ea5e9',
+              success: '#10b981',
+              warning: '#f59e0b',
+              danger: '#ef4444',
+              info: '#0ea5e9',
+              text: '#f1f5f9',
+              muted: '#94a3b8',
+              dim: '#64748b',
+              faint: '#475569',
             },
           },
           fontFamily: {
             sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
           },
         },
       },
     };
   </script>
-
-  <link rel="stylesheet" href="/static/css/main.css" />
-  {% block extra_css %}{% endblock %}
 
   <script defer src="https://unpkg.com/htmx.org@2.0.3"></script>
   <script defer src="/static/js/csrf.js"></script>
@@ -73,19 +88,27 @@
   <script defer src="/static/js/main.js"></script>
   <script defer src="/static/js/confirm.js"></script>
   <script defer src="/static/js/htmx-config.js"></script>
-  <script src="https://cdn.tailwindcss.com/3.4.5?plugins=forms,typography" defer></script>
 
   {% block extra_head %}{% endblock %}
 </head>
 
-<body class="bg-noctra-bg text-neutral-100 antialiased min-h-screen">
+<body class="{% block body_class %}{% endblock %}">
+
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100]
+           focus:px-4 focus:py-2 focus:rounded-lg focus:bg-accent focus:text-white focus:shadow-lg">
+    Skip to content
+  </a>
+
   <noscript>
-    <div style="padding:16px;background:#1c1c1c;color:#f5f5f5;border-bottom:1px solid #262626;">
-      NOCTRA requires JavaScript to be enabled. Please turn it on and reload.
+    <div style="padding:16px;background:#1a2030;color:#f1f5f9;border-bottom:1px solid rgba(148,163,184,.16)">
+      NOCTRA memerlukan JavaScript. Tolong aktifkan dan muat ulang.
     </div>
   </noscript>
 
+  {% include 'components/flash.html' %}
+
   {% block body %}{% endblock %}
+
   {% block extra_js %}{% endblock %}
 </body>
 

@@ -1,16 +1,16 @@
 /* ============================================================
    NOCTRA — Dashboard charts
-   Reads data from #dashboard-data (JSON embedded by Jinja)
-   and renders Chart.js line + bar charts with the dark theme.
    ============================================================ */
 (function () {
   'use strict';
 
   const COLORS = {
-    accent:   '#0ea5e9',   // cyan
-    success:  '#10b981',   // green
+    accent:   '#0ea5e9',
+    accentBg: 'rgba(14,165,233,0.12)',
+    success:  '#10b981',
+    successBg: 'rgba(16,185,129,0.12)',
     danger:   '#ef4444',
-    border:   'rgba(148,163,184,0.08)',
+    border:   'rgba(148,163,184,0.06)',
     surface2: '#111827',
     muted:    '#64748b',
     text:     '#f1f5f9',
@@ -19,18 +19,13 @@
   function readData() {
     const el = document.getElementById('dashboard-data');
     if (!el) return null;
-    try {
-      return JSON.parse(el.textContent);
-    } catch (err) {
-      console.error('dashboard-data parse failed', err);
-      return null;
-    }
+    try { return JSON.parse(el.textContent); }
+    catch (err) { console.error('dashboard-data parse failed', err); return null; }
   }
 
   function formatRupiah(n) {
     if (n == null) return 'Rp 0';
-    const s = Math.round(Number(n)).toString();
-    return 'Rp ' + s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return 'Rp ' + Math.round(Number(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
   function formatCompact(n) {
@@ -42,47 +37,63 @@
   }
 
   function shortDate(iso) {
-    // "2026-10-01" → "01 Oct"
     const d = new Date(iso + 'T00:00:00');
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return String(d.getDate()).padStart(2, '0') + ' ' + months[d.getMonth()]; ccccccc
+    return String(d.getDate()).padStart(2, '0') + ' ' + months[d.getMonth()];
+    /* ← baris "ccccccc" penyebab SyntaxError sudah dihapus */
+  }
+
+  function linearGradient(ctx, hexRgb) {
+    const g = ctx.createLinearGradient(0, 0, 0, 280);
+    g.addColorStop(0, hexRgb.replace('RGBA', 'rgba'));
+    g.addColorStop(1, hexRgb.replace(/,[\d.]+\)$/, ',0)'));
+    return g;
   }
 
   function initRevenueChart(data) {
     const canvas = document.getElementById('revenueChart');
     if (!canvas) return;
+    const ctx = canvas.getContext('2d');
 
-    const labels = (data.periods || []).map(shortDate);
-    const revenue = data.revenue || [];
-    const gp = data.gross_profit || [];
+    const fillAccent = ctx.createLinearGradient(0, 0, 0, 280);
+    fillAccent.addColorStop(0, 'rgba(14,165,233,0.18)');
+    fillAccent.addColorStop(1, 'rgba(14,165,233,0)');
 
-    new Chart(canvas.getContext('2d'), {
+    const fillSuccess = ctx.createLinearGradient(0, 0, 0, 280);
+    fillSuccess.addColorStop(0, 'rgba(16,185,129,0.15)');
+    fillSuccess.addColorStop(1, 'rgba(16,185,129,0)');
+
+    new Chart(ctx, {
       type: 'line',
       data: {
-        labels,
+        labels: (data.periods || []).map(shortDate),
         datasets: [
           {
             label: 'Revenue',
-            data: revenue,
+            data: data.revenue || [],
             borderColor: COLORS.accent,
-            backgroundColor: 'rgba(249,115,22,0.08)',
+            backgroundColor: fillAccent,
             borderWidth: 2,
             tension: 0.35,
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            pointBackgroundColor: COLORS.accent,
+            pointRadius: 0,
+            pointHoverRadius: 6,
+            pointHoverBackgroundColor: COLORS.accent,
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2,
             fill: true,
           },
           {
             label: 'Gross profit',
-            data: gp,
+            data: data.gross_profit || [],
             borderColor: COLORS.success,
-            backgroundColor: 'rgba(34,197,94,0.08)',
+            backgroundColor: fillSuccess,
             borderWidth: 2,
             tension: 0.35,
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            pointBackgroundColor: COLORS.success,
+            pointRadius: 0,
+            pointHoverRadius: 6,
+            pointHoverBackgroundColor: COLORS.success,
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2,
             fill: true,
           },
         ],
@@ -95,27 +106,33 @@
           legend: { display: false },
           tooltip: {
             backgroundColor: COLORS.surface2,
-            borderColor: COLORS.border,
+            borderColor: 'rgba(148,163,184,0.16)',
             borderWidth: 1,
             titleColor: COLORS.text,
             bodyColor: COLORS.text,
             padding: 12,
+            cornerRadius: 8,
+            titleFont: { size: 12, weight: '600' },
+            bodyFont: { size: 12 },
             callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${formatRupiah(ctx.parsed.y)}`,
+              label: (c) => ` ${c.dataset.label}: ${formatRupiah(c.parsed.y)}`,
             },
           },
         },
         scales: {
           x: {
-            grid: { color: 'rgba(38,38,38,0.5)', drawBorder: false },
-            ticks: { color: COLORS.muted, font: { size: 11 } },
+            grid: { display: false },
+            border: { display: false },
+            ticks: { color: COLORS.muted, font: { size: 11 }, maxRotation: 0 },
           },
           y: {
-            grid: { color: 'rgba(38,38,38,0.5)', drawBorder: false },
+            grid: { color: COLORS.border },
+            border: { display: false },
             ticks: {
               color: COLORS.muted,
               font: { size: 11 },
               callback: (v) => formatCompact(v),
+              padding: 8,
             },
             beginAtZero: true,
           },
@@ -128,30 +145,26 @@
     const canvas = document.getElementById('cashFlowChart');
     if (!canvas) return;
 
-    const labels = (data.cash_periods || []).map(shortDate);
-    const inflow = data.cash_in || [];
-    const outflow = data.cash_out || [];
-
     new Chart(canvas.getContext('2d'), {
       type: 'bar',
       data: {
-        labels,
+        labels: (data.cash_periods || []).map(shortDate),
         datasets: [
           {
             label: 'In',
-            data: inflow,
-            backgroundColor: 'rgba(34,197,94,0.65)',
-            borderColor: COLORS.success,
-            borderWidth: 1,
-            borderRadius: 3,
+            data: data.cash_in || [],
+            backgroundColor: 'rgba(16,185,129,0.75)',
+            hoverBackgroundColor: COLORS.success,
+            borderRadius: 4,
+            borderSkipped: false,
           },
           {
             label: 'Out',
-            data: outflow,
-            backgroundColor: 'rgba(239,68,68,0.65)',
-            borderColor: COLORS.danger,
-            borderWidth: 1,
-            borderRadius: 3,
+            data: data.cash_out || [],
+            backgroundColor: 'rgba(239,68,68,0.75)',
+            hoverBackgroundColor: COLORS.danger,
+            borderRadius: 4,
+            borderSkipped: false,
           },
         ],
       },
@@ -161,39 +174,44 @@
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
-            display: true,
             position: 'bottom',
             labels: {
               color: COLORS.muted,
               font: { size: 11 },
-              boxWidth: 10,
-              boxHeight: 10,
-              padding: 12,
+              boxWidth: 8,
+              boxHeight: 8,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              padding: 14,
             },
           },
           tooltip: {
             backgroundColor: COLORS.surface2,
-            borderColor: COLORS.border,
+            borderColor: 'rgba(148,163,184,0.16)',
             borderWidth: 1,
             titleColor: COLORS.text,
             bodyColor: COLORS.text,
             padding: 12,
+            cornerRadius: 8,
             callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${formatRupiah(ctx.parsed.y)}`,
+              label: (c) => ` ${c.dataset.label}: ${formatRupiah(c.parsed.y)}`,
             },
           },
         },
         scales: {
           x: {
             grid: { display: false },
-            ticks: { color: COLORS.muted, font: { size: 11 } },
+            border: { display: false },
+            ticks: { color: COLORS.muted, font: { size: 11 }, maxRotation: 0 },
           },
           y: {
-            grid: { color: 'rgba(38,38,38,0.5)', drawBorder: false },
+            grid: { color: COLORS.border },
+            border: { display: false },
             ticks: {
               color: COLORS.muted,
               font: { size: 11 },
               callback: (v) => formatCompact(v),
+              padding: 8,
             },
             beginAtZero: true,
           },
@@ -203,14 +221,10 @@
   }
 
   function init() {
-    if (typeof Chart === 'undefined') {
-      console.warn('Chart.js not loaded — dashboard charts skipped');
-      return;
-    }
-
-    // Global Chart.js defaults for the dark theme
+    if (typeof Chart === 'undefined') return;
     Chart.defaults.color = COLORS.muted;
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.font.size = 12;
 
     const data = readData();
     if (!data) return;

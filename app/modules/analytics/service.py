@@ -13,17 +13,12 @@ Time-basis conventions:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
-from uuid import UUID
+from datetime import UTC, date, datetime, time, timedelta
 
-from sqlalchemy import Select, and_, func, select, case
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.analytics.constants import (
-    Interval,
-    pick_interval,
-)
+from app.modules.analytics.constants import pick_interval
 from app.modules.analytics.schemas import (
     ActivityEntry,
     CashFlowPoint,
@@ -40,11 +35,7 @@ from app.modules.analytics.schemas import (
 )
 from app.modules.audit.models import AuditLog
 from app.modules.customers.models import Customer
-from app.modules.finance.constants import (
-    EXPENSE_CATEGORY_LABELS,
-    InvoiceStatus,
-    PaymentDirection,
-)
+from app.modules.finance.constants import InvoiceStatus, PaymentDirection
 from app.modules.finance.models import Expense, Invoice, Payment
 from app.modules.inquiries.constants import (
     INQUIRY_STATUS_LABELS,
@@ -54,25 +45,39 @@ from app.modules.inquiries.constants import (
 )
 from app.modules.inquiries.models import Inquiry
 from app.modules.inventory.constants import (
-    MATERIAL_CATEGORY_LABELS,
+    INBOUND_TYPES,
     TransactionType,
 )
 from app.modules.inventory.models import (
     InventoryTransaction,
     Material,
-    PurchaseOrder,
 )
 from app.modules.projects.constants import (
-    PROJECT_STATUS_LABELS,
     TERMINAL_PROJECT_STATUSES,
-    CostCategory,
-    ProjectStatus,
 )
 from app.modules.projects.models import Project, ProjectItem
 
 
+# ── Date-range helpers ────────────────────────────────────────
+# All `*.created_at` columns are timestamptz. Wrapping them in
+# `func.date(...)` defeats the index — instead we compare against
+# a half-open datetime range [start_of_day, start_of_next_day).
+# Both boundaries are inclusive/exclusive correctly, even with
+# rows that fall exactly at midnight.
+
+def _day_start(d: date) -> datetime:
+    return datetime.combine(d, time.min, tzinfo=UTC)
+
+
+def _day_end_exclusive(d: date) -> datetime:
+    return datetime.combine(d + timedelta(days=1), time.min, tzinfo=UTC)
+
+
+# ── Formatting ────────────────────────────────────────────────
+
 def _fmt_rupiah(v: float) -> str:
-    n = int(round(v))
+    # `round()` is banker's; business users expect half-up.
+    n = int(v + 0.5) if v >= 0 else -int(-v + 0.5)
     return "Rp " + f"{n:,}".replace(",", ".")
 
 
@@ -91,11 +96,12 @@ def _delta_direction(delta: float) -> str:
 
 
 def _safe_pct_delta(current: float, previous: float) -> float | None:
-    """% change vs previous, or None if no previous baseline."""
     if previous == 0:
         return None
     return ((current - previous) / abs(previous)) * 100.0
 
+
+# ── Service ───────────────────────────────────────────────────
 
 class AnalyticsService:
     def __init__(self, db: AsyncSession) -> None:
@@ -121,11 +127,12 @@ class AnalyticsService:
             return float((await self.db.execute(stmt)).scalar_one() or 0)
 
         async def _cogs(f: date, t: date) -> float:
+            # Index-friendly range instead of func.date(...)
             stmt = (
                 select(func.coalesce(func.sum(ProjectItem.actual_cost), 0))
                 .where(ProjectItem.actual_cost > 0)
-                .where(func.date(ProjectItem.created_at) >= f)
-                .where(func.date(ProjectItem.created_at) <= t)
+                .where(ProjectItem.created_at >= _day_start(f))
+                .where(ProjectItem.created_at < _day_end_exclusive(t))
             )
             return float((await self.db.execute(stmt)).scalar_one() or 0)
 
@@ -157,63 +164,70 @@ class AnalyticsService:
             return int((await self.db.execute(stmt)).scalar_one() or 0)
 
         async def _unpaid_invoices() -> tuple[int, float]:
-            stmt = select(Invoice).where(
-                Invoice.status.not_in([
+            # Single query — invoice total minus sum of IN payments, per invoice.
+            paid_subq = (
+                select(
+                    Payment.reference_id.label("invoice_id"),
+                    func.coalesce(func.sum(Payment.amount), 0).label("paid"),
+                )
+                .where(Payment.reference_type == "INVOICE")
+                .where(Payment.direction == PaymentDirection.IN.value)
+                .group_by(Payment.reference_id)
+                .subquery()
+            )
+
+            outstanding = func.greatest(
+                Invoice.total - func.coalesce(paid_subq.c.paid, 0),
+                0,
+            )
+
+            stmt = (
+                select(
+                    func.count(Invoice.id).label("count"),
+                    func.coalesce(func.sum(outstanding), 0).label("outstanding"),
+                )
+                .outerjoin(paid_subq, paid_subq.c.invoice_id == Invoice.id)
+                .where(Invoice.status.not_in([
                     InvoiceStatus.PAID.value,
                     InvoiceStatus.CANCELLED.value,
-                ])
+                ]))
             )
-            invoices = (await self.db.execute(stmt)).scalars().all()
-            total = 0.0
-            for inv in invoices:
-                paid_stmt = (
-                    select(func.coalesce(func.sum(Payment.amount), 0))
-                    .where(Payment.reference_type == "INVOICE")
-                    .where(Payment.reference_id == inv.id)
-                    .where(Payment.direction == PaymentDirection.IN.value)
-                )
-                paid = float((await self.db.execute(paid_stmt)).scalar_one() or 0)
-                total += max(0, float(inv.total) - paid)
-            return len(invoices), total
+            row = (await self.db.execute(stmt)).one()
+            return int(row.count or 0), float(row.outstanding or 0)
 
         async def _low_stock() -> int:
-            """Materials whose current stock is below reorder point."""
-            from app.modules.inventory.constants import (
-                INBOUND_TYPES,
+            """Materials whose current stock is at/below reorder point."""
+            inbound_case = case(
+                (
+                    InventoryTransaction.transaction_type.in_(INBOUND_TYPES),
+                    InventoryTransaction.quantity,
+                ),
+                else_=-InventoryTransaction.quantity,
             )
-            # Aggregate per material
-            stock_stmt = (
+            stock_subq = (
                 select(
-                    InventoryTransaction.material_id,
-                    func.coalesce(func.sum(
-                        case(
-                            (
-                                InventoryTransaction.transaction_type.in_(
-                                    ["OPENING", "PURCHASE", "ADJUSTMENT_IN", "TRANSFER_IN"]
-                                ),
-                                InventoryTransaction.quantity,
-                            ),
-                            else_=-InventoryTransaction.quantity,
-                        )
-                    ), 0).label("stock"),
+                    InventoryTransaction.material_id.label("material_id"),
+                    func.coalesce(func.sum(inbound_case), 0).label("stock"),
                 )
                 .group_by(InventoryTransaction.material_id)
+                .subquery()
             )
-            rows = (await self.db.execute(stock_stmt)).all()
-            stock_map = {r.material_id: float(r.stock) for r in rows}
 
-            mat_stmt = select(Material).where(Material.is_active.is_(True))
-            materials = (await self.db.execute(mat_stmt)).scalars().all()
-            count = 0
-            for m in materials:
-                if float(m.reorder_point) <= 0:
-                    continue
-                stock = stock_map.get(m.id, 0.0)
-                if stock <= float(m.reorder_point):
-                    count += 1
-            return count
+            stmt = (
+                select(func.count(Material.id))
+                .outerjoin(
+                    stock_subq, stock_subq.c.material_id == Material.id
+                )
+                .where(Material.is_active.is_(True))
+                .where(Material.reorder_point > 0)
+                .where(
+                    func.coalesce(stock_subq.c.stock, 0)
+                    <= Material.reorder_point
+                )
+            )
+            return int((await self.db.execute(stmt)).scalar_one() or 0)
 
-        # ── Compute everything ──────────────────────────────
+        # ── Compute ─────────────────────────────────────────
         rev_cur = await _revenue(from_date, to_date)
         rev_prev = await _revenue(prev_from, prev_to)
         cogs_cur = await _cogs(from_date, to_date)
@@ -309,7 +323,13 @@ class AnalyticsService:
         self, from_date: date, to_date: date, interval: str | None = None
     ) -> SeriesSet:
         interval = interval or pick_interval(from_date, to_date)
-        bucket = func.date_trunc(interval, Payment.payment_date).label("period")
+
+        # `payment_date` is a DATE column → date_trunc('day', ...) is a no-op
+        # cast; for daily buckets just select the column directly.
+        if interval == "day":
+            bucket = Payment.payment_date.label("period")
+        else:
+            bucket = func.date_trunc(interval, Payment.payment_date).label("period")
 
         stmt = (
             select(bucket, func.coalesce(func.sum(Payment.amount), 0).label("total"))
@@ -321,8 +341,10 @@ class AnalyticsService:
         )
         rows = (await self.db.execute(stmt)).all()
         points = [
-            SeriesPoint(period=r.period.date() if hasattr(r.period, "date") else r.period,
-                        value=float(r.total or 0))
+            SeriesPoint(
+                period=r.period.date() if hasattr(r.period, "date") else r.period,
+                value=float(r.total or 0),
+            )
             for r in rows
         ]
         return SeriesSet(label="Revenue", interval=interval, points=points)
@@ -331,7 +353,11 @@ class AnalyticsService:
         self, from_date: date, to_date: date, interval: str | None = None
     ) -> SeriesSet:
         interval = interval or pick_interval(from_date, to_date)
-        bucket = func.date_trunc(interval, Expense.expense_date).label("period")
+
+        if interval == "day":
+            bucket = Expense.expense_date.label("period")
+        else:
+            bucket = func.date_trunc(interval, Expense.expense_date).label("period")
 
         stmt = (
             select(bucket, func.coalesce(func.sum(Expense.amount), 0).label("total"))
@@ -342,8 +368,10 @@ class AnalyticsService:
         )
         rows = (await self.db.execute(stmt)).all()
         points = [
-            SeriesPoint(period=r.period.date() if hasattr(r.period, "date") else r.period,
-                        value=float(r.total or 0))
+            SeriesPoint(
+                period=r.period.date() if hasattr(r.period, "date") else r.period,
+                value=float(r.total or 0),
+            )
             for r in rows
         ]
         return SeriesSet(label="Expenses", interval=interval, points=points)
@@ -367,7 +395,6 @@ class AnalyticsService:
         )
         rows = (await self.db.execute(stmt)).all()
 
-        # Aggregate into a dict keyed by period
         merged: dict[date, dict[str, float]] = {}
         for r in rows:
             period = r.period.date() if hasattr(r.period, "date") else r.period
@@ -397,27 +424,31 @@ class AnalyticsService:
 
         cogs_bucket = func.date_trunc(interval, ProjectItem.created_at).label("period")
         cogs_stmt = (
-            select(cogs_bucket, func.coalesce(func.sum(ProjectItem.actual_cost), 0).label("total"))
+            select(
+                cogs_bucket,
+                func.coalesce(func.sum(ProjectItem.actual_cost), 0).label("total"),
+            )
             .where(ProjectItem.actual_cost > 0)
-            .where(func.date(ProjectItem.created_at) >= from_date)
-            .where(func.date(ProjectItem.created_at) <= to_date)
+            .where(ProjectItem.created_at >= _day_start(from_date))
+            .where(ProjectItem.created_at < _day_end_exclusive(to_date))
             .group_by(cogs_bucket)
             .order_by(cogs_bucket)
         )
         cogs_rows = (await self.db.execute(cogs_stmt)).all()
         cogs_by_period: dict[date, float] = {
-            (r.period.date() if hasattr(r.period, "date") else r.period): float(r.total or 0)
+            (r.period.date() if hasattr(r.period, "date") else r.period): float(
+                r.total or 0
+            )
             for r in cogs_rows
         }
 
-        points = []
-        for p in rev.points:
-            points.append(
-                SeriesPoint(
-                    period=p.period,
-                    value=p.value - cogs_by_period.get(p.period, 0.0),
-                )
+        points = [
+            SeriesPoint(
+                period=p.period,
+                value=p.value - cogs_by_period.get(p.period, 0.0),
             )
+            for p in rev.points
+        ]
         return SeriesSet(label="Gross profit", interval=interval, points=points)
 
     # ════════════════════════════════════════════════════════════
@@ -427,23 +458,21 @@ class AnalyticsService:
     async def service_profitability(
         self, from_date: date, to_date: date
     ) -> list[ProfitabilityRow]:
-        """
-        Revenue and cost grouped by inquiry.service_interest.
-        Projects without an inquiry link are grouped under UNKNOWN.
-        """
+        revenue_expr = func.coalesce(
+            Project.approved_price, Project.quoted_price, 0
+        )
+
         stmt = (
             select(
                 Inquiry.service_interest,
                 func.count(Project.id).label("project_count"),
-                func.coalesce(func.sum(
-                    func.coalesce(Project.approved_price, Project.quoted_price, 0)
-                ), 0).label("revenue"),
+                func.coalesce(func.sum(revenue_expr), 0).label("revenue"),
                 func.coalesce(func.sum(Project.actual_hpp), 0).label("cogs"),
             )
             .select_from(Project)
             .outerjoin(Inquiry, Inquiry.id == Project.inquiry_id)
-            .where(func.date(Project.created_at) >= from_date)
-            .where(func.date(Project.created_at) <= to_date)
+            .where(Project.created_at >= _day_start(from_date))
+            .where(Project.created_at < _day_end_exclusive(to_date))
             .group_by(Inquiry.service_interest)
             .order_by(func.sum(Project.actual_hpp).desc())
         )
@@ -477,19 +506,21 @@ class AnalyticsService:
     ) -> list[ProfitabilityRow]:
         from app.modules.vehicles.models import Vehicle
 
+        revenue_expr = func.coalesce(
+            Project.approved_price, Project.quoted_price, 0
+        )
+
         stmt = (
             select(
                 Vehicle.category,
                 func.count(Project.id).label("project_count"),
-                func.coalesce(func.sum(
-                    func.coalesce(Project.approved_price, Project.quoted_price, 0)
-                ), 0).label("revenue"),
+                func.coalesce(func.sum(revenue_expr), 0).label("revenue"),
                 func.coalesce(func.sum(Project.actual_hpp), 0).label("cogs"),
             )
             .select_from(Project)
             .outerjoin(Vehicle, Vehicle.id == Project.vehicle_id)
-            .where(func.date(Project.created_at) >= from_date)
-            .where(func.date(Project.created_at) <= to_date)
+            .where(Project.created_at >= _day_start(from_date))
+            .where(Project.created_at < _day_end_exclusive(to_date))
             .group_by(Vehicle.category)
             .order_by(func.sum(Project.actual_hpp).desc())
         )
@@ -524,26 +555,26 @@ class AnalyticsService:
     async def top_customers(
         self, from_date: date, to_date: date, limit: int = 10
     ) -> list[CustomerValueRow]:
+        revenue_expr = func.coalesce(
+            Project.approved_price, Project.quoted_price, 0
+        )
+
         stmt = (
             select(
                 Customer.id,
                 Customer.code,
                 Customer.name,
                 func.count(Project.id).label("project_count"),
-                func.coalesce(func.sum(
-                    func.coalesce(Project.approved_price, Project.quoted_price, 0)
-                ), 0).label("revenue"),
+                func.coalesce(func.sum(revenue_expr), 0).label("revenue"),
                 func.coalesce(func.sum(Project.actual_hpp), 0).label("cost"),
                 func.max(Project.created_at).label("last_project"),
             )
             .select_from(Customer)
             .join(Project, Project.customer_id == Customer.id)
-            .where(func.date(Project.created_at) >= from_date)
-            .where(func.date(Project.created_at) <= to_date)
+            .where(Project.created_at >= _day_start(from_date))
+            .where(Project.created_at < _day_end_exclusive(to_date))
             .group_by(Customer.id, Customer.code, Customer.name)
-            .order_by(func.sum(
-                func.coalesce(Project.approved_price, Project.quoted_price, 0)
-            ).desc())
+            .order_by(func.sum(revenue_expr).desc())
             .limit(limit)
         )
         rows = (await self.db.execute(stmt)).all()
@@ -579,6 +610,12 @@ class AnalyticsService:
     async def top_materials(
         self, from_date: date, to_date: date, limit: int = 20
     ) -> list[MaterialSpendRow]:
+        # COALESCE(unit_cost, 0) so a NULL cost doesn't silently zero the row.
+        cost_expr = (
+            InventoryTransaction.quantity
+            * func.coalesce(InventoryTransaction.unit_cost, 0)
+        )
+
         stmt = (
             select(
                 Material.id,
@@ -586,20 +623,27 @@ class AnalyticsService:
                 Material.name,
                 Material.category,
                 Material.stock_unit,
-                func.coalesce(func.sum(InventoryTransaction.quantity), 0).label("consumed"),
-                func.coalesce(func.sum(
-                    InventoryTransaction.quantity * InventoryTransaction.unit_cost
-                ), 0).label("cost"),
+                func.coalesce(
+                    func.sum(InventoryTransaction.quantity), 0
+                ).label("consumed"),
+                func.coalesce(func.sum(cost_expr), 0).label("cost"),
             )
             .select_from(InventoryTransaction)
             .join(Material, Material.id == InventoryTransaction.material_id)
-            .where(InventoryTransaction.transaction_type == TransactionType.CONSUMPTION.value)
-            .where(func.date(InventoryTransaction.created_at) >= from_date)
-            .where(func.date(InventoryTransaction.created_at) <= to_date)
-            .group_by(Material.id, Material.code, Material.name, Material.category, Material.stock_unit)
-            .order_by(func.sum(
-                InventoryTransaction.quantity * InventoryTransaction.unit_cost
-            ).desc())
+            .where(
+                InventoryTransaction.transaction_type
+                == TransactionType.CONSUMPTION.value
+            )
+            .where(InventoryTransaction.created_at >= _day_start(from_date))
+            .where(InventoryTransaction.created_at < _day_end_exclusive(to_date))
+            .group_by(
+                Material.id,
+                Material.code,
+                Material.name,
+                Material.category,
+                Material.stock_unit,
+            )
+            .order_by(func.sum(cost_expr).desc())
             .limit(limit)
         )
         rows = (await self.db.execute(stmt)).all()
@@ -623,16 +667,12 @@ class AnalyticsService:
     async def estimate_accuracy(
         self, from_date: date, to_date: date
     ) -> EstimateAccuracyStats:
-        """
-        Compare estimated_hpp vs actual_hpp for projects in the period.
-        Only projects with both non-zero.
-        """
         stmt = (
             select(Project.estimated_hpp, Project.actual_hpp)
             .where(Project.estimated_hpp > 0)
             .where(Project.actual_hpp > 0)
-            .where(func.date(Project.created_at) >= from_date)
-            .where(func.date(Project.created_at) <= to_date)
+            .where(Project.created_at >= _day_start(from_date))
+            .where(Project.created_at < _day_end_exclusive(to_date))
         )
         rows = (await self.db.execute(stmt)).all()
 
@@ -647,8 +687,6 @@ class AnalyticsService:
                 avg_actual_hpp=0.0,
             )
 
-        # variance = (actual − estimated) / estimated × 100
-        # positive = overrun, negative = under
         variances: list[float] = []
         est_sum = act_sum = 0.0
         for r in rows:
@@ -660,7 +698,11 @@ class AnalyticsService:
 
         variances.sort()
         n = len(variances)
-        median = variances[n // 2] if n % 2 == 1 else (variances[n // 2 - 1] + variances[n // 2]) / 2.0
+        median = (
+            variances[n // 2]
+            if n % 2 == 1
+            else (variances[n // 2 - 1] + variances[n // 2]) / 2.0
+        )
 
         return EstimateAccuracyStats(
             project_count=n,
@@ -678,13 +720,16 @@ class AnalyticsService:
 
     async def inquiry_funnel(self, from_date: date, to_date: date) -> InquiryFunnel:
         stmt = (
-            select(Inquiry.status, func.count(Inquiry.id))
-            .where(func.date(Inquiry.created_at) >= from_date)
-            .where(func.date(Inquiry.created_at) <= to_date)
+            select(
+                Inquiry.status.label("status"),
+                func.count(Inquiry.id).label("count"),
+            )
+            .where(Inquiry.created_at >= _day_start(from_date))
+            .where(Inquiry.created_at < _day_end_exclusive(to_date))
             .group_by(Inquiry.status)
         )
         rows = (await self.db.execute(stmt)).all()
-        counts = {r[0]: int(r[1]) for r in rows}
+        counts = {r.status: int(r.count) for r in rows}
         total = sum(counts.values())
 
         stages = []
@@ -708,11 +753,18 @@ class AnalyticsService:
 
     async def recent_activity(self, limit: int = 20) -> list[ActivityEntry]:
         stmt = (
-            select(AuditLog)
+            select(
+                AuditLog.id,
+                AuditLog.action,
+                AuditLog.table_name,
+                AuditLog.record_id,
+                AuditLog.user_id,
+                AuditLog.created_at,
+            )
             .order_by(AuditLog.created_at.desc())
             .limit(limit)
         )
-        rows = (await self.db.execute(stmt)).scalars().all()
+        rows = (await self.db.execute(stmt)).all()
         return [
             ActivityEntry(
                 id=r.id,

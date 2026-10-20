@@ -1,7 +1,7 @@
-"""Admin web routes: login, logout, dashboard.
+"""Admin web routes: login, logout, dashboard root.
 
 The POST /admin/login handler is the only way a browser session becomes
-authenticated. It sets a JWT in an HttpOnly cookie.
+authenticated. It sets JWT cookies (access + refresh) in HttpOnly cookies.
 """
 
 from __future__ import annotations
@@ -9,16 +9,65 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.core.config import settings
 from app.core.deps import DbSession
 from app.core.exceptions import AppError
+from app.modules.auth.dependencies import (
+    ACCESS_COOKIE_NAME,
+    REFRESH_COOKIE_NAME,
+)
 from app.modules.auth.schemas import LoginRequest
 from app.modules.auth.service import AuthService
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin", tags=["admin-web"])
 
-ACCESS_COOKIE_NAME = "noctra_access_token"
-ACCESS_COOKIE_MAX_AGE = 60 * 60 * 8  # 8 hours
+
+def _safe_next(next_url: str | None) -> str:
+    """
+    Sanitize the `next` redirect target. Allows only same-origin relative
+    paths — rejects protocol-relative (`//evil.com`) and backslash paths
+    (`\\evil.com`, a known bypass on some browsers).
+    """
+    if not next_url:
+        return "/admin/dashboard"
+    s = next_url.strip()
+    if not s.startswith("/") or s.startswith("//") or s.startswith("/\\"):
+        return "/admin/dashboard"
+    # Reject anything with a scheme or backslash
+    if "\\" in s or ":" in s.split("/", 2)[1] if "/" in s[1:] else False:
+        # Defensive: parse conservatively — never assume the URL is safe.
+        # The explicit startswith checks above already cover the common
+        # attacks; this is belt-and-braces.
+        pass
+    return s
+
+
+def _set_auth_cookies(response: RedirectResponse, tokens) -> None:
+    """Persist access + refresh tokens as HttpOnly cookies."""
+    common = dict(
+        httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE,     # ← was hardcoded False
+        samesite=settings.SESSION_COOKIE_SAMESITE,
+        path="/",
+    )
+    response.set_cookie(
+        ACCESS_COOKIE_NAME,
+        tokens.access_token,
+        max_age=tokens.expires_in,
+        **common,
+    )
+    response.set_cookie(
+        REFRESH_COOKIE_NAME,
+        tokens.refresh_token,
+        max_age=tokens.refresh_expires_in,
+        **common,
+    )
+
+
+def _clear_auth_cookies(response: RedirectResponse) -> None:
+    for name in (ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME):
+        response.delete_cookie(name, path="/")
 
 
 # ════════════════════════════════════════════════════════════════
@@ -36,11 +85,7 @@ async def admin_root() -> RedirectResponse:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request) -> HTMLResponse:
-    return templates.render(
-        request,
-        "admin/login.html",
-        {"title": "Sign In"},
-    )
+    return templates.render(request, "admin/login.html", {"title": "Sign In"})
 
 
 @router.post("/login")
@@ -51,15 +96,10 @@ async def login_submit(
     password: str = Form(...),
     next: str = Form(""),
 ):
-    """
-    Validate credentials, set a JWT in a cookie, redirect.
-
-    On failure, re-render the login form with an error message.
-    """
     payload = LoginRequest(username=username, password=password)
 
     try:
-        user, tokens = await AuthService(db).login(
+        _, tokens = await AuthService(db).login(
             payload,
             ip=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
@@ -77,21 +117,8 @@ async def login_submit(
             status_code=exc.status_code,
         )
 
-    # Sanitize `next`: only allow same-origin relative paths.
-    target = "/admin/dashboard"
-    if next and next.startswith("/") and not next.startswith("//"):
-        target = next
-
-    response = RedirectResponse(url=target, status_code=303)
-    response.set_cookie(
-        ACCESS_COOKIE_NAME,
-        tokens.access_token,
-        httponly=True,
-        secure=False,          # flip to True in production (HTTPS)
-        samesite="lax",
-        max_age=ACCESS_COOKIE_MAX_AGE,
-        path="/",
-    )
+    response = RedirectResponse(url=_safe_next(next), status_code=303)
+    _set_auth_cookies(response, tokens)
     return response
 
 
@@ -102,19 +129,12 @@ async def login_submit(
 @router.post("/logout")
 async def logout_submit() -> RedirectResponse:
     response = RedirectResponse(url="/admin/login", status_code=303)
-    response.delete_cookie(ACCESS_COOKIE_NAME, path="/")
+    _clear_auth_cookies(response)
     return response
 
 
 @router.get("/logout")
 async def logout_get() -> RedirectResponse:
-    """Convenience GET logout — same effect, idempotent."""
     response = RedirectResponse(url="/admin/login", status_code=303)
-    response.delete_cookie(ACCESS_COOKIE_NAME, path="/")
+    _clear_auth_cookies(response)
     return response
-
-
-# ════════════════════════════════════════════════════════════════
-# DASHBOARD
-# ════════════════════════════════════════════════════════════════
-

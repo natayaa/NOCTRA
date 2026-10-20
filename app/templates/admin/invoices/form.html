@@ -1,122 +1,284 @@
 {% extends "admin/base.html" %}
-{% block content %}
 {% set fv = form_values or {} %}
+
+{# macro: preserves empty string (user clear) while falling back to default #}
+{% macro v(key, default='') -%}
+{{- fv[key] if key in fv else default -}}
+{%- endmacro %}
+
+{% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">{{ 'New Invoice' if mode == 'create' else 'Edit Invoice' }}</h1></div>
-  <div class="page-actions"><a href="/admin/invoices" class="btn btn-secondary btn-sm">Back</a></div>
+  <div>
+    <h1 class="page-title">{{ 'New Invoice' if mode == 'create' else 'Edit Invoice' }}</h1>
+    {% if invoice %}<p class="page-subtitle mono text-xs">{{ invoice.code }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="/admin/invoices{% if invoice %}/{{ invoice.id }}{% endif %}" class="btn btn-secondary btn-sm">Back</a>
+  </div>
 </div>
 
-{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
+  </div>
+</div>
+{% endif %}
 
 <form method="post"
       action="{{ '/admin/invoices' if mode == 'create' else '/admin/invoices/' ~ invoice.id }}"
-      class="max-w-3xl panel space-y-6" data-guard>
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+      class="max-w-4xl space-y-5"
+      data-guard
+      data-shortcut-submit>
 
-  {% if preselected_customer %}
-    <input type="hidden" name="customer_id" value="{{ preselected_customer.id }}" />
-    <input type="hidden" name="project_id" value="{{ preselected_project.id if preselected_project else '' }}" />
-    <div class="form-row">
-      <label class="form-label">Customer</label>
-      <input class="input" disabled value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
-    </div>
-  {% elif mode == 'create' %}
-    <div class="form-row">
-      <label class="form-label" for="customer_id">Customer ID <span class="req">*</span></label>
-      <input class="input mono" id="customer_id" name="customer_id" required placeholder="paste UUID" />
-    </div>
-  {% endif %}
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
 
-  <div class="grid md:grid-cols-3 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="issue_date">Issue date <span class="req">*</span></label>
-      <input class="input" type="date" id="issue_date" name="issue_date" required
-             value="{{ fv.get('issue_date') or (invoice.issue_date.strftime('%Y-%m-%d') if invoice and invoice.issue_date else today) }}" />
+  {# ── Customer & Project ─────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Customer & Project</h2>
+      <span class="text-xs text-noctra-dim">Required</span>
     </div>
-    <div class="form-row">
-      <label class="form-label" for="due_date">Due date</label>
-      <input class="input" type="date" id="due_date" name="due_date"
-             value="{{ fv.get('due_date') or (invoice.due_date.strftime('%Y-%m-%d') if invoice and invoice.due_date else '') }}" />
-    </div>
-    <div class="form-row">
-      <label class="form-label" for="tax_rate_pct">Tax rate (%)</label>
-      <input class="input" type="number" step="0.1" min="0" max="99"
-             id="tax_rate_pct" name="tax_rate_pct"
-             value="{{ fv.get('tax_rate_pct') or (invoice.tax_rate_pct if invoice else 0) }}" />
-    </div>
-  </div>
 
-  {% if mode == 'create' %}
-  <section>
-    <h2 class="panel-title">Line items</h2>
-    <div id="items-container" class="space-y-3 mt-3">
-      <div class="grid grid-cols-12 gap-3 items-end" data-item-row>
-        <div class="col-span-6"><label class="form-label">Description</label><input class="input" name="item_description" /></div>
-        <div class="col-span-2"><label class="form-label">Qty</label><input class="input" type="number" step="0.01" name="item_quantity" value="1" /></div>
-        <div class="col-span-3"><label class="form-label">Unit price</label><input class="input" type="number" step="1000" name="item_unit_price" value="0" /></div>
-        <div class="col-span-1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('[data-item-row]').remove()">×</button></div>
+    {% if preselected_customer %}
+      <input type="hidden" name="customer_id" value="{{ preselected_customer.id }}" />
+      <input type="hidden" name="project_id" value="{{ preselected_project.id if preselected_project else '' }}" />
+      <div class="form-row !mb-0">
+        <label class="form-label">Customer</label>
+        <input class="input" disabled value="{{ preselected_customer.name }} ({{ preselected_customer.code }})" />
+        <div class="form-hint">Locked to the customer you opened this from.</div>
+      </div>
+    {% elif mode == 'create' %}
+      <div class="grid md:grid-cols-2 gap-5">
+        <div class="form-row !mb-0">
+          <label class="form-label" for="customer_id">Customer <span class="req">*</span></label>
+          <select class="select" id="customer_id" name="customer_id" required data-customer-select>
+            <option value="">— Choose customer —</option>
+            {% set cur_cid = v('customer_id', '') %}
+            {% for c in customers %}
+              <option value="{{ c.id }}"
+                      {% if cur_cid == c.id|string %}selected{% endif %}>
+                {{ c.name }} ({{ c.code }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-row !mb-0">
+          <label class="form-label" for="project_id">Related Project</label>
+          <select class="select" id="project_id" name="project_id" data-project-select>
+            <option value="">— None —</option>
+            {% set cur_pid = v('project_id', '') %}
+            {% for p in projects %}
+              <option value="{{ p.id }}"
+                      data-customer-id="{{ p.customer_id }}"
+                      {% if cur_pid == p.id|string %}selected{% endif %}>
+                {{ p.code }} — {{ p.title or 'Project' }}
+              </option>
+            {% endfor %}
+          </select>
+          <div class="form-hint">Optional — only that customer's projects shown.</div>
+        </div>
+      </div>
+    {% else %}
+      {# Edit mode: customer/project immutable #}
+      <div class="grid md:grid-cols-2 gap-5">
+        <div class="form-row !mb-0">
+          <label class="form-label">Customer</label>
+          <input class="input" disabled
+                 value="{{ preselected_customer.name if preselected_customer else '—' }}{% if preselected_customer %} ({{ preselected_customer.code }}){% endif %}" />
+        </div>
+        <div class="form-row !mb-0">
+          <label class="form-label">Project</label>
+          <input class="input" disabled
+                 value="{{ preselected_project.code if preselected_project else '—' }}" />
+          <div class="form-hint">Customer and project cannot be changed after creation.</div>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  {# ── Dates & Tax ────────────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Dates & Tax</h2>
+    </div>
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="issue_date">Issue date <span class="req">*</span></label>
+        <input class="input" type="date" id="issue_date" name="issue_date" required
+               value="{{ v('issue_date',
+                 invoice.issue_date.isoformat() if invoice and invoice.issue_date
+                 else (today.isoformat() if today else '')
+               ) }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="due_date">Due date</label>
+        <input class="input" type="date" id="due_date" name="due_date"
+               value="{{ v('due_date',
+                 invoice.due_date.isoformat() if invoice and invoice.due_date else ''
+               ) }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="tax_rate_pct">Tax rate (%)</label>
+        <input class="input" type="number" step="0.1" min="0" max="99"
+               id="tax_rate_pct" name="tax_rate_pct"
+               value="{{ v('tax_rate_pct',
+                 invoice.tax_rate_pct if invoice else 0
+               ) }}" />
       </div>
     </div>
-    <button type="button" class="btn btn-secondary btn-sm mt-3" onclick="addItemRow()">+ Add item</button>
+  </section>
+
+  {# ── Line items (create only) ──────────────── #}
+  {% if mode == 'create' %}
+  <section class="panel">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Line items</h2>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="addItemRow()">+ Add item</button>
+    </div>
+
+    <div id="items-container" class="space-y-3">
+      <div class="grid grid-cols-12 gap-3 items-end" data-item-row>
+        <div class="col-span-12 md:col-span-6">
+          <label class="form-label">Description</label>
+          <input class="input" name="item_description" placeholder="e.g. Full body repaint" maxlength="500" />
+        </div>
+        <div class="col-span-4 md:col-span-2">
+          <label class="form-label">Qty</label>
+          <input class="input" type="number" step="any" min="0.01" name="item_quantity" value="1" />
+        </div>
+        <div class="col-span-8 md:col-span-3">
+          <label class="form-label">Unit price (IDR)</label>
+          <input class="input" type="number" step="any" min="0" name="item_unit_price" value="0" />
+        </div>
+        <div class="col-span-12 md:col-span-1 flex justify-end">
+          <button type="button" class="btn btn-ghost btn-sm text-noctra-danger !p-1.5"
+                  onclick="this.closest('[data-item-row]').remove()"
+                  title="Remove item">
+            <svg viewBox="0 0 24 24" fill="none" class="w-5 h-5" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
   {% endif %}
 
-  <script>
-    function addItemRow() {
-      const container = document.getElementById('items-container');
-      const row = container.querySelector('[data-item-row]').cloneNode(true);
-      row.querySelectorAll('input').forEach(i => {
-        if (i.name === 'item_quantity') {
-          i.value = '1';
-        } else if (i.name === 'item_unit_price') {
-          i.value = '0';
-        } else {
-          i.value = '';
-        }
-      });
-      container.appendChild(row);
-    }
-  </script>
+  {# ── Additional details ────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Additional Details</h2>
+    </div>
 
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="discount_amount">Discount amount (IDR)</label>
-      <input class="input" type="number" step="1000" min="0" id="discount_amount" name="discount_amount"
-             value="{{ fv.get('discount_amount') or (invoice.discount_amount if invoice else 0) }}" />
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="discount_amount">Discount amount (IDR)</label>
+        <input class="input" type="number" step="any" min="0"
+               id="discount_amount" name="discount_amount"
+               value="{{ v('discount_amount',
+                 invoice.discount_amount if invoice else 0
+               ) }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="terms">Terms</label>
+        <input class="input" id="terms" name="terms" maxlength="500"
+               value="{{ v('terms', invoice.terms if invoice else '') }}"
+               placeholder="e.g. Due within 14 days" />
+      </div>
+    </div>
+
+    <div class="form-row mt-5 !mb-0">
+      <label class="form-label" for="notes">Notes</label>
+      <textarea class="textarea" id="notes" name="notes" rows="2" maxlength="5000"
+                placeholder="Internal notes…">{{ v('notes', invoice.notes if invoice else '') }}</textarea>
+    </div>
+  </section>
+
+  {# ── Sticky save bar ──────────────────────── #}
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Create invoice' if mode == 'create' else 'Save changes' }}
+      </button>
+      <a href="/admin/invoices{% if invoice %}/{{ invoice.id }}{% endif %}"
+         class="btn btn-secondary">Cancel</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
     </div>
   </div>
-
-  <div class="form-row">
-    <label class="form-label" for="terms">Terms</label>
-    <input class="input" id="terms" name="terms" maxlength="500"
-           value="{{ fv.get('terms') or (invoice.terms if invoice else '') }}" />
-  </div>
-
-  <div class="form-row">
-    <label class="form-label" for="notes">Notes</label>
-    <textarea class="textarea" id="notes" name="notes" rows="2">{{ fv.get('notes') or (invoice.notes if invoice else '') }}</textarea>
-  </div>
-
-  <div class="flex gap-2 pt-2">
-    <button class="btn btn-primary">{{ 'Create invoice' if mode == 'create' else 'Save changes' }}</button>
-    <a href="/admin/invoices" class="btn btn-secondary">Cancel</a>
-  </div>
 </form>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-  function addItemRow() {
+(() => {
+  window.addItemRow = function () {
     const container = document.getElementById('items-container');
+    if (!container) return;
     const row = container.querySelector('[data-item-row]').cloneNode(true);
     row.querySelectorAll('input').forEach(i => {
-      if (i.name === 'item_quantity') {
-        i.value = '1';
-      } else if (i.name === 'item_unit_price') {
-        i.value = '0';
-      } else {
-        i.value = '';
-      }
+      if (i.name === 'item_quantity') i.value = '1';
+      else if (i.name === 'item_unit_price') i.value = '0';
+      else i.value = '';
     });
     container.appendChild(row);
+  };
+
+  // ⌘/Ctrl + Enter to submit
+  const form = document.querySelector('form[data-shortcut-submit]');
+  if (form) {
+    form.addEventListener('keydown', (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+      if (e.target && e.target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    });
   }
+
+  // Customer → Project cascade
+  const customerSel = document.querySelector('[data-customer-select]');
+  const projectSel  = document.querySelector('[data-project-select]');
+  if (customerSel && projectSel) {
+    const allOptions = Array.from(projectSel.options).filter(o => o.value);
+
+    function syncProjects() {
+      const cid = customerSel.value;
+      const prev = projectSel.value;
+      while (projectSel.options.length > 1) projectSel.remove(1);
+
+      if (!cid) {
+        projectSel.options[0].textContent = '— Select customer first —';
+        projectSel.disabled = true;
+        return;
+      }
+
+      const matches = allOptions.filter(
+        (o) => String(o.dataset.customerId) === String(cid)
+      );
+
+      projectSel.options[0].textContent = matches.length === 0
+        ? '— No open projects for this customer —'
+        : '— None —';
+      matches.forEach((o) => projectSel.appendChild(o.cloneNode(true)));
+      projectSel.disabled = false;
+
+      if (matches.some((o) => o.value === prev)) projectSel.value = prev;
+    }
+
+    customerSel.addEventListener('change', syncProjects);
+    if (customerSel.value) syncProjects();
+    else projectSel.disabled = true;
+  }
+})();
 </script>
 {% endblock %}

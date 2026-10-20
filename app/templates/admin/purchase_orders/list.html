@@ -1,44 +1,157 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
 
+{% set has_filters = status_filter %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
+
 {% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">Purchase Orders</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
-  <div class="page-actions"><a href="/admin/purchase-orders/new" class="btn btn-primary btn-sm">New PO</a></div>
+  <div>
+    <h1 class="page-title">Purchase Orders</h1>
+    <p class="page-subtitle">
+      {{ page_meta.total }} total
+      {% if has_filters %}· <span class="text-noctra-muted">filtered</span>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/purchase-orders/new" class="btn btn-primary btn-sm">New PO</a>
+  </div>
 </div>
 
-<div class="mb-4 flex flex-wrap gap-2">
-  <a href="/admin/purchase-orders" class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
-  {% for s in statuses %}
-    <a href="/admin/purchase-orders?status={{ s }}" class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">{{ status_labels.get(s, s) }}</a>
+{# ── Status chips ───────────────────────────────────── #}
+<div class="mb-4 overflow-x-auto pb-1">
+  <div class="flex gap-2 items-center w-max">
+    <a href="/admin/purchase-orders"
+       class="badge whitespace-nowrap {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+      All
+    </a>
+    {% for s in statuses %}
+      {# 🐛 FIX: Ganti qs(status=s) dengan string literal karena `qs` tidak tersedia di context #}
+      <a href="/admin/purchase-orders?status={{ s }}"
+         class="badge whitespace-nowrap {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
+        {{ status_labels.get(s, s) }}
+      </a>
+    {% endfor %}
+  </div>
+</div>
+
+{# ── Toolbar ──────────────────────────────────────── #}
+{% if purchase_orders %}
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+  </div>
+
+  <form method="get" class="per-page-form">
+    {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+    <label for="per_page_po">Show</label>
+    <select id="per_page_po" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
+</div>
+{% endif %}
+
+{% if purchase_orders %}
+
+{# ── Desktop table ──────────────────────────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table w-full">
+      <thead>
+        <tr>
+          <th class="text-left w-24">Code</th>
+          <th class="text-left">Supplier</th>
+          <th class="text-left w-32">Order date</th>
+          <th class="text-left w-32">Expected</th>
+          <th class="text-right w-32">Total</th>
+          <th class="text-left w-32">Status</th>
+          <th class="text-right w-16"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for po in purchase_orders %}
+        {% set sup = suppliers_by_id.get(po.supplier_id) %}
+        <tr>
+          <td class="mono text-xs text-left">{{ po.code }}</td>
+          <td class="text-left">
+            {% if sup %}
+              <div class="font-medium">{{ sup.name }}</div>
+              <div class="text-xs text-noctra-dim">{{ sup.code }}</div>
+            {% else %}
+              <span class="text-noctra-dim">—</span>
+            {% endif %}
+          </td>
+          <td class="text-sm text-left">{{ po.order_date.strftime('%d %b %Y') }}</td>
+          <td class="text-sm text-noctra-muted text-left">
+            {{ po.expected_date.strftime('%d %b') if po.expected_date else '—' }}
+          </td>
+          <td class="text-right font-mono text-sm">{{ po.total_amount | rupiah }}</td>
+          <td class="text-left">
+            {% set sbadge = {'DRAFT':'badge-neutral','SENT':'badge-info','RECEIVED':'badge-success','CLOSED':'badge-neutral','CANCELLED':'badge-danger'}.get(po.status, 'badge-neutral') %}
+            <span class="badge {{ sbadge }}">
+              <span class="badge-dot"></span>
+              {{ status_labels.get(po.status, po.status) }}
+            </span>
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/purchase-orders/{{ po.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Mobile cards ───────────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for po in purchase_orders %}
+  {% set sup = suppliers_by_id.get(po.supplier_id) %}
+  <a href="/admin/purchase-orders/{{ po.id }}" class="block panel !p-4 active:scale-[0.995] transition">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <span class="mono text-xs text-noctra-dim">{{ po.code }}</span>
+      {% set sbadge = {'DRAFT':'badge-neutral','SENT':'badge-info','RECEIVED':'badge-success','CLOSED':'badge-neutral','CANCELLED':'badge-danger'}.get(po.status, 'badge-neutral') %}
+      <span class="badge {{ sbadge }} shrink-0">
+        <span class="badge-dot"></span>
+        {{ status_labels.get(po.status, po.status) }}
+      </span>
+    </div>
+    
+    <div class="font-medium text-sm">
+      {{ sup.name if sup else 'Unknown Supplier' }}
+    </div>
+    
+    <div class="flex items-end justify-between mt-3">
+      <div class="text-xs text-noctra-muted space-y-0.5">
+        <div>Ordered: {{ po.order_date.strftime('%d %b %Y') }}</div>
+        {% if po.expected_date %}
+        <div>Expected: {{ po.expected_date.strftime('%d %b %Y') }}</div>
+        {% endif %}
+      </div>
+      <div class="font-mono text-sm font-semibold text-noctra-text">
+        {{ po.total_amount | rupiah }}
+      </div>
+    </div>
+  </a>
   {% endfor %}
 </div>
 
-{% if purchase_orders %}
-<div class="table-wrap">
-  <table class="table">
-    <thead><tr><th>Code</th><th>Supplier</th><th>Order date</th><th>Expected</th><th class="text-right">Total</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      {% for po in purchase_orders %}
-      {% set sup = suppliers_by_id.get(po.supplier_id) %}
-      <tr>
-        <td class="mono text-xs">{{ po.code }}</td>
-        <td>{{ sup.name if sup else '—' }}</td>
-        <td class="text-sm">{{ po.order_date.strftime('%d %b %Y') }}</td>
-        <td class="text-sm text-neutral-500">{{ po.expected_date.strftime('%d %b') if po.expected_date else '—' }}</td>
-        <td class="text-right font-mono text-sm">{{ po.total_amount | rupiah }}</td>
-        <td>
-          {% set sbadge = {'DRAFT':'badge-neutral','SENT':'badge-info','RECEIVED':'badge-success','CLOSED':'badge-neutral','CANCELLED':'badge-danger'}.get(po.status, 'badge-neutral') %}
-          <span class="badge {{ sbadge }}">{{ status_labels.get(po.status, po.status) }}</span>
-        </td>
-        <td class="text-right"><a href="/admin/purchase-orders/{{ po.id }}" class="btn btn-ghost btn-sm">View</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
 {% include "components/pagination.html" %}
+
 {% else %}
-{{ empty_state('No purchase orders yet', 'Create one to start ordering stock.', '/admin/purchase-orders/new', 'New PO', 'plus') }}
+{{ empty_state(
+  title='No purchase orders found',
+  message='Create one to start ordering stock.',
+  action_url='/admin/purchase-orders/new',
+  action_label='New PO',
+  icon='plus'
+) }}
 {% endif %}
 {% endblock %}

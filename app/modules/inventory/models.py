@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -14,6 +15,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -32,7 +34,7 @@ class Supplier(Base, UUIDMixin, TimestampMixin):
         Index("ix_suppliers_active_name", "is_active", "name"),
     )
 
-    code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     contact_person: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str | None] = mapped_column(String(255))
@@ -41,7 +43,9 @@ class Supplier(Base, UUIDMixin, TimestampMixin):
     tax_id: Mapped[str | None] = mapped_column(String(64))
     payment_terms: Mapped[str | None] = mapped_column(String(64))
     notes: Mapped[str | None] = mapped_column(Text)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
 
     def __repr__(self) -> str:
         return f"<Supplier {self.code} {self.name}>"
@@ -59,7 +63,7 @@ class Material(Base, UUIDMixin, TimestampMixin):
         Index("ix_materials_sku", "sku"),
     )
 
-    code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     sku: Mapped[str | None] = mapped_column(String(64))
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -69,20 +73,20 @@ class Material(Base, UUIDMixin, TimestampMixin):
     # ── Unit model ──────────────────────────────────────
     purchase_unit: Mapped[str] = mapped_column(String(16), nullable=False)
     stock_unit: Mapped[str] = mapped_column(String(16), nullable=False)
-    stock_units_per_purchase: Mapped[float] = mapped_column(
+    stock_units_per_purchase: Mapped[Decimal] = mapped_column(
         Numeric(14, 4), nullable=False,
     )
 
     # ── Pricing ────────────────────────────────────────
-    current_purchase_price: Mapped[float] = mapped_column(
+    current_purchase_price: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
 
     # ── Stock thresholds ───────────────────────────────
-    reorder_point: Mapped[float] = mapped_column(
+    reorder_point: Mapped[Decimal] = mapped_column(
         Numeric(14, 4), default=0, nullable=False, server_default="0",
     )
-    min_stock: Mapped[float] = mapped_column(
+    min_stock: Mapped[Decimal] = mapped_column(
         Numeric(14, 4), default=0, nullable=False, server_default="0",
     )
 
@@ -95,7 +99,9 @@ class Material(Base, UUIDMixin, TimestampMixin):
     # ── Metadata ───────────────────────────────────────
     notes: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(String(64))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
 
     supplier: Mapped[Supplier | None] = relationship(
         foreign_keys=[preferred_supplier_id],
@@ -132,15 +138,23 @@ class InventoryTransaction(Base, UUIDMixin, TimestampMixin):
     )
     transaction_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 
-    quantity: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
-
-    unit_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
 
     reference_type: Mapped[str | None] = mapped_column(String(32))
     reference_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
     reference_note: Mapped[str | None] = mapped_column(String(255))
 
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # Business date the movement occurred — used by finance PnL and
+    # COGS periodization. Backfilled from `created_at` for legacy rows.
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
 
     created_by_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -150,7 +164,9 @@ class InventoryTransaction(Base, UUIDMixin, TimestampMixin):
     material: Mapped[Material] = relationship()
 
     def __repr__(self) -> str:
-        sign = "+" if self.transaction_type in ("OPENING", "PURCHASE", "ADJUSTMENT_IN", "TRANSFER_IN") else "-"
+        sign = "+" if self.transaction_type in (
+            "OPENING", "PURCHASE", "ADJUSTMENT_IN", "TRANSFER_IN"
+        ) else "-"
         return f"<InventoryTx {self.transaction_type} {sign}{self.quantity} of {self.material_id}>"
 
 
@@ -165,7 +181,7 @@ class PurchaseOrder(Base, UUIDMixin, TimestampMixin):
         Index("ix_purchase_orders_supplier", "supplier_id"),
     )
 
-    code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
 
     supplier_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -176,6 +192,7 @@ class PurchaseOrder(Base, UUIDMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(16),
         default=PurchaseOrderStatus.DRAFT.value,
+        server_default=PurchaseOrderStatus.DRAFT.value,
         nullable=False,
         index=True,
     )
@@ -184,7 +201,7 @@ class PurchaseOrder(Base, UUIDMixin, TimestampMixin):
     expected_date: Mapped[date | None] = mapped_column(Date)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    total_amount: Mapped[float] = mapped_column(
+    total_amount: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, nullable=False, server_default="0",
     )
 
@@ -224,10 +241,10 @@ class PurchaseOrderItem(Base, UUIDMixin, TimestampMixin):
         nullable=False,
     )
 
-    quantity: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
-    unit_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
 
-    quantity_received: Mapped[float] = mapped_column(
+    quantity_received: Mapped[Decimal] = mapped_column(
         Numeric(14, 4), default=0, nullable=False, server_default="0",
     )
 

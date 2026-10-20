@@ -1,45 +1,94 @@
 {% extends "admin/base.html" %}
 
+{% set today_date = today() if today is callable else today %}
+{% set TERMINAL = ('CONVERTED', 'LOST') %}
+
+{% set action_labels = {
+  'CREATE': 'Created',
+  'UPDATE': 'Updated',
+  'DELETE': 'Deleted',
+  'STATUS_CHANGE': 'Status changed',
+  'ASSIGN': 'Assigned',
+  'VIEW': 'Viewed',
+  'LOGIN': 'Logged in',
+  'LOGOUT': 'Logged out',
+  'LOGIN_FAILED': 'Login failed',
+} %}
+{% set action_tone = {
+  'CREATE': 'badge-success',
+  'UPDATE': 'badge-info',
+  'STATUS_CHANGE': 'badge-accent',
+  'DELETE': 'badge-danger',
+  'ASSIGN': 'badge-info',
+  'LOGIN_FAILED': 'badge-warning',
+} %}
+
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="flex items-center gap-3">
-      <h1 class="page-title">{{ inquiry.code }}</h1>
-      <span class="badge {{ status_tone.get(inquiry.status, 'badge-neutral') }}">{{ inquiry.status }}</span>
+    <div class="flex items-center gap-3 flex-wrap">
+      <h1 class="page-title mono">{{ inquiry.code }}</h1>
+      <button type="button" class="admin-icon-btn !w-7 !h-7" data-copy="{{ inquiry.code }}"
+              title="Copy code" aria-label="Copy inquiry code">
+        <svg viewBox="0 0 24 24" fill="none" class="!w-3.5 !h-3.5">
+          <rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.75" />
+          <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+        </svg>
+      </button>
+      <span class="badge {{ status_tone.get(inquiry.status, 'badge-neutral') }}">
+        <span class="badge-dot"></span>
+        {{ status_labels.get(inquiry.status, inquiry.status) }}
+      </span>
     </div>
     <p class="page-subtitle">
       <span>{{ source_labels.get(inquiry.source, inquiry.source) }}</span>
-      <span class="ml-2 text-neutral-500">· {{ inquiry.created_at | dt_id('%d %b %Y') }}</span>
+      <span class="ml-2 text-noctra-dim">· {{ inquiry.created_at | date_id }}</span>
     </p>
   </div>
   <div class="page-actions flex gap-2">
     {% if customer %}
-      <a href="/admin/customers/{{ inquiry.customer_id }}" class="btn btn-secondary btn-sm">Customer</a>
+    <a href="/admin/customers/{{ inquiry.customer_id }}" class="btn btn-secondary btn-sm">Customer</a>
     {% endif %}
-    {% if inquiry.status not in ('CONVERTED', 'LOST') %}
-      <a href="/admin/inquiries/{{ inquiry.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+    {% if inquiry.status not in TERMINAL %}
+    <a href="/admin/inquiries/{{ inquiry.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
     {% endif %}
   </div>
 </div>
 
 {% if error %}
-<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">Action failed: {{ error }}</div>
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75" />
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+    </svg>
+    <div class="text-sm text-red-200">Action failed: {{ error }}</div>
+  </div>
 </div>
 {% endif %}
 
-{# Overdue / due-today warning #}
-{% if inquiry.follow_up_date and inquiry.status not in ('CONVERTED', 'LOST') %}
-  {% if inquiry.follow_up_date < today %}
-  <div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05);">
-    <div class="text-sm text-red-300">
-      ⚠ Follow-up overdue since <strong>{{ inquiry.follow_up_date.strftime('%d %b %Y') }}</strong>.
+{# ── Follow-up warning ────────────────────────── #}
+{% if inquiry.follow_up_date and inquiry.status not in TERMINAL %}
+  {% if inquiry.follow_up_date < today_date %}
+  <div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+              stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <div class="text-sm text-red-200">
+        Follow-up overdue since <strong>{{ inquiry.follow_up_date | date_id }}</strong>.
+      </div>
     </div>
   </div>
-  {% elif inquiry.follow_up_date == today %}
-  <div class="panel mb-4" style="border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.05);">
-    <div class="text-sm text-amber-300">
-      ⏰ Follow-up is due <strong>today</strong>.
+  {% elif inquiry.follow_up_date == today_date %}
+  <div class="panel mb-4" style="border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.06);">
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75" />
+        <path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+      </svg>
+      <div class="text-sm text-amber-200">Follow-up is due <strong>today</strong>.</div>
     </div>
   </div>
   {% endif %}
@@ -48,64 +97,65 @@
 <div class="grid lg:grid-cols-3 gap-6">
   <div class="lg:col-span-2 space-y-6">
 
-    {# The request #}
+    {# ── Request ──────────────────────────────── #}
     <div class="panel">
       <div class="panel-title">Request</div>
 
       <div class="grid sm:grid-cols-2 gap-4 mt-3">
         {% if inquiry.service_interest %}
         <div class="text-sm">
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Service</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Service</div>
           <div>{{ service_labels.get(inquiry.service_interest, inquiry.service_interest) }}</div>
         </div>
         {% endif %}
         <div class="text-sm">
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Custom graphics</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Custom graphics</div>
           <div>{% if inquiry.has_custom_graphics %}Yes{% else %}No{% endif %}</div>
         </div>
       </div>
 
       <div class="mt-4 text-sm">
-        <div class="text-neutral-500 text-xs uppercase tracking-wider">Description</div>
-        <p class="mt-1 whitespace-pre-line text-neutral-200">{{ inquiry.description }}</p>
+        <div class="text-noctra-dim text-xs uppercase tracking-wider">Description</div>
+        <p class="mt-1 whitespace-pre-line text-noctra-text leading-relaxed">{{ inquiry.description }}</p>
       </div>
 
       <div class="grid sm:grid-cols-3 gap-4 mt-5">
         <div class="text-sm">
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Color</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Color</div>
           <div class="flex items-center gap-2 mt-0.5">
             {% if inquiry.color_family %}
-              <span class="inline-block w-4 h-4 rounded-full border border-noctra-border"
-                    style="background: {{ color_swatch.get(inquiry.color_family, '#64748b') }};"></span>
+            <span class="inline-block w-4 h-4 rounded-full border border-noctra-border"
+                  style="background: {{ color_swatch.get(inquiry.color_family, '#64748b') }};"></span>
             {% endif %}
             <span>{{ inquiry.color_preference or '—' }}</span>
           </div>
           {% if inquiry.color_family %}
-            <div class="text-xs text-neutral-500 mt-0.5">
-              {{ color_labels.get(inquiry.color_family, inquiry.color_family) }}
-            </div>
+          <div class="text-xs text-noctra-dim mt-0.5">
+            {{ color_labels.get(inquiry.color_family, inquiry.color_family) }}
+          </div>
           {% endif %}
         </div>
         <div class="text-sm">
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Finish</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Finish</div>
           <div>{{ finish_labels.get(inquiry.finish_preference, inquiry.finish_preference) if inquiry.finish_preference else '—' }}</div>
         </div>
         <div class="text-sm">
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Budget</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Budget</div>
           <div>{{ budget_labels.get(inquiry.budget_range, inquiry.budget_range) if inquiry.budget_range else '—' }}</div>
         </div>
       </div>
 
       {% if inquiry.preferences %}
       <div class="mt-5 pt-5 border-t border-noctra-border">
-        <div class="text-neutral-500 text-xs uppercase tracking-wider mb-2">Additional preferences</div>
+        <div class="text-noctra-dim text-xs uppercase tracking-wider mb-2">Additional preferences</div>
         <dl class="grid grid-cols-2 gap-3 text-sm">
           {% for key, value in inquiry.preferences.items() %}
           <div>
-            <dt class="text-neutral-500 text-xs">{{ key.replace('_', ' ').title() }}</dt>
+            <dt class="text-noctra-dim text-xs">{{ key.replace('_', ' ').title() }}</dt>
             <dd>
               {% if value is sameas true %}Yes
               {% elif value is sameas false %}No
+              {% elif value is mapping %}{{ value | tojson }}
               {% elif value is iterable and value is not string %}{{ value | join(', ') }}
               {% else %}{{ value }}{% endif %}
             </dd>
@@ -116,70 +166,73 @@
       {% endif %}
     </div>
 
-    {# Logistics #}
+    {# ── Logistics ────────────────────────────── #}
     <div class="panel">
       <div class="panel-title">Logistics</div>
       <dl class="grid grid-cols-2 gap-4 mt-3 text-sm">
         <div>
-          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Desired date</dt>
-          <dd>{{ inquiry.desired_date.strftime('%d %b %Y') if inquiry.desired_date else '—' }}</dd>
+          <dt class="text-noctra-dim text-xs uppercase tracking-wider">Desired date</dt>
+          <dd>{{ inquiry.desired_date | date_id }}</dd>
         </div>
         <div>
-          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Follow-up</dt>
-          <dd class="{% if inquiry.follow_up_date and inquiry.follow_up_date < today and inquiry.status not in ('CONVERTED','LOST') %}text-red-400 font-medium{% endif %}">
-            {{ inquiry.follow_up_date.strftime('%d %b %Y') if inquiry.follow_up_date else '—' }}
+          <dt class="text-noctra-dim text-xs uppercase tracking-wider">Follow-up</dt>
+          <dd class="{% if inquiry.follow_up_date and inquiry.follow_up_date < today_date and inquiry.status not in TERMINAL %}text-red-400 font-medium{% endif %}">
+            {{ inquiry.follow_up_date | date_id }}
           </dd>
         </div>
         <div>
-          <dt class="text-neutral-500 text-xs uppercase tracking-wider">Last contacted</dt>
-          <dd>{{ inquiry.last_contacted_at | dt_id if inquiry.last_contacted_at else '—' }}</dd>
+          <dt class="text-noctra-dim text-xs uppercase tracking-wider">Last contacted</dt>
+          <dd>{{ inquiry.last_contacted_at | dt_id }}</dd>
         </div>
       </dl>
     </div>
 
-    {# Photos #}
+    {# ── Photos ───────────────────────────────── #}
     <div class="panel">
-      <div class="flex items-center justify-between">
-        <div class="panel-title">Photos</div>
-        {% if photos %}<span class="text-xs text-neutral-500">{{ photos|length }} attached</span>{% endif %}
+      <div class="flex items-center justify-between mb-3">
+        <div class="panel-title !mb-0">Photos</div>
+        {% if photos %}<span class="text-xs text-noctra-dim">{{ photos|length }} attached</span>{% endif %}
       </div>
       {% if photos %}
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {% for p in photos %}
         <div class="group relative aspect-square rounded-md border border-noctra-border overflow-hidden bg-noctra-surface2">
           <a href="{{ p.file_path }}" target="_blank" rel="noopener" class="block w-full h-full">
             <img src="{{ p.file_path }}" alt="{{ p.caption or 'Inquiry photo' }}"
-                 class="w-full h-full object-cover transition group-hover:scale-[1.02]" />
+                 class="w-full h-full object-cover transition group-hover:scale-[1.03]" loading="lazy" />
           </a>
           {% if p.is_primary %}
-            <span class="absolute top-1.5 left-1.5 badge badge-accent text-[10px]">Primary</span>
+          <span class="absolute top-1.5 left-1.5 badge badge-accent text-[10px]">Primary</span>
           {% endif %}
           {% if p.caption %}
-            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1 text-[11px] text-neutral-100 truncate">
-              {{ p.caption }}
-            </div>
+          <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 py-1 text-[11px] text-white truncate">
+            {{ p.caption }}
+          </div>
           {% endif %}
-          {% if inquiry.status not in ('CONVERTED', 'LOST') %}
+          {% if inquiry.status not in TERMINAL %}
           <form method="post" action="/admin/inquiries/{{ inquiry.id }}/photos/{{ p.id }}/delete"
-                class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition"
-                data-guard onsubmit="return confirm('Delete this photo?');">
-            <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-            <button class="btn btn-sm"
-                    style="background: rgba(0,0,0,0.6); color: white; padding: 2px 8px;"
-                    title="Delete photo">×</button>
+                class="absolute top-1.5 right-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                data-confirm="Delete this photo?" data-guard>
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+            <button type="submit" class="w-7 h-7 rounded-full grid place-items-center text-white"
+                    style="background: rgba(0,0,0,0.65);" aria-label="Delete photo">
+              <svg viewBox="0 0 24 24" fill="none" class="w-3.5 h-3.5">
+                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </button>
           </form>
           {% endif %}
         </div>
         {% endfor %}
       </div>
       {% else %}
-      <p class="text-neutral-500 text-sm mt-2">No photos attached yet.</p>
+      <p class="text-noctra-dim text-sm">No photos attached yet.</p>
       {% endif %}
 
-      {% if inquiry.status not in ('CONVERTED', 'LOST') %}
+      {% if inquiry.status not in TERMINAL %}
       <form method="post" action="/admin/inquiries/{{ inquiry.id }}/photos"
             class="mt-4 grid md:grid-cols-4 gap-3 items-end" data-guard>
-        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
         <div class="form-row !mb-0 md:col-span-2">
           <label class="form-label" for="photo_file_path">Image URL</label>
           <input class="input" id="photo_file_path" name="file_path" required maxlength="500"
@@ -191,42 +244,54 @@
         </div>
         <button class="btn btn-secondary btn-sm">Add photo</button>
       </form>
-      <p class="text-xs text-neutral-500 mt-2">File uploads arrive in Phase 2c. For now, paste a hosted image URL.</p>
+      <p class="text-xs text-noctra-dim mt-2">Paste a hosted image URL. File uploads arrive in Phase 2c.</p>
       {% endif %}
     </div>
 
-    {# Notes #}
+    {# ── Notes ────────────────────────────────── #}
     {% if inquiry.notes %}
     <div class="panel">
       <div class="panel-title">Staff notes</div>
-      <p class="text-neutral-300 mt-2 whitespace-pre-line text-sm">{{ inquiry.notes }}</p>
+      <p class="text-noctra-muted mt-2 whitespace-pre-line text-sm leading-relaxed">{{ inquiry.notes }}</p>
     </div>
     {% endif %}
 
     {% if inquiry.closing_note %}
     <div class="panel" style="border-color: rgba(239,68,68,0.3);">
       <div class="panel-title">Closing note</div>
-      <p class="text-neutral-300 mt-2 whitespace-pre-line text-sm">{{ inquiry.closing_note }}</p>
+      <p class="text-noctra-muted mt-2 whitespace-pre-line text-sm leading-relaxed">{{ inquiry.closing_note }}</p>
     </div>
     {% endif %}
 
-    {# Timeline #}
+    {# ── Timeline ──────────────────────────────── #}
     {% if timeline %}
     <div class="panel">
       <div class="panel-title">Activity</div>
-      <ol class="mt-3 space-y-3">
+      <ol class="mt-4 relative">
         {% for ev in timeline %}
-        <li class="flex gap-3 text-sm">
-          <span class="mt-1.5 inline-block w-1.5 h-1.5 rounded-full bg-noctra-accent flex-shrink-0"></span>
-          <div class="flex-1">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-neutral-300 font-medium">{{ ev.action }}</span>
-              <span class="text-xs text-neutral-500">{{ ev.created_at | dt_id if ev.created_at else '' }}</span>
+        {% set is_last = loop.last %}
+        <li class="relative pl-7 pb-4 {% if is_last %}!pb-0{% endif %} text-sm">
+          {% if not is_last %}
+          <span class="absolute left-[7px] top-[18px] -bottom-1 w-px bg-noctra-border" aria-hidden="true"></span>
+          {% endif %}
+          <span class="absolute left-0 top-[5px] inline-block w-[15px] h-[15px] rounded-full
+                       border-2 border-noctra-surface bg-noctra-accent" aria-hidden="true"></span>
+          <div class="min-w-0">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <span class="badge badge-xs {{ action_tone.get(ev.action, 'badge-neutral') }}">
+                {{ action_labels.get(ev.action, ev.action | replace('_', ' ') | title) }}
+              </span>
+              <span class="text-xs text-noctra-dim">
+                {{ ev.created_at | dt_id if ev.created_at else '' }}
+              </span>
             </div>
             {% if ev.new_data and ev.new_data.status %}
-              <div class="text-xs text-neutral-500">
-                status → <span class="text-neutral-300">{{ ev.new_data.status }}</span>
-              </div>
+            <div class="text-xs text-noctra-dim mt-1">
+              status →
+              <span class="text-noctra-text font-medium">
+                {{ status_labels.get(ev.new_data.status, ev.new_data.status) }}
+              </span>
+            </div>
             {% endif %}
           </div>
         </li>
@@ -237,25 +302,25 @@
 
   </div>
 
-  {# Sidebar #}
-  <aside class="space-y-6">
+  {# ── Sidebar ──────────────────────────────── #}
+  <aside class="space-y-6 lg:sticky lg:top-4 lg:self-start">
 
-    {# Convert to Project #}
+    {# Convert #}
     {% if inquiry.status == 'APPROVED' %}
     <div class="panel panel-accent">
       <div class="panel-title">Ready to start?</div>
-      <p class="text-xs text-neutral-500 mt-1">
-        This inquiry is approved. Convert it into a project to begin costing and execution.
+      <p class="text-xs text-noctra-dim mt-1">
+        This inquiry is approved. Convert it into a project to begin costing.
       </p>
       <form method="post" action="/admin/inquiries/{{ inquiry.id }}/convert"
             class="mt-3 space-y-3" data-guard
-            onsubmit="return confirm('Convert this inquiry into a project?');">
-        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+            data-confirm="Convert this inquiry into a project?">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
         <div class="form-row !mb-0">
           <label class="form-label" for="convert_price">Selling price (IDR)</label>
-          <input class="input" type="number" step="1000" min="0" id="convert_price"
-                 name="quoted_price" placeholder="e.g. 1800000" />
-          <div class="form-hint">Optional — you can also set it on the project page.</div>
+          <input class="input" type="number" step="1000" min="0"
+                 id="convert_price" name="quoted_price" placeholder="e.g. 1800000" />
+          <div class="form-hint">Optional — you can set it on the project page.</div>
         </div>
         <button class="btn btn-primary btn-sm btn-block">Convert to Project →</button>
       </form>
@@ -267,18 +332,17 @@
     <div class="panel" style="border-color: rgba(34,197,94,0.35);">
       <div class="panel-title">Project</div>
       {% if project %}
-      <p class="text-xs text-neutral-500 mt-1">This inquiry has been converted into a project.</p>
+      <p class="text-xs text-noctra-dim mt-1">This inquiry has been converted into a project.</p>
       <a href="/admin/projects/{{ project.id }}" class="btn btn-primary btn-sm btn-block mt-3">
         Open {{ project.code }} →
       </a>
-      <div class="text-xs text-neutral-500 mt-2">
-        Status: {{ project.status }}
-        {% if project.quoted_price %} · {{ project.quoted_price | rupiah }}{% endif %}
+      <div class="text-xs text-noctra-dim mt-2">
+        Status: {{ project.status | replace('_', ' ') | title }}
+        {% if project.quoted_price is not none %} · {{ project.quoted_price | rupiah }}{% endif %}
       </div>
       {% else %}
-      <p class="text-xs text-neutral-500 mt-1">
-        Inquiry is marked as CONVERTED but no project was found.
-        This shouldn't happen — check the audit log.
+      <p class="text-xs text-noctra-dim mt-1">
+        Inquiry is marked CONVERTED but no project was found. Check the audit log.
       </p>
       {% endif %}
     </div>
@@ -291,11 +355,34 @@
       <a href="/admin/customers/{{ customer.id }}" class="block mt-3 font-medium hover:text-noctra-accent">
         {{ customer.name }}
       </a>
-      <div class="mono text-xs text-neutral-500 mt-1">{{ customer.code }}</div>
-      {% if customer.phone %}<div class="text-xs text-neutral-500 mt-2">{{ customer.phone }}</div>{% endif %}
-      {% if customer.email %}<div class="text-xs text-neutral-500">{{ customer.email }}</div>{% endif %}
+      <div class="mono text-xs text-noctra-dim mt-1">{{ customer.code }}</div>
+
+      {% if customer.phone or customer.email %}
+      <div class="mt-3 space-y-1.5">
+        {% if customer.phone %}
+        <a href="tel:{{ customer.phone }}"
+           class="flex items-center gap-2 text-xs text-noctra-muted hover:text-noctra-accent transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+                  stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          {{ customer.phone }}
+        </a>
+        {% endif %}
+        {% if customer.email %}
+        <a href="mailto:{{ customer.email }}"
+           class="flex items-center gap-2 text-xs text-noctra-muted hover:text-noctra-accent transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.75" />
+            <path d="M3 7l9 6 9-6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          {{ customer.email }}
+        </a>
+        {% endif %}
+      </div>
+      {% endif %}
       {% else %}
-      <p class="text-neutral-500 text-sm mt-2">No customer linked yet.</p>
+      <p class="text-noctra-dim text-sm mt-2">No customer linked yet.</p>
       {% endif %}
     </div>
 
@@ -307,25 +394,25 @@
         {{ vehicle.brand }} {{ vehicle.model }}
       </a>
       {% if vehicle.plate_number %}
-      <div class="mono text-xs text-neutral-500 mt-1">{{ vehicle.plate_number }}</div>
+      <div class="mono text-xs text-noctra-dim mt-1">{{ vehicle.plate_number }}</div>
       {% endif %}
-      {% if vehicle.year %}<div class="text-xs text-neutral-500">{{ vehicle.year }}</div>{% endif %}
+      {% if vehicle.year %}<div class="text-xs text-noctra-dim">{{ vehicle.year }}</div>{% endif %}
       {% else %}
-      <p class="text-neutral-500 text-sm mt-2">No vehicle linked yet.</p>
+      <p class="text-noctra-dim text-sm mt-2">No vehicle linked yet.</p>
       {% endif %}
     </div>
 
     {# Assignment #}
     <div class="panel">
       <div class="panel-title">Assignment</div>
-      {% if inquiry.status not in ('CONVERTED', 'LOST') %}
-      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/assign"
-            class="mt-3 space-y-3" data-guard>
-        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-        <select class="select" name="assigned_to_id">
+      {% if inquiry.status not in TERMINAL %}
+      <form method="post" action="/admin/inquiries/{{ inquiry.id }}/assign" class="mt-3 space-y-3" data-guard>
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+        <select class="select" name="assigned_to_id" aria-label="Assign to">
           <option value="">Unassigned</option>
           {% for u in assignees %}
-          <option value="{{ u.id }}" {% if inquiry.assigned_to_id == u.id %}selected{% endif %}>
+          <option value="{{ u.id }}"
+                  {% if inquiry.assigned_to_id and inquiry.assigned_to_id|string == u.id|string %}selected{% endif %}>
             {{ u.full_name }}
           </option>
           {% endfor %}
@@ -333,10 +420,10 @@
         <button class="btn btn-secondary btn-sm btn-block">Update</button>
       </form>
       {% else %}
-      <p class="text-neutral-500 text-sm mt-2">
+      <p class="text-noctra-muted text-sm mt-2">
         {% if assignee %}{{ assignee.full_name }}{% else %}Unassigned{% endif %}
       </p>
-      <p class="text-xs text-neutral-500 mt-1">Closed inquiries can't be reassigned.</p>
+      <p class="text-xs text-noctra-dim mt-1">Closed inquiries can't be reassigned.</p>
       {% endif %}
     </div>
 
@@ -344,22 +431,25 @@
     {% if next_statuses %}
     <div class="panel">
       <div class="panel-title">Advance workflow</div>
-      <p class="text-xs text-neutral-500 mt-1">
-        From <strong>{{ inquiry.status }}</strong>, allowed next:
+      <p class="text-xs text-noctra-dim mt-1">
+        From <strong class="text-noctra-text">{{ status_labels.get(inquiry.status, inquiry.status) }}</strong>,
+        allowed next:
       </p>
       <form method="post" action="/admin/inquiries/{{ inquiry.id }}/status"
-            class="mt-3 space-y-3" data-guard x-data="{ target: '' }">
-        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-        <select class="select" name="status" x-model="target">
+            class="mt-3 space-y-3" data-guard data-status-form>
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+        <select class="select" name="status" data-status-select>
           {% for s in next_statuses %}
-            {% if s != 'CONVERTED' %}
-              <option value="{{ s }}">{{ s }}</option>
-            {% endif %}
+          {% if s != 'CONVERTED' %}
+          <option value="{{ s }}">{{ status_labels.get(s, s) }}</option>
+          {% endif %}
           {% endfor %}
         </select>
 
-        <div x-show="target === 'LOST'" x-cloak>
-          <label class="form-label" for="closing_note">Closing note (required for LOST)</label>
+        <div data-lost-note hidden>
+          <label class="form-label" for="closing_note">
+            Closing note <span class="req">*</span>
+          </label>
           <textarea class="textarea" id="closing_note" name="closing_note" rows="2"
                     placeholder="Why was this inquiry lost?"></textarea>
         </div>
@@ -372,7 +462,7 @@
     {# Metadata #}
     <div class="panel">
       <div class="panel-title">Record</div>
-      <div class="mt-3 text-xs text-neutral-500 space-y-1">
+      <div class="mt-3 text-xs text-noctra-dim space-y-1">
         <div>Created {{ inquiry.created_at | dt_id }}</div>
         <div>Updated {{ inquiry.updated_at | dt_id }}</div>
       </div>
@@ -380,4 +470,50 @@
 
   </aside>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  // Copy-to-clipboard with error feedback
+  document.querySelectorAll('[data-copy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(btn.dataset.copy);
+        } else {
+          // Fallback for non-secure context
+          const ta = document.createElement('textarea');
+          ta.value = btn.dataset.copy;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" class="!w-3.5 !h-3.5" style="color:#4ade80"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        setTimeout(() => (btn.innerHTML = orig), 1200);
+      } catch (_) {
+        // Silent fail — user can copy manually
+      }
+    });
+  });
+
+  // Toggle "closing note" field when status = LOST
+  document.querySelectorAll('[data-status-form]').forEach((form) => {
+    const sel = form.querySelector('[data-status-select]');
+    const note = form.querySelector('[data-lost-note]');
+    if (!sel || !note) return;
+    const sync = () => {
+      note.hidden = sel.value !== 'LOST';
+      const ta = note.querySelector('textarea');
+      if (ta) ta.required = sel.value === 'LOST';
+    };
+    sync();
+    sel.addEventListener('change', sync);
+  });
+})();
+</script>
 {% endblock %}

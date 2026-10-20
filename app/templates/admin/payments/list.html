@@ -1,54 +1,148 @@
 {% extends "admin/base.html" %}
-{% include "components/pagination.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% set has_filters = q or direction_filter %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
 
 {% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">Payments</h1><p class="page-subtitle">{{ page_meta.total }} total</p></div>
-  <div class="page-actions">
+  <div>
+    <h1 class="page-title">Payments</h1>
+    <p class="page-subtitle">
+      {{ page_meta.total }} total
+      {% if has_filters %}· <span class="text-noctra-muted">filtered</span>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions flex gap-2">
     <a href="/admin/payments/new?direction=IN" class="btn btn-primary btn-sm">Record payment in</a>
     <a href="/admin/payments/new?direction=OUT" class="btn btn-secondary btn-sm">Record payment out</a>
   </div>
 </div>
 
-<div class="mb-4 flex flex-wrap gap-2">
-  <a href="/admin/payments" class="badge {% if not direction_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
-  <a href="/admin/payments?direction=IN" class="badge {% if direction_filter == 'IN' %}badge-accent{% else %}badge-neutral{% endif %}">Money in</a>
-  <a href="/admin/payments?direction=OUT" class="badge {% if direction_filter == 'OUT' %}badge-accent{% else %}badge-neutral{% endif %}">Money out</a>
+{# ── Filter chips ───────────────────────────────────── #}
+<div class="mb-4 overflow-x-auto pb-1">
+  <div class="flex gap-2 items-center w-max">
+    <a href="/admin/payments"
+       class="badge whitespace-nowrap {% if not direction_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
+    <a href="/admin/payments?direction=IN"
+       class="badge whitespace-nowrap {% if direction_filter == 'IN' %}badge-accent{% else %}badge-neutral{% endif %}">Money in</a>
+    <a href="/admin/payments?direction=OUT"
+       class="badge whitespace-nowrap {% if direction_filter == 'OUT' %}badge-accent{% else %}badge-neutral{% endif %}">Money out</a>
+  </div>
 </div>
 
+{# ── Toolbar ──────────────────────────────────────── #}
 {% if rows %}
-<div class="table-wrap">
-  <table class="table">
-    <thead>
-      <tr><th>Code</th><th>Date</th><th>Direction</th><th>Party</th><th>Method</th><th>Reference</th><th class="text-right">Amount</th><th></th></tr>
-    </thead>
-    <tbody>
-      {% for r in rows %}
-      {% set p = r.payment %}
-      <tr>
-        <td class="mono text-xs">{{ p.code }}</td>
-        <td class="text-xs">{{ p.payment_date.strftime('%d %b %Y') }}</td>
-        <td>
-          {% if p.direction == 'IN' %}<span class="badge badge-success">IN</span>
-          {% else %}<span class="badge badge-danger">OUT</span>{% endif %}
-        </td>
-        <td class="text-sm">
-          {% if r.customer %}{{ r.customer.name }}
-          {% elif r.supplier %}{{ r.supplier.name }}
-          {% else %}<span class="text-neutral-500">—</span>{% endif %}
-        </td>
-        <td class="text-xs">{{ payment_method_labels.get(p.method, p.method) }}</td>
-        <td class="text-xs text-neutral-500">{{ p.reference_number or '—' }}</td>
-        <td class="text-right font-mono text-sm {% if p.direction == 'IN' %}text-noctra-success{% else %}text-noctra-danger{% endif %}">
-          {{ p.amount | rupiah }}
-        </td>
-        <td class="text-right"><a href="/admin/payments/{{ p.id }}" class="btn btn-ghost btn-sm">View</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+  </div>
+
+  <form method="get" class="per-page-form">
+    {% for k, v in request.query_params.items() %}
+      {% if k not in ('per_page', 'page') and v %}<input type="hidden" name="{{ k }}" value="{{ v }}" />{% endif %}
+    {% endfor %}
+    <label for="per_page_pay">Show</label>
+    <select id="per_page_pay" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
 </div>
+{% endif %}
+
+{% if rows %}
+
+{# ── Desktop table ──────────────────────────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table w-full">
+      <thead>
+        <tr>
+          <th class="text-left w-24">Code</th>
+          <th class="text-left w-24">Date</th>
+          <th class="text-left w-16">Dir</th>
+          <th class="text-left">Party</th>
+          <th class="text-left">Method</th>
+          <th class="text-left">Reference</th>
+          <th class="text-right w-32">Amount</th>
+          <th class="text-right w-16"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        {% set p = r.payment %}
+        <tr>
+          <td class="mono text-xs text-left">{{ p.code }}</td>
+          <td class="text-xs text-noctra-dim text-left">{{ p.payment_date.strftime('%d %b %Y') }}</td>
+          <td class="text-left">
+            {% if p.direction == 'IN' %}<span class="badge badge-success">IN</span>
+            {% else %}<span class="badge badge-danger">OUT</span>{% endif %}
+          </td>
+          <td class="text-sm text-left">
+            {% if r.customer %}{{ r.customer.name }}
+            {% elif r.supplier %}{{ r.supplier.name }}
+            {% else %}<span class="text-noctra-dim">—</span>{% endif %}
+          </td>
+          <td class="text-xs text-left">{{ payment_method_labels.get(p.method, p.method) }}</td>
+          <td class="text-xs text-noctra-dim text-left">
+            {% if p.reference_type %}<span class="badge badge-neutral badge-xs">{{ p.reference_type }}</span>{% endif %}
+            {{ p.reference_number or '' }}
+          </td>
+          <td class="text-right font-mono text-sm {% if p.direction == 'IN' %}text-emerald-400{% else %}text-red-400{% endif %}">
+            {% if p.direction == 'IN' %}+{% else %}−{% endif %}{{ p.amount | rupiah }}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/payments/{{ p.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Mobile cards ───────────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for r in rows %}
+  {% set p = r.payment %}
+  <a href="/admin/payments/{{ p.id }}" class="block panel !p-4 active:scale-[0.995] transition">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <span class="mono text-xs text-noctra-dim">{{ p.code }}</span>
+      <span class="badge {% if p.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %} shrink-0">
+        {{ p.direction }}
+      </span>
+    </div>
+    <div class="font-medium text-sm">
+      {% if r.customer %}{{ r.customer.name }}{% elif r.supplier %}{{ r.supplier.name }}{% else %}Unknown{% endif %}
+    </div>
+    <div class="flex items-end justify-between mt-3">
+      <div class="text-xs text-noctra-muted space-y-0.5">
+        <div>{{ p.payment_date.strftime('%d %b %Y') }}</div>
+        <div>{{ payment_method_labels.get(p.method, p.method) }}</div>
+      </div>
+      <div class="font-mono text-sm font-semibold {% if p.direction == 'IN' %}text-emerald-400{% else %}text-red-400{% endif %}">
+        {% if p.direction == 'IN' %}+{% else %}−{% endif %}{{ p.amount | rupiah }}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+{% include "components/pagination.html" %}
+
 {% else %}
-<div class="panel text-center py-16"><p class="text-neutral-400">No payments yet.</p></div>
+{{ empty_state(
+  title='No payments found',
+  message='Record a payment to get started.',
+  action_url='/admin/payments/new',
+  action_label='Record Payment',
+  icon='plus'
+) }}
 {% endif %}
 {% endblock %}

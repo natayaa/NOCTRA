@@ -13,11 +13,13 @@
   </a>
 {% endmacro %}
 
-<aside class="admin-sidebar" aria-label="Admin navigation">
+<aside class="admin-sidebar" id="admin-sidebar" aria-label="Admin navigation">
   <div class="sidebar-brand">
     <span class="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M6 6l12 12M18 6L6 18"/>
+      {# Monogram "N" #}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 20V4L19 20V4"/>
       </svg>
     </span>
     <span class="brand-text">
@@ -30,55 +32,56 @@
 
     <div class="sidebar-section-label">Main</div>
     {{ navlink('/admin/dashboard', 'Dashboard',
-       'M3 12l9-9 9 9M5 10v10h14V10') }}
+       'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z') }}
     {{ navlink('/admin/inquiries', 'Inquiries',
-       'M4 5h16v12H7l-3 3V5Z') }}
+       'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z') }}
     {{ navlink('/admin/customers', 'Customers',
-       'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0') }}
+       'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm14 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75') }}
     {{ navlink('/admin/vehicles', 'Vehicles',
-       'M5 17h14M6 13l2-5h8l2 5M7 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm14 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z') }}
+       'M5 17h14M6 13l2-5h8l2 5M7 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm14 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z') }}
     {{ navlink('/admin/projects', 'Projects',
-       'M4 7h16v10H4zM9 7V5h6v2') }}
+       'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z') }}
 
     <div class="sidebar-section-label">Workshop</div>
     {{ navlink('/admin/inventory', 'Inventory',
-       'M4 7l8-4 8 4v10l-8 4-8-4V7Zm0 0 8 4 8-4M12 11v10') }}
+       'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.27 6.96 12 12.01l8.73-5.05M12 22.08V12') }}
     {{ navlink('/admin/materials', 'Materials',
-       'M4 7l8-4 8 4v10l-8 4-8-4V7Zm0 0 8 4 8-4M12 11v10') }}
+       'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5') }}
     {{ navlink('/admin/purchase-orders', 'Purchase Orders',
-       'M5 5h14v14H5zM8 9h8M8 13h5') }}
+       'M9 22a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm11 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6') }}
     {{ navlink('/admin/suppliers', 'Suppliers',
-       'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0') }}
+       'M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm13 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z') }}
     {{ navlink('/admin/employees', 'Employees',
-       'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0') }}
+       'M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17 11l2 2 4-4') }}
 
     <div class="sidebar-section-label">Finance</div>
     {{ navlink('/admin/invoices', 'Invoices',
-       'M7 3v18M17 3v18M3 8h18M3 16h18') }}
+       'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8') }}
     {{ navlink('/admin/payments', 'Payments',
-       'M3 12h4l3-9 4 18 3-9h4') }}
+       'M21 4H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM1 10h22') }}
     {{ navlink('/admin/expenses', 'Expenses',
-       'M12 3v18M3 9h18M3 15h18') }}
+       'M4 2v20l4-2 4 2 4-2 4 2V2l-4 2-4-2-4 2zM8 8h8M8 12h8M8 16h5') }}
     {{ navlink('/admin/reports/pnl', 'P&L Report',
-       'M3 3v18h18M7 15l4-4 3 3 5-6') }}
+       'M18 20V10M12 20V4M6 20v-6') }}
     {{ navlink('/admin/pricing-rules', 'Pricing Rules',
-       'M12 2v20M2 12h20M7 7l10 10M17 7 7 17') }}
+       'M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01') }}
     {{ navlink('/admin/pricing-analytics', 'Pricing Analytics',
-       'M3 12h4l3-9 4 18 3-9h4') }}
+       'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6') }}
 
     <div class="sidebar-section-label">System</div>
     {{ navlink('/admin/users', 'Users',
-       'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0') }}
+       'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z') }}
     {{ navlink('/admin/roles', 'Roles',
-       'M12 3l8 4v5c0 5-3.5 8.5-8 9.5C7.5 20.5 4 17 4 12V7l8-4Z') }}
+       'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z') }}
     {{ navlink('/admin/audit', 'Audit Log',
-       'M5 5h14v14H5zM8 9h8M8 13h5') }}
+       'M22 12h-4l-3 9L9 3l-3 9H2') }}
     {{ navlink('/admin/settings', 'Settings',
-       'M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 0v9M12 3v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M19.8 7.5l-2.6 1.5M6.8 15l-2.6 1.5') }}
+       'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z') }}
 
   </nav>
 
   <div class="sidebar-footer">
-    v0.1.0 · Phase 7
+    <span>v0.1.0 · Phase 7</span>
+    <span class="sidebar-status" aria-label="System operational" title="System operational"></span>
   </div>
 </aside>

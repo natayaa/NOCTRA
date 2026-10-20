@@ -4,16 +4,22 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.logging import log
+from app.core.config import settings
 from app.core.constants import AuditAction
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.logging import log
+from app.core.pagination import PageMeta, PageParams, paginate
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
+from app.modules.auth.repository import UserRepository
 from app.modules.customers.repository import CustomerRepository
 from app.modules.inquiries.constants import (
     ALLOWED_TRANSITIONS,
+    CONTACT_IMPLYING_STATUSES,
+    MAX_PHOTOS_PER_INQUIRY,
     TERMINAL_STATUSES,
     InquiryStatus,
 )
@@ -44,10 +50,13 @@ class InquiryService:
         self.repo = InquiryRepository(db)
         self.customers = CustomerRepository(db)
         self.vehicles = VehicleRepository(db)
+        self.users = UserRepository(db)
         self.audit = AuditService(db)
 
     # ── Create ────────────────────────────────────────
-    async def create(self, payload: InquiryCreate, *, actor: User | None = None) -> Inquiry:
+    async def create(
+        self, payload: InquiryCreate, *, actor: User | None = None
+    ) -> Inquiry:
         if payload.customer_id and not await self.customers.get(payload.customer_id):
             raise NotFoundError("Customer not found")
         if payload.vehicle_id and not await self.vehicles.get(payload.vehicle_id):
@@ -78,16 +87,24 @@ class InquiryService:
             table_name="inquiries",
             record_id=inquiry.id,
             user_id=actor.id if actor else None,
-            new_data={"code": inquiry.code, "status": inquiry.status, "source": inquiry.source},
+            new_data={
+                "code": inquiry.code,
+                "status": inquiry.status,
+                "source": inquiry.source,
+            },
         )
         return inquiry
 
     # ── Update ────────────────────────────────────────
-    async def update(self, inquiry_id: UUID, payload: InquiryUpdate, *, actor: User) -> Inquiry:
+    async def update(
+        self, inquiry_id: UUID, payload: InquiryUpdate, *, actor: User
+    ) -> Inquiry:
         inquiry = await self._get_or_404(inquiry_id)
 
         if inquiry.status in TERMINAL_STATUSES:
-            raise ConflictError(f"Cannot edit inquiry in terminal state {inquiry.status}")
+            raise ConflictError(
+                f"Cannot edit inquiry in terminal state {inquiry.status}"
+            )
 
         before = self._snapshot(inquiry)
         fields = payload.model_fields_set
@@ -102,6 +119,12 @@ class InquiryService:
                 raise NotFoundError("Vehicle not found")
             inquiry.vehicle_id = payload.vehicle_id
 
+        # `has_custom_graphics` is NOT NULL in DB — reject explicit null.
+        # Schema validator covers this; defence in depth for direct service use.
+        if "has_custom_graphics" in fields:
+            if payload.has_custom_graphics is None:
+                raise ValidationError("has_custom_graphics cannot be null")
+
         for field in (
             "service_interest", "description", "color_preference",
             "color_family", "finish_preference", "has_custom_graphics",
@@ -109,7 +132,11 @@ class InquiryService:
             "follow_up_date", "notes",
         ):
             if field in fields:
-                setattr(inquiry, field, getattr(payload, field))
+                value = getattr(payload, field)
+                # Normalise description like create does.
+                if field == "description" and value is not None:
+                    value = value.strip()
+                setattr(inquiry, field, value)
 
         await self.db.flush()
 
@@ -126,10 +153,21 @@ class InquiryService:
         return inquiry
 
     # ── Assign ────────────────────────────────────────
-    async def assign(self, inquiry_id: UUID, assignee_id: UUID | None, *, actor: User) -> Inquiry:
+    async def assign(
+        self, inquiry_id: UUID, assignee_id: UUID | None, *, actor: User
+    ) -> Inquiry:
         inquiry = await self._get_or_404(inquiry_id)
         if inquiry.status in TERMINAL_STATUSES:
             raise ConflictError("Cannot reassign a closed inquiry")
+
+        # Validate assignee exists and is active — otherwise the FK write
+        # would surface as a 500 IntegrityError.
+        if assignee_id is not None:
+            user = await self.users.get(assignee_id)
+            if not user:
+                raise NotFoundError("Assignee not found")
+            if not user.is_active:
+                raise ConflictError("Cannot assign to an inactive user")
 
         before = inquiry.assigned_to_id
         inquiry.assigned_to_id = assignee_id
@@ -160,13 +198,19 @@ class InquiryService:
         if target not in allowed:
             raise ConflictError(
                 f"Cannot move inquiry from {current} to {target}",
-                context={"current": current, "target": target, "allowed": sorted(allowed)},
+                context={
+                    "current": current,
+                    "target": target,
+                    "allowed": sorted(allowed),
+                },
             )
 
         if target == InquiryStatus.LOST.value and not payload.closing_note:
-            raise ValidationError("A closing note is required when marking an inquiry as LOST")
+            raise ValidationError(
+                "A closing note is required when marking an inquiry as LOST"
+            )
 
-        # CONVERTED delegates to the conversion workflow
+        # CONVERTED delegates to the conversion workflow.
         if target == InquiryStatus.CONVERTED.value:
             inquiry, _ = await self.convert_to_project(inquiry_id, actor=actor)
             if payload.closing_note:
@@ -175,8 +219,16 @@ class InquiryService:
             return inquiry
 
         inquiry.status = target
-        if current == InquiryStatus.NEW.value:
-            inquiry.last_contacted_at = datetime.now(UTC)
+
+        # Refresh `last_contacted_at` whenever the transition implies
+        # real contact. Config flag preserves the legacy NEW-only path.
+        if settings.INQUIRY_TRACK_CONTACT_ON_TRANSITION:
+            if target in CONTACT_IMPLYING_STATUSES:
+                inquiry.last_contacted_at = datetime.now(UTC)
+        else:
+            if current == InquiryStatus.NEW.value and target == InquiryStatus.CONTACTED.value:
+                inquiry.last_contacted_at = datetime.now(UTC)
+
         if "closing_note" in payload.model_fields_set:
             inquiry.closing_note = payload.closing_note
 
@@ -192,7 +244,6 @@ class InquiryService:
         return inquiry
 
     async def mark_contacted(self, inquiry_id: UUID, *, actor: User) -> Inquiry:
-        # Guard: only NEW → CONTACTED via this shortcut
         inquiry = await self._get_or_404(inquiry_id)
         if inquiry.status != InquiryStatus.NEW.value:
             raise ConflictError(
@@ -205,8 +256,20 @@ class InquiryService:
         )
 
     # ── Photos ────────────────────────────────────────
-    async def add_photo(self, inquiry_id: UUID, payload: InquiryPhotoIn, *, actor: User) -> InquiryPhoto:
+    async def add_photo(
+        self, inquiry_id: UUID, payload: InquiryPhotoIn, *, actor: User
+    ) -> InquiryPhoto:
         inquiry = await self._get_or_404(inquiry_id)
+
+        if inquiry.status in TERMINAL_STATUSES:
+            raise ConflictError(
+                f"Cannot add photos to inquiry in terminal state {inquiry.status}"
+            )
+
+        if len(inquiry.photos or []) >= MAX_PHOTOS_PER_INQUIRY:
+            raise ConflictError(
+                f"Maximum {MAX_PHOTOS_PER_INQUIRY} photos per inquiry reached"
+            )
 
         if payload.is_primary:
             for existing in await self.repo.list_photos(inquiry_id):
@@ -230,18 +293,22 @@ class InquiryService:
         )
         return photo
 
-    async def delete_photo(self, photo_id: UUID, *, actor: User) -> None:
+    async def delete_photo(
+        self, inquiry_id: UUID, photo_id: UUID, *, actor: User
+    ) -> None:
+        """Delete a photo, verifying it belongs to the given inquiry."""
         photo = await self.db.get(InquiryPhoto, photo_id)
-        if not photo:
+        if not photo or photo.inquiry_id != inquiry_id:
             raise NotFoundError("Photo not found")
-        inquiry_id = photo.inquiry_id
+
+        old_data = {"inquiry_id": str(inquiry_id), "file_path": photo.file_path}
         await self.repo.delete_photo(photo)
         await self.audit.log(
             action=AuditAction.DELETE,
             table_name="inquiry_photos",
             record_id=photo_id,
             user_id=actor.id,
-            old_data={"inquiry_id": str(inquiry_id), "file_path": photo.file_path},
+            old_data=old_data,
         )
 
     # ── Convert to project ────────────────────────────
@@ -253,12 +320,20 @@ class InquiryService:
         quoted_price: float | None = None,
         approved_price: float | None = None,
     ) -> tuple[Inquiry, "Project"]:
-        from app.modules.projects.service import ProjectService
+        from app.modules.projects.service import ProjectService  # noqa: F401
+
+        # Serialise concurrent conversions of the same inquiry. Released
+        # at transaction end — same pattern as `next_code()`.
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": f"inquiry-convert:{inquiry_id}"},
+        )
 
         inquiry = await self._get_or_404(inquiry_id)
         if inquiry.status != InquiryStatus.APPROVED.value:
             raise ConflictError(
-                f"Cannot convert an inquiry in status '{inquiry.status}'. Move it to APPROVED first."
+                f"Cannot convert an inquiry in status '{inquiry.status}'. "
+                f"Move it to APPROVED first."
             )
 
         project = await ProjectService(self.db).create_from_inquiry(
@@ -283,34 +358,59 @@ class InquiryService:
                 "project_code": project.code,
             },
         )
-        log.info("inquiry_converted", inquiry_code=inquiry.code, project_code=project.code)
+        log.info(
+            "inquiry_converted",
+            inquiry_code=inquiry.code,
+            project_code=project.code,
+        )
         return inquiry, project
 
     # ── Timeline ──────────────────────────────────────
-    async def get_timeline(self, inquiry_id: UUID, limit: int = 30) -> list[dict]:
-        """Best-effort activity feed from the audit log."""
-        try:
-            from app.modules.audit.models import AuditLog  # type: ignore
-        except Exception:  # audit model not exposed publicly
-            return []
-        from sqlalchemy import select
+    async def get_timeline(
+        self, inquiry_id: UUID, params: PageParams
+    ) -> tuple[list[dict], PageMeta]:
+        """
+        Paginated activity feed from the audit log, with user names enriched
+        in one batch query. Ordered newest-first with a stable `id` tiebreaker
+        so deep pagination does not drift.
+        """
+        from sqlalchemy import select as _select
+
+        from app.modules.audit.models import AuditLog
+
+        # Existence check — return 404 for ghost UUIDs instead of empty page.
+        await self._get_or_404(inquiry_id)
+
         stmt = (
-            select(AuditLog)
-            .where(AuditLog.table_name == "inquiries", AuditLog.record_id == str(inquiry_id))
-            .order_by(AuditLog.created_at.desc())
-            .limit(limit)
+            _select(AuditLog)
+            .where(AuditLog.table_name == "inquiries")
+            .where(AuditLog.record_id == str(inquiry_id))
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
         )
-        rows = (await self.db.execute(stmt)).scalars().all()
-        return [
+        rows, meta = await paginate(self.db, stmt, params)
+
+        # Batch-fetch user names for the current page only.
+        user_ids = {r.user_id for r in rows if r.user_id}
+        users: dict[UUID, str] = {}
+        if user_ids:
+            u_rows = await self.db.execute(
+                _select(User.id, User.full_name).where(User.id.in_(user_ids))
+            )
+            users = {uid: name for uid, name in u_rows.all()}
+
+        items = [
             {
-                "action": getattr(r, "action", None),
-                "user_id": getattr(r, "user_id", None),
-                "old_data": getattr(r, "old_data", None),
-                "new_data": getattr(r, "new_data", None),
-                "created_at": getattr(r, "created_at", None),
+                "id": r.id,
+                "action": r.action,
+                "user_id": r.user_id,
+                "user_name": users.get(r.user_id) if r.user_id else None,
+                "old_data": r.old_data,
+                "new_data": r.new_data,
+                "created_at": r.created_at,
             }
             for r in rows
         ]
+        return items, meta
 
     # ── Helpers ───────────────────────────────────────
     async def _get_or_404(self, inquiry_id: UUID) -> Inquiry:

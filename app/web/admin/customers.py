@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime
+from urllib.parse import urlencode, quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -10,8 +11,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
 from app.modules.auth.dependencies import get_current_user
 from app.modules.customers.constants import (
@@ -22,24 +24,27 @@ from app.modules.customers.constants import (
     CUSTOMER_STATUSES,
     STATUS_TONE,
 )
+from app.modules.inquiries.constants import (
+    INQUIRY_STATUS_LABELS,
+    SERVICE_INTEREST_LABELS,
+    STATUS_TONE as INQ_STATUS_TONE,
+)
 from app.modules.customers.repository import CustomerRepository
 from app.modules.customers.schemas import (
     CustomerContactIn,
     CustomerCreate,
     CustomerUpdate,
 )
+
 from app.modules.customers.service import CustomerService
 from app.modules.vehicles.repository import VehicleRepository
+from app.web.admin._perms import read, write
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin/customers", tags=["admin-customers"])
 
 _FORM_ERRORS = (AppError, PydanticValidationError, ValueError, KeyError)
 
-
-# ════════════════════════════════════════════════════════════════
-# HELPERS
-# ════════════════════════════════════════════════════════════════
 
 def _catalog_context() -> dict:
     return {
@@ -53,8 +58,6 @@ def _catalog_context() -> dict:
 
 
 def _qs_factory(q, status_, is_active, source, sort):
-    from urllib.parse import urlencode
-
     def _qs(**overrides) -> str:
         base = {
             "q": q or "",
@@ -69,8 +72,12 @@ def _qs_factory(q, status_, is_active, source, sort):
     return _qs
 
 
+def _form_error(exc: Exception) -> str:
+    return (getattr(exc, "message", None) or str(exc) or "Invalid input").strip()
+
+
 # ════════════════════════════════════════════════════════════════
-# LIST
+# LIST + EXPORT
 # ════════════════════════════════════════════════════════════════
 
 @router.get("", response_class=HTMLResponse)
@@ -83,6 +90,7 @@ async def list_view(
     is_active: bool | None = Query(None),
     source: str | None = Query(None),
     sort: str = Query("created_desc"),
+    _=read(PermissionCode.CUSTOMER_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     repo = CustomerRepository(db)
@@ -112,10 +120,6 @@ async def list_view(
     )
 
 
-# ════════════════════════════════════════════════════════════════
-# EXPORT CSV
-# ════════════════════════════════════════════════════════════════
-
 @router.get("/export.csv")
 async def export_csv(
     db: DbSession,
@@ -123,6 +127,7 @@ async def export_csv(
     status_: str | None = Query(None, alias="status"),
     is_active: bool | None = Query(None),
     source: str | None = Query(None),
+    _=read(PermissionCode.CUSTOMER_READ),
     current=Depends(get_current_user),
 ):
     stmt = CustomerRepository(db).query(
@@ -160,7 +165,11 @@ async def export_csv(
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/new", response_class=HTMLResponse)
-async def new_view(request: Request, current=Depends(get_current_user)) -> HTMLResponse:
+async def new_view(
+    request: Request,
+    _=write(PermissionCode.CUSTOMER_WRITE),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
     return templates.render(
         request,
         "admin/customers/form.html",
@@ -174,28 +183,15 @@ async def new_view(request: Request, current=Depends(get_current_user)) -> HTMLR
 
 
 @router.post("")
-async def create_submit(request: Request, db: DbSession, current=Depends(get_current_user)):
+async def create_submit(
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.CUSTOMER_WRITE),
+    current=Depends(get_current_user),
+):
     form = await request.form()
-    payload = CustomerCreate(
-        name=(form.get("name") or "").strip(),
-        email=(form.get("email") or "").strip() or None,
-        phone=(form.get("phone") or "").strip() or None,
-        alt_phone=(form.get("alt_phone") or "").strip() or None,
-        address_line1=(form.get("address_line1") or "").strip() or None,
-        address_line2=(form.get("address_line2") or "").strip() or None,
-        city=(form.get("city") or "").strip() or None,
-        province=(form.get("province") or "").strip() or None,
-        postal_code=(form.get("postal_code") or "").strip() or None,
-        country=(form.get("country") or "Indonesia").strip(),
-        tax_id=(form.get("tax_id") or "").strip() or None,
-        notes=(form.get("notes") or "").strip() or None,
-        source=(form.get("source") or "").strip() or None,
-    )
 
-    try:
-        customer = await CustomerService(db).create(payload, actor=current)
-    except _FORM_ERRORS as exc:
-        await db.rollback()
+    def _render_error(msg: str, status_code: int = 400):
         return templates.render(
             request,
             "admin/customers/form.html",
@@ -203,14 +199,35 @@ async def create_submit(request: Request, db: DbSession, current=Depends(get_cur
                 "title": "New Customer",
                 "mode": "create",
                 "customer": None,
-                "error": getattr(exc, "message", str(exc)),
+                "error": msg,
                 "form_values": dict(form),
                 **_catalog_context(),
             },
-            status_code=getattr(exc, "status_code", 400),
+            status_code=status_code,
         )
 
-    await db.commit()
+    try:
+        payload = CustomerCreate(
+            name=(form.get("name") or "").strip(),
+            email=(form.get("email") or "").strip() or None,
+            phone=(form.get("phone") or "").strip() or None,
+            alt_phone=(form.get("alt_phone") or "").strip() or None,
+            address_line1=(form.get("address_line1") or "").strip() or None,
+            address_line2=(form.get("address_line2") or "").strip() or None,
+            city=(form.get("city") or "").strip() or None,
+            province=(form.get("province") or "").strip() or None,
+            postal_code=(form.get("postal_code") or "").strip() or None,
+            country=(form.get("country") or "Indonesia").strip(),
+            tax_id=(form.get("tax_id") or "").strip() or None,
+            notes=(form.get("notes") or "").strip() or None,
+            source=(form.get("source") or "").strip() or None,
+        )
+        customer = await CustomerService(db).create(payload, actor=current)
+        await db.commit()
+    except _FORM_ERRORS as exc:
+        await db.rollback()
+        return _render_error(_form_error(exc), getattr(exc, "status_code", 400))
+
     return RedirectResponse(url=f"/admin/customers/{customer.id}", status_code=303)
 
 
@@ -223,12 +240,13 @@ async def detail_view(
     customer_id: UUID,
     request: Request,
     db: DbSession,
+    _=read(PermissionCode.CUSTOMER_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
+    from sqlalchemy import func, select
+
     from app.modules.inquiries.models import Inquiry
-    from app.modules.inquiries.constants import (
-        SERVICE_INTEREST_LABELS, STATUS_TONE as INQ_STATUS_TONE,
-    )
+    from app.modules.inquiries.constants import InquiryStatus
 
     repo = CustomerRepository(db)
     customer = await repo.get(customer_id)
@@ -236,13 +254,8 @@ async def detail_view(
         raise NotFoundError("Customer not found")
 
     contacts = await repo.list_contacts(customer_id)
-    vehicles, _ = await paginate(
-        db,
-        VehicleRepository(db).query(customer_id=customer_id),
-        PageParams(page=1, size=100),
-    )
 
-    # Related inquiries — most recent first
+    # Recent inquiries (display only)
     inq_rows = (
         await db.execute(
             select(Inquiry)
@@ -251,8 +264,27 @@ async def detail_view(
             .limit(15)
         )
     ).scalars().all()
-    open_inq_count = sum(
-        1 for i in inq_rows if i.status not in ("CONVERTED", "LOST")
+
+    # FIX (B1): count ALL open inquiries, not just the 15 displayed.
+    open_inq_count = int(
+        (
+            await db.execute(
+                select(func.count(Inquiry.id))
+                .where(Inquiry.customer_id == customer_id)
+                .where(
+                    Inquiry.status.not_in([
+                        InquiryStatus.CONVERTED.value,
+                        InquiryStatus.LOST.value,
+                    ])
+                )
+            )
+        ).scalar_one()
+    )
+
+    vehicles, _ = await paginate(
+        db,
+        VehicleRepository(db).query(customer_id=customer_id),
+        PageParams(page=1, size=100),
     )
 
     return templates.render(
@@ -267,6 +299,7 @@ async def detail_view(
             "open_inq_count": open_inq_count,
             "service_labels": SERVICE_INTEREST_LABELS,
             "inq_status_tone": INQ_STATUS_TONE,
+            "inquiry_status_labels": INQUIRY_STATUS_LABELS,   # FIX (B2)
             **_catalog_context(),
         },
     )
@@ -281,6 +314,7 @@ async def edit_view(
     customer_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.CUSTOMER_WRITE),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     customer = await CustomerRepository(db).get(customer_id)
@@ -303,31 +337,43 @@ async def update_submit(
     customer_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.CUSTOMER_WRITE),
     current=Depends(get_current_user),
 ):
     form = await request.form()
-    payload = CustomerUpdate(
-        name=(form.get("name") or "").strip() or None,
-        email=(form.get("email") or "").strip() or None,
-        phone=(form.get("phone") or "").strip() or None,
-        alt_phone=(form.get("alt_phone") or "").strip() or None,
-        address_line1=(form.get("address_line1") or "").strip() or None,
-        address_line2=(form.get("address_line2") or "").strip() or None,
-        city=(form.get("city") or "").strip() or None,
-        province=(form.get("province") or "").strip() or None,
-        postal_code=(form.get("postal_code") or "").strip() or None,
-        country=(form.get("country") or "").strip() or None,
-        tax_id=(form.get("tax_id") or "").strip() or None,
-        notes=(form.get("notes") or "").strip() or None,
-        status=(form.get("status") or "").strip() or None,
-        is_active=form.get("is_active") == "true",
-    )
 
     try:
+        payload = CustomerUpdate(
+            name=(form.get("name") or "").strip() or None,
+            email=(form.get("email") or "").strip() or None,
+            phone=(form.get("phone") or "").strip() or None,
+            alt_phone=(form.get("alt_phone") or "").strip() or None,
+            address_line1=(form.get("address_line1") or "").strip() or None,
+            address_line2=(form.get("address_line2") or "").strip() or None,
+            city=(form.get("city") or "").strip() or None,
+            province=(form.get("province") or "").strip() or None,
+            postal_code=(form.get("postal_code") or "").strip() or None,
+            country=(form.get("country") or "").strip() or None,
+            tax_id=(form.get("tax_id") or "").strip() or None,
+            notes=(form.get("notes") or "").strip() or None,
+            status=(form.get("status") or "").strip() or None,
+            # FIX (B3): `_has_is_active` sentinel is set by the form when the
+            # checkbox group was rendered — distinguishes "user unchecked it"
+            # from "form not yet submitted".
+            is_active=(
+                form.get("is_active") == "true"
+                if form.get("_has_is_active") == "1"
+                else None
+            ),
+        )
         await CustomerService(db).update(customer_id, payload, actor=current)
+        await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
         customer = await CustomerRepository(db).get(customer_id)
+        # Preserve form state for re-render — including is_active
+        fv = dict(form)
+        fv["_has_is_active"] = "1"
         return templates.render(
             request,
             "admin/customers/form.html",
@@ -335,16 +381,14 @@ async def update_submit(
                 "title": f"Edit {customer.name if customer else 'Customer'}",
                 "mode": "edit",
                 "customer": customer,
-                "error": getattr(exc, "message", str(exc)),
-                "form_values": dict(form),
+                "error": _form_error(exc),
+                "form_values": fv,
                 **_catalog_context(),
             },
             status_code=getattr(exc, "status_code", 400),
         )
 
-    await db.commit()
     return RedirectResponse(url=f"/admin/customers/{customer_id}", status_code=303)
-
 
 # ════════════════════════════════════════════════════════════════
 # CONTACTS
@@ -355,6 +399,7 @@ async def add_contact_submit(
     customer_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.CUSTOMER_WRITE),
     current=Depends(get_current_user),
 ):
     form = await request.form()
@@ -370,8 +415,7 @@ async def add_contact_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        from urllib.parse import quote
-        msg = quote(getattr(exc, "message", str(exc)), safe="")
+        msg = quote(_form_error(exc), safe="")
         return RedirectResponse(
             url=f"/admin/customers/{customer_id}?error={msg}",
             status_code=303,
@@ -388,10 +432,19 @@ async def deactivate_submit(
     customer_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.CUSTOMER_DELETE),
     current=Depends(get_current_user),
 ):
-    await CustomerService(db).deactivate(customer_id, actor=current)
-    await db.commit()
+    try:
+        await CustomerService(db).deactivate(customer_id, actor=current)
+        await db.commit()
+    except _FORM_ERRORS as exc:
+        await db.rollback()
+        msg = quote(_form_error(exc), safe="")
+        return RedirectResponse(
+            url=f"/admin/customers/{customer_id}?error={msg}",
+            status_code=303,
+        )
     return RedirectResponse(url=f"/admin/customers/{customer_id}", status_code=303)
 
 
@@ -400,8 +453,17 @@ async def reactivate_submit(
     customer_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.CUSTOMER_WRITE),
     current=Depends(get_current_user),
 ):
-    await CustomerService(db).reactivate(customer_id, actor=current)
-    await db.commit()
+    try:
+        await CustomerService(db).reactivate(customer_id, actor=current)
+        await db.commit()
+    except _FORM_ERRORS as exc:
+        await db.rollback()
+        msg = quote(_form_error(exc), safe="")
+        return RedirectResponse(
+            url=f"/admin/customers/{customer_id}?error={msg}",
+            status_code=303,
+        )
     return RedirectResponse(url=f"/admin/customers/{customer_id}", status_code=303)

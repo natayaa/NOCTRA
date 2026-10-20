@@ -5,7 +5,11 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import AuditAction
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.customers.constants import CustomerSource, CustomerStatus
@@ -28,20 +32,27 @@ class CustomerService:
     async def create(
         self, payload: CustomerCreate, *, actor: User | None = None
     ) -> Customer:
-        if payload.email and (existing := await self.repo.find_by_email(str(payload.email))):
+        if payload.email and (
+            existing := await self.repo.find_by_email(str(payload.email))
+        ):
             raise ConflictError(
                 f"Customer with this email already exists ({existing.code})",
                 context={"existing_id": str(existing.id)},
             )
-        if payload.phone and (existing := await self.repo.find_by_phone(payload.phone)):
+        if payload.phone and (
+            existing := await self.repo.find_by_phone(payload.phone)
+        ):
             raise ConflictError(
                 f"Customer with this phone already exists ({existing.code})",
                 context={"existing_id": str(existing.id)},
             )
 
+        # Advisory lock serialises code generation across transactions.
+        code = await self.repo.next_code_locked()
+
         customer = Customer(
-            code=await self.repo.next_code(),
-            name=payload.name.strip(),
+            code=code,
+            name=payload.name,           # already stripped by schema validator
             email=payload.email,
             phone=payload.phone,
             alt_phone=payload.alt_phone,
@@ -72,8 +83,8 @@ class CustomerService:
             },
         )
 
-        # `lazy="selectin"` only fires on objects loaded from a query,
-        # not on freshly created+flushed objects. Force the load here.
+        # `selectin` lazy strategy does not fire for freshly created objects
+        # — force-load contacts so the API response includes them.
         await self.db.refresh(customer, ["contacts"])
         return customer
 
@@ -86,14 +97,20 @@ class CustomerService:
         phone: str | None,
         source: str = CustomerSource.WEBSITE.value,
     ) -> tuple[Customer, bool]:
+        name_clean = name.strip() if name else ""
+        if not name_clean:
+            raise ValidationError("name cannot be blank")
+
         if email and (existing := await self.repo.find_by_email(email)):
             return existing, False
         if phone and (existing := await self.repo.find_by_phone(phone)):
             return existing, False
 
+        code = await self.repo.next_code_locked()
+
         customer = Customer(
-            code=await self.repo.next_code(),
-            name=name.strip(),
+            code=code,
+            name=name_clean,
             email=email,
             phone=phone,
             source=source,
@@ -120,6 +137,17 @@ class CustomerService:
         before = self._snapshot(customer)
         fields = payload.model_fields_set
 
+        # Non-nullable columns must reject explicit null.
+        if "name" in fields:
+            if payload.name is None:
+                raise ValidationError("name cannot be null")
+            customer.name = payload.name             # already stripped
+
+        if "country" in fields:
+            if payload.country is None:
+                raise ValidationError("country cannot be null")
+            customer.country = payload.country
+
         if "email" in fields:
             new_email = str(payload.email) if payload.email else None
             if new_email and new_email != customer.email:
@@ -137,9 +165,9 @@ class CustomerService:
             customer.phone = new_phone
 
         for field in (
-            "name", "alt_phone",
+            "alt_phone",
             "address_line1", "address_line2", "city", "province",
-            "postal_code", "country", "tax_id", "notes",
+            "postal_code", "tax_id", "notes",
             "status", "is_active",
         ):
             if field in fields:
@@ -166,7 +194,7 @@ class CustomerService:
         customer = await self._get_or_404(customer_id)
         contact = CustomerContact(
             customer_id=customer.id,
-            name=payload.name.strip(),
+            name=payload.name,                       # already stripped
             role=payload.role,
             phone=payload.phone,
             email=payload.email,
@@ -186,6 +214,29 @@ class CustomerService:
         await self._get_or_404(customer_id)
         return await self.repo.list_contacts(customer_id)
 
+    async def delete_contact(
+        self, customer_id: UUID, contact_id: UUID, *, actor: User
+    ) -> None:
+        """Remove a contact. Verifies the contact belongs to the given customer."""
+        contact = await self.repo.get_contact(contact_id)
+        if not contact or contact.customer_id != customer_id:
+            raise NotFoundError("Contact not found")
+
+        old_data = {
+            "customer_id": str(customer_id),
+            "name": contact.name,
+            "role": contact.role,
+        }
+        await self.db.delete(contact)
+        await self.db.flush()
+        await self.audit.log(
+            action=AuditAction.DELETE,
+            table_name="customer_contacts",
+            record_id=contact_id,
+            user_id=actor.id,
+            old_data=old_data,
+        )
+
     # ── Delete (soft) ─────────────────────────────────
     async def deactivate(self, customer_id: UUID, *, actor: User) -> None:
         customer = await self._get_or_404(customer_id)
@@ -200,7 +251,7 @@ class CustomerService:
             new_data={"is_active": False},
         )
 
-    async def reactivate(self, customer_id: UUID, *, actor: User) -> None:
+    async def reactivate(self, customer_id: UUID, *, actor: User) -> Customer:
         customer = await self._get_or_404(customer_id)
         customer.is_active = True
         await self.db.flush()
@@ -212,6 +263,7 @@ class CustomerService:
             old_data={"is_active": False},
             new_data={"is_active": True},
         )
+        return customer
 
     # ── Helpers ───────────────────────────────────────
     async def _get_or_404(self, customer_id: UUID) -> Customer:

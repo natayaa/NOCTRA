@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.core.constants import PermissionCode, RoleName
 from app.core.database import SessionLocal
-from app.modules.rbac.constant import DEFAULT_ROLE_PERMISSIONS
+from app.modules.rbac.constants import DEFAULT_ROLE_PERMISSIONS
 from app.modules.rbac.models import Permission, Role, RolePermission
 
 # ── Register every model module before SQLAlchemy configures mappers.

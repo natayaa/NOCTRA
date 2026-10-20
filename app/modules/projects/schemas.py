@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.projects.constants import (
     COST_CATEGORIES,
+    INVENTORY_CATEGORIES,
+    LABOR_CATEGORIES,
     PROJECT_ITEM_STATUSES,
     PROJECT_STATUSES,
 )
@@ -31,13 +33,21 @@ class EmployeeCreate(BaseModel):
 
 class EmployeeUpdate(BaseModel):
     name: str | None = Field(None, min_length=2, max_length=255)
-    position: str | None = None
+    position: str | None = Field(None, max_length=100)
     hourly_rate: float | None = Field(None, ge=0)
     monthly_salary: float | None = Field(None, ge=0)
     joined_at: date | None = None
-    phone: str | None = None
+    phone: str | None = Field(None, max_length=32)
     notes: str | None = None
     is_active: bool | None = None
+
+    # Non-nullable in DB — reject explicit null.
+    @field_validator("hourly_rate", "is_active")
+    @classmethod
+    def _non_nullable(cls, v):
+        if v is None:
+            raise ValueError("field cannot be null")
+        return v
 
 
 class EmployeeListItem(BaseModel):
@@ -63,6 +73,25 @@ class EmployeeDetail(EmployeeListItem):
 # PROJECT ITEMS
 # ════════════════════════════════════════════════════════════════
 
+def _validate_item_links(category: str, material_id, employee_id) -> None:
+    """Enforce the material/employee link contract per category."""
+    if category in INVENTORY_CATEGORIES:
+        if not material_id:
+            raise ValueError(f"material_id is required for {category} items")
+        if employee_id:
+            raise ValueError(f"employee_id is not allowed for {category} items")
+    elif category in LABOR_CATEGORIES:
+        if not employee_id:
+            raise ValueError(f"employee_id is required for {category} items")
+        if material_id:
+            raise ValueError(f"material_id is not allowed for {category} items")
+    else:
+        if material_id:
+            raise ValueError(f"material_id is not allowed for {category} items")
+        if employee_id:
+            raise ValueError(f"employee_id is not allowed for {category} items")
+
+
 class ProjectItemCreate(BaseModel):
     category: str
     description: str = Field(..., min_length=1, max_length=500)
@@ -87,12 +116,17 @@ class ProjectItemCreate(BaseModel):
             raise ValueError(f"category must be one of {COST_CATEGORIES}")
         return v
 
+    @model_validator(mode="after")
+    def _check_links(self):
+        _validate_item_links(self.category, self.material_id, self.employee_id)
+        return self
+
 
 class ProjectItemUpdate(BaseModel):
     description: str | None = Field(None, min_length=1, max_length=500)
     material_id: UUID | None = None
     employee_id: UUID | None = None
-    unit: str | None = None
+    unit: str | None = Field(None, max_length=16)
 
     estimated_quantity: float | None = Field(None, ge=0)
     estimated_unit_cost: float | None = Field(None, ge=0)
@@ -130,6 +164,7 @@ class ProjectItemOut(BaseModel):
 
     status: str
     notes: str | None
+    occurred_at: datetime
     created_at: datetime
     updated_at: datetime
 
@@ -159,9 +194,19 @@ class ProjectCreate(BaseModel):
 
     internal_notes: str | None = None
 
+    @model_validator(mode="after")
+    def _validate_dates(self):
+        if (
+            self.start_date
+            and self.target_end_date
+            and self.target_end_date < self.start_date
+        ):
+            raise ValueError("target_end_date must be on or after start_date")
+        return self
+
 
 class ProjectUpdate(BaseModel):
-    title: str | None = None
+    title: str | None = Field(None, max_length=255)
     description: str | None = None
     assigned_lead_id: UUID | None = None
     priority: int | None = None
@@ -171,6 +216,13 @@ class ProjectUpdate(BaseModel):
     target_end_date: date | None = None
     actual_end_date: date | None = None
     internal_notes: str | None = None
+
+    @field_validator("priority")
+    @classmethod
+    def _non_nullable_priority(cls, v):
+        if v is None:
+            raise ValueError("priority cannot be null")
+        return v
 
 
 class ProjectStatusChange(BaseModel):
@@ -207,6 +259,9 @@ class ProjectListItem(BaseModel):
 
     variance: float = 0.0
     gross_margin_pct: float = 0.0
+
+    # Enrichment — populated by API layer.
+    customer_name: str | None = None
 
 
 class ProjectCostBreakdown(BaseModel):
@@ -245,6 +300,7 @@ class ProjectDetail(ProjectListItem):
     customer_name: str | None = None
     customer_code: str | None = None
     vehicle_label: str | None = None
+    assigned_lead_name: str | None = None
 
 
 class OverheadRateInfo(BaseModel):

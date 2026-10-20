@@ -20,6 +20,15 @@ def _normalize_optional_str(v):
     return s
 
 
+def _strip_required_name(v):
+    """Strip whitespace and reject blank names BEFORE length checks."""
+    if isinstance(v, str):
+        v = v.strip()
+        if not v:
+            raise ValueError("name cannot be blank")
+    return v
+
+
 # ── Customer Contacts ───────────────────────────────────────
 class CustomerContactIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
@@ -27,6 +36,11 @@ class CustomerContactIn(BaseModel):
     phone: str | None = Field(None, pattern=PHONE_PATTERN)
     email: EmailStr | None = None
     notes: str | None = Field(None, max_length=2000)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _clean_name(cls, v):
+        return _strip_required_name(v)
 
     @field_validator("email", "phone", "role", "notes", mode="before")
     @classmethod
@@ -63,9 +77,16 @@ class CustomerCreate(BaseModel):
     notes: str | None = Field(None, max_length=5000)
     source: str | None = Field(None, max_length=32)
 
-    @field_validator("email", "phone", "alt_phone", "tax_id",
-                     "address_line1", "address_line2", "city", "province",
-                     "postal_code", "notes", mode="before")
+    @field_validator("name", mode="before")
+    @classmethod
+    def _clean_name(cls, v):
+        return _strip_required_name(v)
+
+    @field_validator(
+        "email", "phone", "alt_phone", "tax_id",
+        "address_line1", "address_line2", "city", "province",
+        "postal_code", "notes", mode="before",
+    )
     @classmethod
     def _clean_optional(cls, v):
         return _normalize_optional_str(v)
@@ -96,9 +117,16 @@ class CustomerUpdate(BaseModel):
     status: str | None = None
     is_active: bool | None = None
 
-    @field_validator("email", "phone", "alt_phone", "tax_id",
-                     "address_line1", "address_line2", "city", "province",
-                     "postal_code", "notes", mode="before")
+    @field_validator("name", mode="before")
+    @classmethod
+    def _clean_name(cls, v):
+        return _strip_required_name(v)
+
+    @field_validator(
+        "email", "phone", "alt_phone", "tax_id",
+        "address_line1", "address_line2", "city", "province",
+        "postal_code", "notes", mode="before",
+    )
     @classmethod
     def _clean_optional(cls, v):
         return _normalize_optional_str(v)
@@ -137,3 +165,15 @@ class CustomerDetail(CustomerListItem):
     source: str | None
     updated_at: datetime
     contacts: list[CustomerContactOut] = Field(default_factory=list)
+
+
+class CustomerSearchResult(BaseModel):
+    """Lightweight shape for autocomplete pickers."""
+    id: UUID
+    code: str
+    name: str
+    phone: str | None
+    city: str | None
+    label: str
+    sublabel: str
+    is_active: bool

@@ -3,52 +3,91 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{{ po.code }}</h1>
-    <p class="page-subtitle">
-      <span class="badge {% if po.status == 'RECEIVED' %}badge-success{% elif po.status == 'CANCELLED' %}badge-danger{% elif po.status == 'SENT' %}badge-info{% else %}badge-neutral{% endif %}">
+    <div class="flex items-center gap-3 flex-wrap mb-1">
+      <h1 class="page-title mono">{{ po.code }}</h1>
+      {% set sbadge = {'DRAFT':'badge-neutral','SENT':'badge-info','RECEIVED':'badge-success','CLOSED':'badge-neutral','CANCELLED':'badge-danger'}.get(po.status, 'badge-neutral') %}
+      <span class="badge {{ sbadge }}">
+        <span class="badge-dot"></span>
         {{ status_labels.get(po.status, po.status) }}
       </span>
-      {% if supplier %}<span class="ml-2">· {{ supplier.name }}</span>{% endif %}
+    </div>
+    <p class="page-subtitle">
+      {% if supplier %}
+        Supplier: <span class="text-noctra-text font-medium">{{ supplier.name }}</span>
+      {% else %}
+        Unknown supplier
+      {% endif %}
     </p>
   </div>
-  <div class="page-actions">
+  <div class="page-actions flex gap-2">
     <a href="/admin/purchase-orders" class="btn btn-secondary btn-sm">Back</a>
   </div>
 </div>
 
 {% set err = request.query_params.get('error') %}
-{% if err %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ err }}</div></div>{% endif %}
+{% if err %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ err }}</div>
+  </div>
+</div>
+{% endif %}
 
 <div class="grid lg:grid-cols-3 gap-6">
 
   <div class="lg:col-span-2 space-y-6">
 
-    {# Line items #}
+    {# ── Line items ────────────────────────────────── #}
     <div class="panel">
       <div class="panel-title">Line items</div>
 
       {% if items %}
-      <div class="table-wrap mt-3">
-        <table class="table">
-          <thead><tr><th>Material</th><th class="text-right">Qty</th><th class="text-right">Unit price</th><th class="text-right">Line total</th><th class="text-right">Received</th><th></th></tr></thead>
+      
+      {# Desktop Table #}
+      <div class="hidden md:block table-wrap table-wrap--sticky mt-3">
+        <table class="table w-full">
+          <thead>
+            <tr>
+              <th class="text-left">Material</th>
+              <th class="text-right w-24">Qty</th>
+              <th class="text-right w-32">Unit price</th>
+              <th class="text-right w-32">Line total</th>
+              <th class="text-right w-24">Received</th>
+              <th class="w-16"></th>
+            </tr>
+          </thead>
           <tbody>
             {% for item in items %}
             {% set m = materials_by_id.get(item.material_id) %}
             <tr>
-              <td>
-                {% if m %}<div class="font-medium text-sm">{{ m.name }}</div><div class="mono text-xs text-neutral-500">{{ m.code }}</div>
-                {% else %}<span class="text-neutral-500">Material missing</span>{% endif %}
+              <td class="text-left">
+                {% if m %}
+                  <div class="font-medium text-sm">{{ m.name }}</div>
+                  <div class="mono text-xs text-noctra-dim">{{ m.code }}</div>
+                {% else %}
+                  <span class="text-noctra-dim italic">Material missing</span>
+                {% endif %}
               </td>
               <td class="text-right font-mono text-sm">{{ '%.2f'|format(item.quantity) }}</td>
               <td class="text-right font-mono text-sm">{{ item.unit_price | rupiah }}</td>
               <td class="text-right font-mono text-sm">{{ (item.quantity * item.unit_price) | rupiah }}</td>
-              <td class="text-right font-mono text-xs">{{ '%.2f'|format(item.quantity_received) }}</td>
+              <td class="text-right font-mono text-xs text-noctra-muted">
+                {{ '%.2f'|format(item.quantity_received) }}
+              </td>
               <td class="text-right">
                 {% if po.status == 'DRAFT' %}
                 <form method="post" action="/admin/purchase-orders/{{ po.id }}/items/{{ item.id }}/delete"
                       data-confirm="Remove this line?">
                   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-                  <button class="btn btn-ghost btn-sm text-noctra-danger">×</button>
+                  <button type="submit" class="btn btn-ghost btn-sm text-noctra-danger !p-1.5" title="Remove line">
+                    <svg viewBox="0 0 24 24" fill="none" class="w-4 h-4">
+                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                  </button>
                 </form>
                 {% endif %}
               </td>
@@ -56,60 +95,125 @@
             {% endfor %}
           </tbody>
           <tfoot>
-            <tr><td colspan="3" class="text-right text-neutral-500 text-xs uppercase">Total</td>
-                <td class="text-right font-mono font-semibold">{{ po.total_amount | rupiah }}</td>
-                <td colspan="2"></td></tr>
+            <tr style="border-top: 2px solid var(--border-strong);">
+              <td colspan="3" class="text-right text-noctra-dim text-xs uppercase font-semibold">Total</td>
+              <td class="text-right font-mono font-semibold text-base">{{ po.total_amount | rupiah }}</td>
+              <td colspan="2"></td>
+            </tr>
           </tfoot>
         </table>
       </div>
+
+      {# Mobile Cards for Line Items #}
+      <div class="md:hidden space-y-3 mt-3">
+        {% for item in items %}
+        {% set m = materials_by_id.get(item.material_id) %}
+        <div class="panel !p-3 relative">
+          <div class="flex justify-between items-start gap-2">
+            <div>
+              <div class="font-medium text-sm">{{ m.name if m else 'Material missing' }}</div>
+              {% if m %}<div class="mono text-xs text-noctra-dim">{{ m.code }}</div>{% endif %}
+            </div>
+            {% if po.status == 'DRAFT' %}
+            <form method="post" action="/admin/purchase-orders/{{ po.id }}/items/{{ item.id }}/delete"
+                  data-confirm="Remove this line?" class="shrink-0">
+              <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+              <button type="submit" class="btn btn-ghost btn-sm text-noctra-danger !p-1.5">
+                <svg viewBox="0 0 24 24" fill="none" class="w-4 h-4"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+          <div class="grid grid-cols-2 gap-2 mt-3 text-xs">
+            <div>
+              <span class="text-noctra-dim">Qty:</span> <span class="font-mono">{{ '%.2f'|format(item.quantity) }}</span>
+            </div>
+            <div>
+              <span class="text-noctra-dim">Price:</span> <span class="font-mono">{{ item.unit_price | rupiah }}</span>
+            </div>
+            <div>
+              <span class="text-noctra-dim">Received:</span> <span class="font-mono">{{ '%.2f'|format(item.quantity_received) }}</span>
+            </div>
+            <div class="text-right font-medium text-sm">
+              {{ (item.quantity * item.unit_price) | rupiah }}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        
+        <div class="panel !p-3 text-right text-sm font-semibold">
+          Total: <span class="font-mono text-base ml-2">{{ po.total_amount | rupiah }}</span>
+        </div>
+      </div>
+
       {% else %}
-      <p class="text-neutral-500 text-sm mt-2">No line items yet.</p>
+      <p class="text-noctra-dim text-sm mt-2">No line items yet.</p>
       {% endif %}
 
+      {# Add Item Form #}
       {% if po.status in ('DRAFT', 'SENT') %}
-      <form method="post" action="/admin/purchase-orders/{{ po.id }}/items"
-            class="mt-4 grid md:grid-cols-5 gap-3 items-end" data-guard>
-        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-        <div class="form-row !mb-0 md:col-span-2">
-          <label class="form-label" for="material_id">Material</label>
-          <select class="select" id="material_id" name="material_id" required>
-            <option value="">Choose material…</option>
-            {% for m in materials %}<option value="{{ m.id }}">{{ m.code }} — {{ m.name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="form-row !mb-0">
-          <label class="form-label" for="quantity">Quantity</label>
-          <input class="input" type="number" step="0.01" id="quantity" name="quantity" required />
-        </div>
-        <div class="form-row !mb-0">
-          <label class="form-label" for="unit_price">Unit price</label>
-          <input class="input" type="number" step="0.01" id="unit_price" name="unit_price" required />
-        </div>
-        <button class="btn btn-secondary btn-sm">Add item</button>
-      </form>
+      <div class="mt-6 pt-5 border-t border-noctra-border">
+        <div class="text-xs uppercase tracking-wider text-noctra-dim font-semibold mb-3">Add line item</div>
+        <form method="post" action="/admin/purchase-orders/{{ po.id }}/items"
+              class="grid md:grid-cols-5 gap-3 items-end" data-guard>
+          <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+          <div class="form-row !mb-0 md:col-span-2">
+            <label class="form-label" for="material_id">Material</label>
+            <select class="select" id="material_id" name="material_id" required>
+              <option value="">Choose material…</option>
+              {% for m in materials %}<option value="{{ m.id }}">{{ m.code }} — {{ m.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-row !mb-0">
+            <label class="form-label" for="quantity">Quantity</label>
+            <input class="input" type="number" step="0.01" id="quantity" name="quantity" required placeholder="0" />
+          </div>
+          <div class="form-row !mb-0">
+            <label class="form-label" for="unit_price">Unit price</label>
+            <input class="input" type="number" step="0.01" id="unit_price" name="unit_price" required placeholder="0" />
+          </div>
+          <button class="btn btn-secondary btn-sm h-10">Add item</button>
+        </form>
+      </div>
       {% endif %}
     </div>
 
-    {# Timeline / notes #}
+    {# ── Notes ─────────────────────────────────────── #}
     {% if po.notes %}
     <div class="panel">
       <div class="panel-title">Notes</div>
-      <p class="text-neutral-300 mt-2 whitespace-pre-line text-sm">{{ po.notes }}</p>
+      <p class="text-noctra-muted mt-2 whitespace-pre-line text-sm leading-relaxed">{{ po.notes }}</p>
     </div>
     {% endif %}
   </div>
 
-  <aside class="space-y-6">
+  {# ── Sidebar ────────────────────────────────────── #}
+  <aside class="space-y-6 lg:sticky lg:top-4 lg:self-start">
 
     <div class="panel">
       <div class="panel-title">Order details</div>
-      <dl class="mt-3 text-sm space-y-2">
-        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Supplier</dt>
-          <dd>{% if supplier %}<a href="/admin/suppliers/{{ supplier.id }}" class="hover:text-noctra-accent">{{ supplier.name }}</a>{% else %}—{% endif %}</dd></div>
-        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Order date</dt><dd>{{ po.order_date.strftime('%d %b %Y') }}</dd></div>
-        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Expected</dt><dd>{{ po.expected_date.strftime('%d %b %Y') if po.expected_date else '—' }}</dd></div>
+      <dl class="mt-3 text-sm space-y-3">
+        <div>
+          <dt class="text-noctra-dim text-xs uppercase tracking-wider">Supplier</dt>
+          <dd>
+            {% if supplier %}
+              <a href="/admin/suppliers/{{ supplier.id }}" class="hover:text-noctra-accent font-medium">{{ supplier.name }}</a>
+            {% else %}—{% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-noctra-dim text-xs uppercase tracking-wider">Order date</dt>
+          <dd>{{ po.order_date.strftime('%d %b %Y') }}</dd>
+        </div>
+        <div>
+          <dt class="text-noctra-dim text-xs uppercase tracking-wider">Expected</dt>
+          <dd>{{ po.expected_date.strftime('%d %b %Y') if po.expected_date else '—' }}</dd>
+        </div>
         {% if po.received_at %}
-        <div><dt class="text-neutral-500 text-xs uppercase tracking-wider">Received</dt><dd>{{ po.received_at | dt_id }}</dd></div>
+        <div>
+          <dt class="text-noctra-dim text-xs uppercase tracking-wider">Received at</dt>
+          <dd class="text-emerald-400">{{ po.received_at | dt_id }}</dd>
+        </div>
         {% endif %}
       </dl>
     </div>
@@ -120,7 +224,9 @@
         {% if po.status == 'DRAFT' %}
         <form method="post" action="/admin/purchase-orders/{{ po.id }}/send" data-guard>
           <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-          <button class="btn btn-primary btn-sm btn-block">Send to supplier</button>
+          <button class="btn btn-primary btn-sm btn-block">
+            Send to supplier
+          </button>
         </form>
         {% endif %}
 
@@ -129,7 +235,9 @@
               data-confirm="Receive all line items into stock? This will update material prices."
               data-guard>
           <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-          <button class="btn btn-primary btn-sm btn-block">Receive full order</button>
+          <button class="btn btn-primary btn-sm btn-block">
+            Receive full order
+          </button>
         </form>
 
         <form method="post" action="/admin/purchase-orders/{{ po.id }}/cancel"
@@ -140,11 +248,13 @@
         {% endif %}
 
         {% if po.status == 'RECEIVED' %}
-        <p class="text-xs text-neutral-500">Received {{ po.received_at | dt_id }}. Stock has been added.</p>
+        <p class="text-xs text-noctra-dim bg-noctra-surface2 p-2 rounded border border-noctra-border">
+          Received {{ po.received_at | dt_id }}. Stock has been added.
+        </p>
         {% endif %}
 
         {% if po.status in ('CLOSED', 'CANCELLED') %}
-        <p class="text-xs text-neutral-500">This PO is {{ po.status|lower }}.</p>
+        <p class="text-xs text-noctra-dim">This PO is {{ po.status|lower }}.</p>
         {% endif %}
       </div>
     </div>

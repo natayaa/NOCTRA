@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.modules.projects.constants import TERMINAL_PROJECT_STATUSES
 from app.modules.projects.models import Employee, Project, ProjectItem
@@ -29,7 +30,8 @@ class EmployeeRepository:
         q: str | None = None,
         is_active: bool | None = None,
     ) -> Select:
-        stmt = select(Employee).order_by(Employee.name)
+        # Stable secondary sort prevents pagination drift on name ties.
+        stmt = select(Employee).order_by(Employee.name.asc(), Employee.id.asc())
         conds = []
         if q:
             like = f"%{q.strip()}%"
@@ -47,6 +49,14 @@ class EmployeeRepository:
         return stmt
 
     async def next_code(self) -> str:
+        """
+        Generate EMP-NNN under an advisory lock. Serialises concurrent
+        creation so the unique constraint cannot collide.
+        """
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": "employee-code"},
+        )
         stmt = (
             select(Employee.code)
             .where(Employee.code.like("EMP-%"))
@@ -70,6 +80,15 @@ class ProjectRepository:
     async def get(self, pid: UUID) -> Project | None:
         return await self.db.get(Project, pid)
 
+    async def get_for_update(self, pid: UUID) -> Project | None:
+        """Load with row-level lock; prevents concurrent status transitions."""
+        stmt = (
+            select(Project)
+            .where(Project.id == pid)
+            .with_for_update()
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     async def by_code(self, code: str) -> Project | None:
         stmt = select(Project).where(Project.code == code)
         return (await self.db.execute(stmt)).scalar_one_or_none()
@@ -85,7 +104,8 @@ class ProjectRepository:
         only_open: bool = False,
         sort: str = "created_desc",
     ) -> Select:
-        stmt = select(Project)
+        # `noload` prevents selectin eager loading of `items` in list views.
+        stmt = select(Project).options(noload(Project.items))
         conds = []
         if q:
             like = f"%{q.strip()}%"
@@ -109,17 +129,21 @@ class ProjectRepository:
         if conds:
             stmt = stmt.where(and_(*conds))
 
-        # ── Sorting ──
+        # Stable secondary sort on id for pagination.
         if sort == "created_asc":
-            stmt = stmt.order_by(Project.created_at.asc())
+            stmt = stmt.order_by(Project.created_at.asc(), Project.id.asc())
         elif sort == "updated_desc":
-            stmt = stmt.order_by(Project.updated_at.desc())
+            stmt = stmt.order_by(Project.updated_at.desc(), Project.id.asc())
         elif sort == "target_asc":
-            stmt = stmt.order_by(Project.target_end_date.asc().nulls_last())
+            stmt = stmt.order_by(
+                Project.target_end_date.asc().nulls_last(), Project.id.asc()
+            )
         elif sort == "priority_desc":
-            stmt = stmt.order_by(Project.priority.desc(), Project.created_at.desc())
+            stmt = stmt.order_by(
+                Project.priority.desc(), Project.created_at.desc(), Project.id.asc()
+            )
         else:
-            stmt = stmt.order_by(Project.created_at.desc())
+            stmt = stmt.order_by(Project.created_at.desc(), Project.id.asc())
 
         return stmt
 
@@ -157,8 +181,18 @@ class ProjectRepository:
         }
 
     async def next_code(self) -> str:
+        """
+        Generate NOCTRA-P-YYYY-NNNNNN under an advisory lock. Serialises
+        concurrent creation so the unique constraint cannot collide.
+        """
         year = datetime.now(UTC).year
         prefix = f"NOCTRA-P-{year}-"
+
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": prefix},
+        )
+
         stmt = (
             select(Project.code)
             .where(Project.code.like(f"{prefix}%"))

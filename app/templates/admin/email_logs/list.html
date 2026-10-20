@@ -1,48 +1,173 @@
 {% extends "admin/base.html" %}
-{% from "components/pagination.html" import pagination %}
+
+{% set status_labels = {
+  'PENDING': 'Pending',
+  'SENT': 'Sent',
+  'FAILED': 'Failed',
+  'SKIPPED': 'Skipped',
+} %}
+{% set status_tones = {
+  'PENDING': 'badge-neutral',
+  'SENT': 'badge-success',
+  'FAILED': 'badge-danger',
+  'SKIPPED': 'badge-neutral',
+} %}
+{% set has_filters = status_filter or template_filter %}
 
 {% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">Email Log</h1>
-    <p class="page-subtitle">{{ page_meta.total }} total</p>
+  <div>
+    <h1 class="page-title">Email Log</h1>
+    <p class="page-subtitle">
+      {{ page_meta.total }} email{% if page_meta.total != 1 %}s{% endif %}
+      {% if has_filters %}
+        · <a class="text-accent" href="/admin/email-logs">Clear filters</a>
+      {% endif %}
+    </p>
   </div>
 </div>
 
-<div class="mb-4 flex flex-wrap gap-2">
-  <a href="/admin/email-logs" class="badge {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">All</a>
-  {% for s in statuses %}
-    <a href="/admin/email-logs?status={{ s }}" class="badge {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">{{ s }}</a>
-  {% endfor %}
+{# ── Status chips ────────────────────────────────── #}
+<div class="mb-3 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
+    {# FIX (T3): preserve template filter on status chip #}
+    <a href="/admin/email-logs{{ qs(status='') }}"
+       class="badge whitespace-nowrap {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+      All
+    </a>
+    {% for s in statuses %}
+      <a href="/admin/email-logs{{ qs(status=s) }}"
+         class="badge whitespace-nowrap {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
+        {{ status_labels.get(s, s) }}
+      </a>
+    {% endfor %}
+  </div>
 </div>
+
+{# ── Template filter dropdown ────────────────────── #}
+{% if template_choices %}
+<form method="get" action="/admin/email-logs"
+      class="panel mb-4 flex flex-wrap items-end gap-3">
+  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+  <div class="form-row !mb-0 min-w-[240px]">
+    <label class="form-label" for="template_filter">Template</label>
+    <select class="select" id="template_filter" name="template"
+            onchange="this.form.submit()">
+      <option value="">All templates</option>
+      {% for t in template_choices %}
+        <option value="{{ t }}" {% if template_filter == t %}selected{% endif %}>
+          {{ t | replace('_', ' ') | title }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="flex gap-2 ml-auto">
+    <button class="btn btn-secondary btn-sm">Apply</button>
+    {% if has_filters %}
+      <a href="/admin/email-logs" class="btn btn-ghost btn-sm">Reset</a>
+    {% endif %}
+  </div>
+</form>
+{% endif %}
 
 {% if emails %}
 <div class="table-wrap">
-  <table class="table">
-    <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Template</th><th>Status</th></tr></thead>
+  <table class="table w-full">
+    <thead>
+      <tr>
+        <th class="w-[170px]">When</th>
+        <th>To</th>
+        <th>Subject</th>
+        <th class="w-[160px]">Template</th>
+        <th class="w-[100px]">Status</th>
+        <th class="w-[180px]">Related</th>
+      </tr>
+    </thead>
     <tbody>
       {% for e in emails %}
-      <tr>
-        <td class="text-xs text-neutral-500">{{ e.created_at | dt_id('%d %b %H:%M') }}</td>
-        <td class="text-sm">
-          {% if e.to_name %}<div class="font-medium">{{ e.to_name }}</div>{% endif %}
-          <div class="mono text-xs text-neutral-500">{{ e.to_email }}</div>
+      {# FIX (T5): prefer `sent_at` over `created_at` for SENT emails #}
+      {% set display_time = e.sent_at if e.sent_at else e.created_at %}
+      {% set is_queued_only = (e.status == 'PENDING' and not e.sent_at) %}
+      <tr class="align-top">
+        <td class="text-xs text-noctra-dim mono whitespace-nowrap">
+          {% if display_time %}
+            <span title="{{ display_time | dt_id('%A, %d %B %Y at %H:%M:%S %Z') }}">
+              {{ display_time | dt_id('%d %b %Y · %H:%M') }}
+            </span>
+            {% if is_queued_only %}
+              <span class="badge badge-neutral badge-xs ml-1">queued</span>
+            {% endif %}
+          {% else %}—{% endif %}
         </td>
-        <td class="text-sm">{{ e.subject }}</td>
-        <td class="mono text-xs text-neutral-500">{{ e.template }}</td>
+
+        <td class="text-sm">
+          {% if e.to_name %}
+            <div class="font-medium">{{ e.to_name }}</div>
+          {% endif %}
+          <div class="mono text-xs text-noctra-dim truncate max-w-[240px]"
+               title="{{ e.to_email }}">{{ e.to_email }}</div>
+        </td>
+
+        <td class="text-sm">
+          <div class="font-medium">{{ e.subject }}</div>
+          {% if e.status == 'FAILED' and e.error_message %}
+            {# FIX (T6): show error inline, not just tooltip #}
+            <div class="text-xs text-red-400 mt-1 flex items-start gap-1">
+              <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+                <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+              </svg>
+              <span class="break-all">{{ e.error_message | truncate(160, True, '…') }}</span>
+            </div>
+          {% endif %}
+        </td>
+
+        <td class="mono text-xs text-noctra-dim">
+          {{ e.template | replace('_', ' ') | title }}
+        </td>
+
         <td>
-          {% if e.status == 'SENT' %}<span class="badge badge-success">Sent</span>
-          {% elif e.status == 'FAILED' %}<span class="badge badge-danger" title="{{ e.error_message }}">Failed</span>
-          {% else %}<span class="badge badge-neutral">{{ e.status }}</span>{% endif %}
+          <span class="badge {{ status_tones.get(e.status, 'badge-neutral') }} whitespace-nowrap">
+            {{ status_labels.get(e.status, e.status) }}
+          </span>
+        </td>
+
+        <td class="text-xs">
+          {% if e.related_type and e.related_id %}
+            <div class="flex items-center gap-1">
+              <span class="badge badge-neutral badge-xs">{{ e.related_type }}</span>
+              <a class="mono text-accent hover:underline truncate max-w-[100px]"
+                 title="{{ e.related_id }}"
+                 href="{{ '/admin/inquiries/' ~ e.related_id if e.related_type == 'INQUIRY'
+                       else ('/admin/customers/' ~ e.related_id if e.related_type == 'CUSTOMER'
+                       else ('/admin/projects/' ~ e.related_id if e.related_type == 'PROJECT'
+                       else ('/admin/invoices/' ~ e.related_id if e.related_type == 'INVOICE'
+                       else '#'))) }}">
+                {{ e.related_id | string | truncate(8, True, '…') }}
+              </a>
+            </div>
+          {% else %}
+            <span class="text-noctra-dim">—</span>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
-{{ pagination() }}
+
+{% include "components/pagination.html" %}
+
 {% else %}
 <div class="panel text-center py-16">
-  <p class="text-neutral-400">No emails sent yet.</p>
+  {% if has_filters %}
+    <p class="text-noctra-dim mb-2">No emails match these filters.</p>
+    <a href="/admin/email-logs" class="text-accent text-sm hover:underline">
+      Clear filters
+    </a>
+  {% else %}
+    <p class="text-noctra-dim">No emails sent yet.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

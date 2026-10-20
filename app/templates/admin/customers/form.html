@@ -3,6 +3,13 @@
 {% block content %}
 {% set fv = form_values or {} %}
 
+{# FIX (T7): distinguish "not submitted yet" from "user unchecked" #}
+{% if '_has_is_active' in fv %}
+  {% set cur_active = fv.get('is_active') == 'true' %}
+{% else %}
+  {% set cur_active = customer.is_active if customer else True %}
+{% endif %}
+
 <div class="page-header">
   <div>
     <h1 class="page-title">{{ 'New Customer' if mode == 'create' else 'Edit Customer' }}</h1>
@@ -14,137 +21,199 @@
 </div>
 
 {% if error %}
-<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">{{ error }}</div>
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
+  </div>
 </div>
 {% endif %}
 
 <form method="post"
       action="{{ '/admin/customers' if mode == 'create' else '/admin/customers/' ~ customer.id }}"
-      class="max-w-3xl panel space-y-5"
-      data-guard>
+      class="max-w-3xl space-y-5"
+      data-guard
+      data-shortcut-submit>
 
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
 
-  <div class="form-row">
-    <label class="form-label" for="name">Full name <span class="req">*</span></label>
-    <input class="input" id="name" name="name" required maxlength="255"
-           value="{{ fv.get('name') or (customer.name if customer else '') }}" />
-  </div>
-
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row">
-      <label class="form-label" for="phone">Phone / WhatsApp</label>
-      <input class="input" id="phone" name="phone" maxlength="32"
-             value="{{ fv.get('phone') or (customer.phone if customer else '') }}" />
+  {# ── Basic ────────────────────────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Basic info</h2>
+      <span class="text-xs text-noctra-dim">Required</span>
     </div>
+
     <div class="form-row">
-      <label class="form-label" for="alt_phone">Alternate phone</label>
-      <input class="input" id="alt_phone" name="alt_phone" maxlength="32"
-             value="{{ fv.get('alt_phone') or (customer.alt_phone if customer else '') }}" />
+      <label class="form-label" for="name">Full name <span class="req">*</span></label>
+      <input class="input" id="name" name="name" required maxlength="255"
+             {% if mode == 'create' %}autofocus{% endif %} {# FIX (T6) #}
+             value="{{ fv.get('name') or (customer.name if customer else '') }}" />
     </div>
-  </div>
 
-  <div class="form-row">
-    <label class="form-label" for="email">Email</label>
-    <input class="input" type="email" id="email" name="email" maxlength="255"
-           value="{{ fv.get('email') or (customer.email if customer else '') }}" />
-  </div>
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="phone">Phone / WhatsApp</label>
+        <input class="input" type="tel" id="phone" name="phone" maxlength="32"
+               value="{{ fv.get('phone') or (customer.phone if customer else '') }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="alt_phone">Alternate phone</label>
+        <input class="input" type="tel" id="alt_phone" name="alt_phone" maxlength="32"
+               value="{{ fv.get('alt_phone') or (customer.alt_phone if customer else '') }}" />
+      </div>
+    </div>
 
-  {% if mode == 'create' %}
-  <div class="form-row">
-    <label class="form-label" for="source">Source</label>
-    <select class="select" id="source" name="source">
-      <option value="">—</option>
-      {% set cur_src = fv.get('source') or '' %}
-      {% for s in sources %}
-        <option value="{{ s }}" {% if cur_src == s %}selected{% endif %}>
-          {{ source_labels.get(s, s) }}
-        </option>
-      {% endfor %}
-    </select>
-  </div>
-  {% endif %}
+    <div class="form-row mt-5">
+      <label class="form-label" for="email">Email</label>
+      <input class="input" type="email" id="email" name="email" maxlength="255"
+             value="{{ fv.get('email') or (customer.email if customer else '') }}" />
+    </div>
 
-  <div class="form-row">
-    <label class="form-label" for="address_line1">Address line 1</label>
-    <input class="input" id="address_line1" name="address_line1" maxlength="255"
-           value="{{ fv.get('address_line1') or (customer.address_line1 if customer else '') }}" />
-  </div>
+    {% if mode == 'create' %}
+    <div class="form-row mt-5">
+      <label class="form-label" for="source">Source</label>
+      <select class="select" id="source" name="source">
+        <option value="">—</option>
+        {% set cur_src = fv.get('source') or '' %}
+        {% for s in sources %}
+          <option value="{{ s }}" {% if cur_src == s %}selected{% endif %}>
+            {{ source_labels.get(s, s) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+  </section>
 
-  <div class="form-row">
-    <label class="form-label" for="address_line2">Address line 2</label>
-    <input class="input" id="address_line2" name="address_line2" maxlength="255"
-           value="{{ fv.get('address_line2') or (customer.address_line2 if customer else '') }}" />
-  </div>
+  {# ── Address ──────────────────────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Address</h2>
+      <span class="text-xs text-noctra-dim">Optional</span>
+    </div>
 
-  <div class="grid md:grid-cols-3 gap-5">
     <div class="form-row">
-      <label class="form-label" for="city">City</label>
-      <input class="input" id="city" name="city" maxlength="100"
-             value="{{ fv.get('city') or (customer.city if customer else '') }}" />
+      <label class="form-label" for="address_line1">Address line 1</label>
+      <input class="input" id="address_line1" name="address_line1" maxlength="255"
+             value="{{ fv.get('address_line1') or (customer.address_line1 if customer else '') }}" />
     </div>
-    <div class="form-row">
-      <label class="form-label" for="province">Province</label>
-      <input class="input" id="province" name="province" maxlength="100"
-             value="{{ fv.get('province') or (customer.province if customer else '') }}" />
-    </div>
-    <div class="form-row">
-      <label class="form-label" for="postal_code">Postal code</label>
-      <input class="input" id="postal_code" name="postal_code" maxlength="20"
-             value="{{ fv.get('postal_code') or (customer.postal_code if customer else '') }}" />
-    </div>
-  </div>
 
-  <div class="grid md:grid-cols-2 gap-5">
     <div class="form-row">
-      <label class="form-label" for="country">Country</label>
-      <input class="input" id="country" name="country" maxlength="64"
-             value="{{ fv.get('country') or (customer.country if customer else 'Indonesia') }}" />
+      <label class="form-label" for="address_line2">Address line 2</label>
+      <input class="input" id="address_line2" name="address_line2" maxlength="255"
+             value="{{ fv.get('address_line2') or (customer.address_line2 if customer else '') }}" />
     </div>
-    <div class="form-row">
-      <label class="form-label" for="tax_id">Tax ID (NPWP)</label>
-      <input class="input" id="tax_id" name="tax_id" maxlength="64"
-             value="{{ fv.get('tax_id') or (customer.tax_id if customer else '') }}" />
-    </div>
-  </div>
 
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="city">City</label>
+        <input class="input" id="city" name="city" maxlength="100"
+               value="{{ fv.get('city') or (customer.city if customer else '') }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="province">Province</label>
+        <input class="input" id="province" name="province" maxlength="100"
+               value="{{ fv.get('province') or (customer.province if customer else '') }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="postal_code">Postal code</label>
+        <input class="input" id="postal_code" name="postal_code" maxlength="20"
+               value="{{ fv.get('postal_code') or (customer.postal_code if customer else '') }}" />
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-5 mt-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="country">Country</label>
+        <input class="input" id="country" name="country" maxlength="64"
+               value="{{ fv.get('country') or (customer.country if customer else 'Indonesia') }}" />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="tax_id">Tax ID (NPWP)</label>
+        <input class="input mono" id="tax_id" name="tax_id" maxlength="64"
+               value="{{ fv.get('tax_id') or (customer.tax_id if customer else '') }}" />
+      </div>
+    </div>
+  </section>
+
+  {# ── Status (edit only) ────────────────────────────── #}
   {% if mode == 'edit' %}
   {% set cur_status = fv.get('status') or (customer.status if customer else 'LEAD') %}
-  {% set cur_active = fv.get('is_active') == 'true' if 'is_active' in fv else (customer.is_active if customer else True) %}
 
-  <div class="form-row">
-    <label class="form-label" for="status">Status</label>
-    <select class="select" id="status" name="status">
-      {% for s in statuses %}
-        <option value="{{ s }}" {% if cur_status == s %}selected{% endif %}>
-          {{ status_labels.get(s, s) }}
-        </option>
-      {% endfor %}
-    </select>
-  </div>
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Status</h2>
+      <span class="text-xs text-noctra-dim">Manage lifecycle</span>
+    </div>
 
-  <div class="form-row">
-    <label class="flex items-center gap-2 text-sm">
+    <div class="form-row">
+      <label class="form-label" for="status">Status</label>
+      <select class="select" id="status" name="status">
+        {% for s in statuses %}
+          <option value="{{ s }}" {% if cur_status == s %}selected{% endif %}>
+            {{ status_labels.get(s, s) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# FIX (T7): sentinel hidden input tells backend this form controls is_active #}
+    <input type="hidden" name="_has_is_active" value="1" />
+    <label class="flex items-center gap-2 text-sm cursor-pointer">
       <input type="checkbox" name="is_active" value="true"
              {% if cur_active %}checked{% endif %} />
       Active
     </label>
-  </div>
+  </section>
   {% endif %}
 
-  <div class="form-row">
-    <label class="form-label" for="notes">Notes</label>
-    <textarea class="textarea" id="notes" name="notes"
-              maxlength="5000">{{ fv.get('notes') or (customer.notes if customer else '') }}</textarea>
-  </div>
+  {# ── Notes ────────────────────────────────────────── #}
+  <section class="panel">
+    <div class="panel-title mb-4">Notes</div>
+    <div class="form-row !mb-0">
+      <textarea class="textarea" id="notes" name="notes"
+                maxlength="5000"
+                rows="3"
+                placeholder="Internal notes about this customer…">{{ fv.get('notes') or (customer.notes if customer else '') }}</textarea>
+    </div>
+  </section>
 
-  <div class="flex gap-2 pt-2">
-    <button type="submit" class="btn btn-primary">
-      {{ 'Create' if mode == 'create' else 'Save changes' }}
-    </button>
-    <a href="{{ '/admin/customers' if mode == 'create' else '/admin/customers/' ~ customer.id }}"
-       class="btn btn-secondary">Cancel</a>
+  {# ── Sticky save bar ──────────────────────────────── #}
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Create' if mode == 'create' else 'Save changes' }}
+      </button>
+      <a href="{{ '/admin/customers' if mode == 'create' else '/admin/customers/' ~ customer.id }}"
+         class="btn btn-secondary">Cancel</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
+    </div>
   </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const form = document.querySelector('form[data-shortcut-submit]');
+  if (form) {
+    form.addEventListener('keydown', (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+      if (e.target && e.target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    });
+  }
+})();
+</script>
 {% endblock %}

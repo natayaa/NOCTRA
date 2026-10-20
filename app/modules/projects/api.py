@@ -5,15 +5,17 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import select
 
 from app.core.constants import PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, paginate, page_params
 from app.modules.auth.dependencies import CurrentUser, require_permission
 from app.modules.projects.constants import (
     COST_CATEGORIES,
     COST_CATEGORY_LABELS,
+    PROJECT_SORT_OPTIONS,
     PROJECT_STATUSES,
     PROJECT_STATUS_LABELS,
 )
@@ -78,8 +80,8 @@ async def overhead_rate(
     h_raw = await settings.get_value(SETTING_MONTHLY_LABOR_HOURS, "0")
 
     try:
-        o = float(o_raw or 0)
-        h = float(h_raw or 0)
+        o = max(0.0, float(o_raw or 0))
+        h = max(0.0, float(h_raw or 0))
     except (TypeError, ValueError):
         o, h = 0.0, 0.0
 
@@ -102,17 +104,43 @@ async def list_projects(
     status_: str | None = Query(None, alias="status"),
     customer_id: UUID | None = Query(None),
     only_open: bool = Query(False),
+    sort: str = Query("created_desc"),
     _=Depends(require_permission(PermissionCode.PROJECT_READ)),
 ) -> Page[ProjectListItem]:
+    if status_ is not None and status_ not in PROJECT_STATUSES:
+        raise ValidationError(
+            f"Invalid status {status_!r}. Choose from: {', '.join(PROJECT_STATUSES)}"
+        )
+    if sort not in PROJECT_SORT_OPTIONS:
+        raise ValidationError(
+            f"sort must be one of {list(PROJECT_SORT_OPTIONS)}",
+            context={"received": sort},
+        )
+
     stmt = ProjectRepository(db).query(
-        q=q, status=status_, customer_id=customer_id, only_open=only_open,
+        q=q, status=status_, customer_id=customer_id,
+        only_open=only_open, sort=sort,
     )
     rows, meta = await paginate(db, stmt, params)
+
+    # Batch-enrich customer names (1 query for the whole page).
+    from app.modules.customers.models import Customer
+
+    cids = {r.customer_id for r in rows if r.customer_id}
+    customers: dict = {}
+    if cids:
+        c_rows = await db.execute(
+            select(Customer.id, Customer.name).where(Customer.id.in_(cids))
+        )
+        customers = {cid: name for cid, name in c_rows.all()}
+
     items = []
     for r in rows:
         item = ProjectListItem.model_validate(r)
         item.variance = r.hpp_variance
         item.gross_margin_pct = r.actual_gross_margin_pct
+        if r.customer_id in customers:
+            item.customer_name = customers[r.customer_id]
         items.append(item)
     return Page[ProjectListItem](items=items, meta=meta)
 
@@ -125,7 +153,7 @@ async def create_project(
     _=Depends(require_permission(PermissionCode.PROJECT_CREATE)),
 ) -> ProjectDetail:
     project = await ProjectService(db).create(payload, actor=actor)
-    return ProjectDetail.model_validate(project)
+    return await _build_project_detail(db, project)
 
 
 @projects_router.get("/{project_id}", response_model=ProjectDetail)
@@ -137,52 +165,7 @@ async def get_project(
     project = await ProjectRepository(db).get(project_id)
     if not project:
         raise NotFoundError("Project not found")
-
-    detail = ProjectDetail.model_validate(project)
-    detail.items = [_item_out(i) for i in project.items]
-
-    detail.variance = project.hpp_variance
-    detail.gross_margin_pct = project.actual_gross_margin_pct
-
-    detail.cost_breakdown = ProjectCostBreakdown(
-        estimated_materials=float(project.estimated_materials),
-        estimated_parts=float(project.estimated_parts),
-        estimated_labor=float(project.estimated_labor),
-        estimated_outsource=float(project.estimated_outsource),
-        estimated_overhead=float(project.estimated_overhead),
-        estimated_misc=float(project.estimated_misc),
-        actual_materials=float(project.actual_materials),
-        actual_parts=float(project.actual_parts),
-        actual_labor=float(project.actual_labor),
-        actual_outsource=float(project.actual_outsource),
-        actual_overhead=float(project.actual_overhead),
-        actual_misc=float(project.actual_misc),
-        estimated_hpp=float(project.estimated_hpp),
-        actual_hpp=float(project.actual_hpp),
-        variance=project.hpp_variance,
-        variance_pct=(
-            (project.hpp_variance / float(project.estimated_hpp)) * 100
-            if project.estimated_hpp else 0.0
-        ),
-    )
-
-    from app.modules.customers.repository import CustomerRepository
-    from app.modules.vehicles.repository import VehicleRepository
-
-    if project.customer_id:
-        c = await CustomerRepository(db).get(project.customer_id)
-        if c:
-            detail.customer_name = c.name
-            detail.customer_code = c.code
-    if project.vehicle_id:
-        v = await VehicleRepository(db).get(project.vehicle_id)
-        if v:
-            detail.vehicle_label = (
-                f"{v.brand} {v.model}"
-                + (f" — {v.plate_number}" if v.plate_number else "")
-            )
-
-    return detail
+    return await _build_project_detail(db, project)
 
 
 @projects_router.patch("/{project_id}", response_model=ProjectDetail)
@@ -194,7 +177,7 @@ async def update_project(
     _=Depends(require_permission(PermissionCode.PROJECT_UPDATE)),
 ) -> ProjectDetail:
     project = await ProjectService(db).update(project_id, payload, actor=actor)
-    return ProjectDetail.model_validate(project)
+    return await _build_project_detail(db, project)
 
 
 @projects_router.post("/{project_id}/status", response_model=ProjectDetail)
@@ -208,7 +191,7 @@ async def change_status(
     project = await ProjectService(db).change_status(
         project_id, payload.status, note=payload.note, actor=actor
     )
-    return ProjectDetail.model_validate(project)
+    return await _build_project_detail(db, project)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -319,10 +302,69 @@ async def update_employee(
 # HELPERS
 # ════════════════════════════════════════════════════════════════
 
+async def _build_project_detail(db, project) -> ProjectDetail:
+    """Build a fully-populated ProjectDetail from a Project ORM instance."""
+    detail = ProjectDetail.model_validate(project)
+    detail.items = [_item_out(i) for i in project.items]
+
+    detail.variance = project.hpp_variance
+    detail.gross_margin_pct = project.actual_gross_margin_pct
+
+    est_hpp = float(project.estimated_hpp)
+    detail.cost_breakdown = ProjectCostBreakdown(
+        estimated_materials=float(project.estimated_materials),
+        estimated_parts=float(project.estimated_parts),
+        estimated_labor=float(project.estimated_labor),
+        estimated_outsource=float(project.estimated_outsource),
+        estimated_overhead=float(project.estimated_overhead),
+        estimated_misc=float(project.estimated_misc),
+        actual_materials=float(project.actual_materials),
+        actual_parts=float(project.actual_parts),
+        actual_labor=float(project.actual_labor),
+        actual_outsource=float(project.actual_outsource),
+        actual_overhead=float(project.actual_overhead),
+        actual_misc=float(project.actual_misc),
+        estimated_hpp=est_hpp,
+        actual_hpp=float(project.actual_hpp),
+        variance=project.hpp_variance,
+        variance_pct=(
+            (project.hpp_variance / est_hpp) * 100 if est_hpp else 0.0
+        ),
+    )
+
+    from app.modules.auth.models import User
+    from app.modules.customers.repository import CustomerRepository
+    from app.modules.vehicles.repository import VehicleRepository
+
+    if project.customer_id:
+        c = await CustomerRepository(db).get(project.customer_id)
+        if c:
+            detail.customer_name = c.name
+            detail.customer_code = c.code
+    if project.vehicle_id:
+        v = await VehicleRepository(db).get(project.vehicle_id)
+        if v:
+            detail.vehicle_label = (
+                f"{v.brand} {v.model}"
+                + (f" — {v.plate_number}" if v.plate_number else "")
+            )
+    if project.assigned_lead_id:
+        lead = await db.get(User, project.assigned_lead_id)
+        if lead:
+            detail.assigned_lead_name = lead.full_name
+
+    return detail
+
+
 def _item_out(item) -> ProjectItemOut:
     out = ProjectItemOut.model_validate(item)
     est = float(item.estimated_cost or 0)
     act = float(item.actual_cost or 0)
     out.variance = est - act
-    out.variance_pct = (out.variance / est * 100) if est else 0.0
+    if est:
+        out.variance_pct = (out.variance / est) * 100
+    elif act:
+        out.variance_pct = -100.0
+    else:
+        out.variance_pct = 0.0
     return out

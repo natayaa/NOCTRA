@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from fastapi import Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,10 +24,10 @@ class PageParams:
 
 
 def page_params(
-    page: int = Query(1, ge=1, le=10_000),
-    size: int = Query(25, ge=1, le=200),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=500),
 ) -> PageParams:
-    return PageParams(page=page, size=size)
+    return PageParams(page=page, size=per_page)
 
 
 class PageMeta(BaseModel):
@@ -37,6 +37,11 @@ class PageMeta(BaseModel):
     pages: int
     has_next: bool
     has_prev: bool
+
+    @computed_field
+    @property
+    def per_page(self) -> int:
+        return self.size
 
 
 class Page(BaseModel, Generic[T]):
@@ -49,9 +54,14 @@ async def paginate(
     stmt: Select,
     params: PageParams,
 ) -> tuple[list, PageMeta]:
-    total_stmt = select(func.count()).select_from(stmt.subquery())
-    total = (await db.execute(total_stmt)).scalar_one()
-    rows = (await db.execute(stmt.offset(params.offset).limit(params.limit))).scalars().all()
+    # Drop ORDER BY from the count — irrelevant and forces a pointless sort.
+    count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    rows = (
+        await db.execute(stmt.offset(params.offset).limit(params.limit))
+    ).scalars().all()
+
     pages = max(1, (total + params.size - 1) // params.size)
     meta = PageMeta(
         page=params.page,

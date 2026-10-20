@@ -16,8 +16,11 @@ from app.modules.email.constants import EmailStatus
 class EmailLog(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "email_logs"
     __table_args__ = (
+        # Covers: status=? ORDER BY created_at DESC
         Index("ix_email_logs_status_created", "status", "created_at"),
+        # Covers: template=? lookups
         Index("ix_email_logs_template", "template"),
+        # Covers: (related_type, related_id) — entity history lookups
         Index("ix_email_logs_related", "related_type", "related_id"),
     )
 
@@ -25,8 +28,12 @@ class EmailLog(Base, UUIDMixin, TimestampMixin):
     to_name: Mapped[str | None] = mapped_column(String(255))
     subject: Mapped[str] = mapped_column(String(500), nullable=False)
     template: Mapped[str] = mapped_column(String(64), nullable=False)
+    # No standalone index — covered by ix_email_logs_status_created prefix.
     status: Mapped[str] = mapped_column(
-        String(16), default=EmailStatus.PENDING.value, nullable=False, index=True
+        String(16),
+        default=EmailStatus.PENDING.value,
+        server_default=EmailStatus.PENDING.value,
+        nullable=False,
     )
 
     # Optional link to a domain object (e.g. INQUIRY + inquiry_id)

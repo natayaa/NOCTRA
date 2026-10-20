@@ -1,6 +1,9 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
 
+{% set has_filters = q or category_filter or brand_filter or customer_id %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
+
 {% block content %}
 <div class="page-header">
   <div>
@@ -9,8 +12,8 @@
     </h1>
     <p class="page-subtitle">
       {{ page_meta.total }} total
-      {% if stats.cat_SCOOTER %}· <span class="text-neutral-400">{{ stats.cat_SCOOTER }} scooter</span>{% endif %}
-      {% if stats.cat_BIG_BIKE %}· <span class="text-neutral-400">{{ stats.cat_BIG_BIKE }} big bike</span>{% endif %}
+      {% if stats.get('cat_SCOOTER') %}· <span class="text-noctra-muted">{{ stats.get('cat_SCOOTER') }} scooter</span>{% endif %}
+      {% if stats.get('cat_BIG_BIKE') %}· <span class="text-noctra-muted">{{ stats.get('cat_BIG_BIKE') }} big bike</span>{% endif %}
     </p>
   </div>
   <div class="page-actions flex gap-2">
@@ -20,24 +23,30 @@
   </div>
 </div>
 
-{# Category chips #}
-<div class="mb-4 flex flex-wrap gap-2 items-center">
-  <a href="/admin/vehicles{{ qs(category='') }}"
-     class="badge {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-    All
-  </a>
-  {% for c in categories %}
-    <a href="/admin/vehicles{{ qs(category=c) }}"
-       class="badge {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
-      {{ category_labels.get(c, c) }}
-      {% if stats['cat_' ~ c] %}<span class="opacity-70">· {{ stats['cat_' ~ c] }}</span>{% endif %}
+{# ── Category chips (scrollable mobile) ──────────── #}
+<div class="mb-4 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
+    <a href="/admin/vehicles{{ qs(category='') }}"
+       class="badge whitespace-nowrap {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+      All
     </a>
-  {% endfor %}
+    {% for c in categories %}
+      <a href="/admin/vehicles{{ qs(category=c) }}"
+         class="badge whitespace-nowrap {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
+        {{ category_labels.get(c, c) }}
+        {% if stats.get('cat_' ~ c) %}
+          <span class="opacity-70">· {{ stats.get('cat_' ~ c) }}</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </div>
 </div>
 
+{# ── Filter form ──────────────────────────────────── #}
 <form method="get" class="panel mb-4">
   {% if customer_id %}<input type="hidden" name="customer_id" value="{{ customer_id }}" />{% endif %}
   {% if category_filter %}<input type="hidden" name="category" value="{{ category_filter }}" />{% endif %}
+  <input type="hidden" name="per_page" value="{{ current_per_page }}" />
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
     <div class="form-row !mb-0 lg:col-span-2">
@@ -73,63 +82,142 @@
   </div>
 </form>
 
+{# ── Toolbar ──────────────────────────────────────── #}
 {% if vehicles %}
-<div class="table-wrap">
-  <table class="table">
-    <thead>
-      <tr>
-        <th>-</th>
-        <th>Plate</th>
-        <th>Vehicle</th>
-        <th>Year</th>
-        <th>Color</th>
-        <th>Category</th>
-        {% if not customer_id %}<th>Owner</th>{% endif %}
-        <th class="text-right"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for v in vehicles %}
-      <tr>
-        <td class="mono text-xs">{{ v.plate_number or '—' }}</td>
-        <td class="font-medium">{{ v.brand }} {{ v.model }}</td>
-        <td class="text-neutral-400 text-sm">{{ v.year or '—' }}</td>
-        <td class="text-neutral-400 text-sm">{{ v.color or '—' }}</td>
-        <td>
-          {% if v.category %}
-            <span class="badge {{ category_tone.get(v.category, 'badge-neutral') }}">
-              {{ category_labels.get(v.category, v.category) }}
-            </span>
-          {% else %}—{% endif %}
-        </td>
-        {% if not customer_id %}
-        <td class="text-sm">
-          {% set o = owners_by_id.get(v.customer_id) %}
-          {% if o %}
-            <a href="/admin/customers/{{ o.id }}" class="hover:text-noctra-accent">{{ o.name }}</a>
-          {% else %}
-            <span class="text-neutral-500">—</span>
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+    {% if has_filters %}· <span class="text-noctra-muted">filtered</span>{% endif %}
+  </div>
+
+  <form method="get" class="per-page-form">
+    {% for k, v in request.query_params.items() %}
+      {% if k not in ('per_page', 'page') and v %}
+        <input type="hidden" name="{{ k }}" value="{{ v }}" />
+      {% endif %}
+    {% endfor %}
+    <label for="per_page_veh">Show</label>
+    <select id="per_page_veh" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
+</div>
+{% endif %}
+
+{% if vehicles %}
+
+{# ── Desktop table — 7 kolom konsisten ──────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Plate</th>
+          <th>Vehicle</th>
+          <th>Year</th>
+          <th>Color</th>
+          <th>Category</th>
+          {% if not customer_id %}<th>Owner</th>{% endif %}
+          <th class="text-right"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in vehicles %}
+        <tr>
+          <td class="mono text-xs">{{ v.plate_number or '—' }}</td>
+          <td class="font-medium">{{ v.brand }} {{ v.model }}</td>
+          <td class="text-noctra-muted text-sm">{{ v.year or '—' }}</td>
+          <td class="text-noctra-muted text-sm">{{ v.color or '—' }}</td>
+          <td>
+            {% if v.category %}
+              <span class="badge {{ category_tone.get(v.category, 'badge-neutral') }}">
+                {{ category_labels.get(v.category, v.category) }}
+              </span>
+            {% else %}<span class="text-noctra-faint">—</span>{% endif %}
+          </td>
+          {% if not customer_id %}
+          <td class="text-sm">
+            {% set o = owners_by_id.get(v.customer_id) %}
+            {% if o %}
+              <a href="/admin/customers/{{ o.id }}" class="hover:text-noctra-accent">{{ o.name }}</a>
+            {% else %}
+              <span class="text-noctra-dim">—</span>
+            {% endif %}
+          </td>
           {% endif %}
-        </td>
-        {% endif %}
-        <td class="text-right">
-          <a href="/admin/vehicles/{{ v.id }}" class="btn btn-ghost btn-sm">View</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/vehicles/{{ v.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Mobile cards ───────────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for v in vehicles %}
+  <a href="/admin/vehicles/{{ v.id }}"
+     class="block panel !p-4 active:scale-[0.995] transition">
+    <div class="flex items-start justify-between gap-2 mb-1">
+      <div class="min-w-0">
+        <div class="font-medium text-sm truncate">{{ v.brand }} {{ v.model }}</div>
+        <div class="mono text-xs text-noctra-dim mt-0.5">{{ v.plate_number or '—' }}</div>
+      </div>
+      {% if v.category %}
+        <span class="badge {{ category_tone.get(v.category, 'badge-neutral') }} shrink-0">
+          {{ category_labels.get(v.category, v.category) }}
+        </span>
+      {% endif %}
+    </div>
+
+    {% if v.year or v.color %}
+      <div class="text-xs text-noctra-muted mt-2 flex items-center gap-2 flex-wrap">
+        {% if v.year %}<span>{{ v.year }}</span>{% endif %}
+        {% if v.color %}· <span>{{ v.color }}</span>{% endif %}
+      </div>
+    {% endif %}
+
+    {% if not customer_id %}
+      {% set o = owners_by_id.get(v.customer_id) %}
+      {% if o %}
+        <div class="mt-2 pt-2 border-t border-noctra-border text-xs text-noctra-dim">
+          Owner: <span class="text-noctra-muted">{{ o.name }}</span>
+        </div>
+      {% endif %}
+    {% endif %}
+  </a>
+  {% endfor %}
 </div>
 
 {% include "components/pagination.html" %}
 
 {% else %}
-{{ empty_state(
-  title='No vehicles match your filters',
-  message='Try adjusting filters or add a new vehicle.',
-  action_url='/admin/vehicles/new',
-  action_label='New Vehicle',
-  icon='plus'
-) }}
+
+{% if has_filters %}
+  {{ empty_state(
+    title='No vehicles match your filters',
+    message='Try adjusting filters or clear them to see all vehicles.',
+    action_url='/admin/vehicles{% if customer_id %}?customer_id=' ~ customer_id ~ '{% endif %}',
+    action_label='Clear filters',
+    icon='search'
+  ) }}
+{% else %}
+  {{ empty_state(
+    title='No vehicles yet',
+    message='Add your first vehicle to start tracking service history.',
+    action_url='/admin/vehicles/new{% if customer_id %}?customer_id={{ customer_id }}{% endif %}',
+    action_label='New Vehicle',
+    icon='plus'
+  ) }}
+{% endif %}
+
 {% endif %}
 {% endblock %}

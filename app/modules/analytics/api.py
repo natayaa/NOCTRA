@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.constants import PermissionCode
 from app.core.deps import DbSession
+from app.core.exceptions import ValidationError
 from app.modules.analytics.constants import (
     INTERVAL_LABELS,
     INTERVALS,
@@ -37,7 +38,27 @@ def _range(
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
 ) -> tuple[date, date]:
-    return resolve_period(preset, from_date=from_date, to_date=to_date)
+    if preset not in PERIOD_PRESETS:
+        raise ValidationError(
+            f"Invalid preset {preset!r}. Choose from: {', '.join(PERIOD_PRESETS)}"
+        )
+    try:
+        return resolve_period(preset, from_date=from_date, to_date=to_date)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+def _interval(
+    interval: str | None = Query(None),
+) -> str | None:
+    """Validate ?interval= against the enum. None means auto-pick."""
+    if interval is None:
+        return None
+    if interval not in INTERVALS:
+        raise ValidationError(
+            f"Invalid interval {interval!r}. Choose from: {', '.join(INTERVALS)}"
+        )
+    return interval
 
 
 @router.get("/catalog")
@@ -64,7 +85,7 @@ async def kpis(
 async def revenue_series(
     db: DbSession,
     range_: tuple[date, date] = Depends(_range),
-    interval: str | None = Query(None),
+    interval: str | None = Depends(_interval),
     _=Depends(require_permission(PermissionCode.ANALYTICS_READ)),
 ) -> SeriesSet:
     f, t = range_
@@ -75,7 +96,7 @@ async def revenue_series(
 async def expense_series(
     db: DbSession,
     range_: tuple[date, date] = Depends(_range),
-    interval: str | None = Query(None),
+    interval: str | None = Depends(_interval),
     _=Depends(require_permission(PermissionCode.ANALYTICS_READ)),
 ) -> SeriesSet:
     f, t = range_
@@ -86,7 +107,7 @@ async def expense_series(
 async def gross_profit_series(
     db: DbSession,
     range_: tuple[date, date] = Depends(_range),
-    interval: str | None = Query(None),
+    interval: str | None = Depends(_interval),
     _=Depends(require_permission(PermissionCode.ANALYTICS_READ)),
 ) -> SeriesSet:
     f, t = range_
@@ -97,7 +118,7 @@ async def gross_profit_series(
 async def cash_flow(
     db: DbSession,
     range_: tuple[date, date] = Depends(_range),
-    interval: str | None = Query(None),
+    interval: str | None = Depends(_interval),
     _=Depends(require_permission(PermissionCode.ANALYTICS_READ)),
 ) -> list[CashFlowPoint]:
     f, t = range_

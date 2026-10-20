@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, case, func, or_, select
+from sqlalchemy import Select, and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload, selectinload
 
 from app.modules.finance.constants import (
     InvoiceStatus,
@@ -49,10 +50,19 @@ class InvoiceRepository:
         self.db = db
 
     async def get(self, iid: UUID) -> Invoice | None:
-        return await self.db.get(Invoice, iid)
+        stmt = (
+            select(Invoice)
+            .options(selectinload(Invoice.items))
+            .where(Invoice.id == iid)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def by_code(self, code: str) -> Invoice | None:
-        stmt = select(Invoice).where(Invoice.code == code)
+        stmt = (
+            select(Invoice)
+            .options(selectinload(Invoice.items))
+            .where(Invoice.code == code)
+        )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     def query(
@@ -66,7 +76,13 @@ class InvoiceRepository:
         to_date: date | None = None,
         only_unpaid: bool = False,
     ) -> Select:
-        stmt = select(Invoice).order_by(Invoice.issue_date.desc(), Invoice.created_at.desc())
+        # `noload` prevents `selectin` from firing for `Invoice.items` in
+        # list views — not needed and costs 1 extra query per page.
+        stmt = (
+            select(Invoice)
+            .options(noload(Invoice.items))
+            .order_by(Invoice.issue_date.desc(), Invoice.created_at.desc())
+        )
         conds = []
         if q:
             like = f"%{q.strip()}%"
@@ -83,7 +99,9 @@ class InvoiceRepository:
             conds.append(Invoice.issue_date <= to_date)
         if only_unpaid:
             conds.append(
-                Invoice.status.not_in([InvoiceStatus.PAID.value, InvoiceStatus.CANCELLED.value])
+                Invoice.status.not_in([
+                    InvoiceStatus.PAID.value, InvoiceStatus.CANCELLED.value,
+                ])
             )
         if conds:
             stmt = stmt.where(and_(*conds))
@@ -92,6 +110,10 @@ class InvoiceRepository:
     async def next_code(self) -> str:
         year = datetime.now(UTC).year
         prefix = f"INV-{year}-"
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": prefix},
+        )
         stmt = (
             select(Invoice.code)
             .where(Invoice.code.like(f"{prefix}%"))
@@ -101,6 +123,17 @@ class InvoiceRepository:
         last = (await self.db.execute(stmt)).scalar_one_or_none()
         n = 1 if last is None else int(last.rsplit("-", 1)[-1]) + 1
         return f"{prefix}{n:05d}"
+
+    async def lock_project(self, project_id: UUID) -> None:
+        """
+        Serialize invoice-creation-for-project. Must be acquired BEFORE
+        the existing-invoice check so two requests cannot both pass it.
+        Released at transaction end.
+        """
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": f"invoice-project:{project_id}"},
+        )
 
     async def add(self, invoice: Invoice) -> Invoice:
         self.db.add(invoice)
@@ -117,7 +150,6 @@ class InvoiceRepository:
         await self.db.flush()
 
     async def payments_for(self, invoice_id: UUID) -> list[Payment]:
-        """All payments tied to this invoice (IN and OUT), oldest first."""
         stmt = (
             select(Payment)
             .where(Payment.reference_type == PaymentReferenceType.INVOICE.value)
@@ -127,10 +159,6 @@ class InvoiceRepository:
         return list((await self.db.execute(stmt)).scalars().all())
 
     async def paid_amount(self, invoice_id: UUID) -> float:
-        """
-        Net amount paid against the invoice.
-        Reversal entries (opposite direction) subtract from the total.
-        """
         amount_expr = case(
             (Payment.direction == PaymentDirection.IN.value, Payment.amount),
             else_=-Payment.amount,
@@ -141,6 +169,27 @@ class InvoiceRepository:
             .where(Payment.reference_id == invoice_id)
         )
         return float((await self.db.execute(stmt)).scalar_one() or 0)
+
+    async def batch_paid_amount(self, invoice_ids: list[UUID]) -> dict[UUID, float]:
+        """Fetch paid_amount for many invoices in one query — kills the N+1
+        in list endpoints."""
+        if not invoice_ids:
+            return {}
+        amount_expr = case(
+            (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+            else_=-Payment.amount,
+        )
+        stmt = (
+            select(
+                Payment.reference_id.label("invoice_id"),
+                func.coalesce(func.sum(amount_expr), 0).label("paid"),
+            )
+            .where(Payment.reference_type == PaymentReferenceType.INVOICE.value)
+            .where(Payment.reference_id.in_(invoice_ids))
+            .group_by(Payment.reference_id)
+        )
+        rows = (await self.db.execute(stmt)).all()
+        return {r.invoice_id: float(r.paid or 0) for r in rows}
 
 
 # ════════════════════════════════════════════════════════════════
@@ -165,7 +214,9 @@ class PaymentRepository:
         from_date: date | None = None,
         to_date: date | None = None,
     ) -> Select:
-        stmt = select(Payment).order_by(Payment.payment_date.desc(), Payment.created_at.desc())
+        stmt = select(Payment).order_by(
+            Payment.payment_date.desc(), Payment.created_at.desc()
+        )
         conds = []
         if direction:
             conds.append(Payment.direction == direction)
@@ -188,6 +239,10 @@ class PaymentRepository:
     async def next_code(self) -> str:
         year = datetime.now(UTC).year
         prefix = f"PAY-{year}-"
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": prefix},
+        )
         stmt = (
             select(Payment.code)
             .where(Payment.code.like(f"{prefix}%"))
@@ -203,21 +258,25 @@ class PaymentRepository:
         await self.db.flush()
         return payment
 
-    async def find_reversal_for(self, original_code: str) -> Payment | None:
-        """Check whether a payment has already been reversed."""
+    async def find_reversal_for(self, payment_id: UUID) -> Payment | None:
+        """Find the reversal row that cancels the given payment (FK-based)."""
         stmt = (
             select(Payment)
-            .where(Payment.notes.like(f"Reversal of {original_code}%"))
+            .where(Payment.reversal_of_id == payment_id)
             .limit(1)
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
+    async def is_reversal(self, payment_id: UUID) -> bool:
+        """True if this payment is itself a reversal entry."""
+        stmt = (
+            select(func.count(Payment.id))
+            .where(Payment.id == payment_id)
+            .where(Payment.reversal_of_id.isnot(None))
+        )
+        return bool((await self.db.execute(stmt)).scalar_one())
+
     async def payments_for_project(self, project_id: UUID) -> list[Payment]:
-        """
-        All IN payments connected to a project — whether they're still
-        PROJECT-referenced (a DP that hasn't been invoiced) or already
-        relinked to an invoice that belongs to this project.
-        """
         invoice_ids_subq = select(Invoice.id).where(Invoice.project_id == project_id)
         stmt = (
             select(Payment)
@@ -258,7 +317,9 @@ class ExpenseRepository:
         from_date: date | None = None,
         to_date: date | None = None,
     ) -> Select:
-        stmt = select(Expense).order_by(Expense.expense_date.desc(), Expense.created_at.desc())
+        stmt = select(Expense).order_by(
+            Expense.expense_date.desc(), Expense.created_at.desc()
+        )
         conds = []
         if q:
             like = f"%{q.strip()}%"
@@ -282,6 +343,10 @@ class ExpenseRepository:
     async def next_code(self) -> str:
         year = datetime.now(UTC).year
         prefix = f"EXP-{year}-"
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": prefix},
+        )
         stmt = (
             select(Expense.code)
             .where(Expense.code.like(f"{prefix}%"))

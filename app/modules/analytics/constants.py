@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import StrEnum
+from zoneinfo import ZoneInfo
+
+from app.core.config import settings
 
 
 class Interval(StrEnum):
@@ -45,6 +48,11 @@ INTERVAL_LABELS: dict[str, str] = {
 }
 
 
+def _today_local() -> date:
+    """Today's date in the app's configured timezone (not UTC)."""
+    return datetime.now(ZoneInfo(settings.APP_TIMEZONE)).date()
+
+
 def resolve_period(
     preset: str,
     *,
@@ -53,35 +61,41 @@ def resolve_period(
 ) -> tuple[date, date]:
     """
     Resolve a preset name into a concrete (from, to) date range.
-    If both from/to are provided, they override the preset.
+
+    Both from_date AND to_date must be provided to override the preset;
+    providing only one raises ValueError so callers can return 400.
+    Presets are inclusive — "Last 7 days" covers exactly 7 calendar days.
     """
-    if from_date and to_date:
+    # Explicit override path
+    if from_date is not None and to_date is not None:
+        if from_date > to_date:
+            raise ValueError("from_date must be <= to_date")
         return from_date, to_date
 
-    today = datetime.now(UTC).date()
+    if (from_date is None) != (to_date is None):
+        raise ValueError("Provide both from_date and to_date, or neither")
+
+    today = _today_local()
 
     if preset == PeriodPreset.TODAY.value:
         return today, today
     if preset == PeriodPreset.WEEK.value:
-        return today - timedelta(days=7), today
+        return today - timedelta(days=6), today      # 7 days inclusive
     if preset == PeriodPreset.MONTH.value:
-        return today - timedelta(days=30), today
+        return today - timedelta(days=29), today     # 30 days inclusive
     if preset == PeriodPreset.QUARTER.value:
-        return today - timedelta(days=90), today
+        return today - timedelta(days=89), today     # 90 days inclusive
     if preset == PeriodPreset.YEAR.value:
-        return today - timedelta(days=365), today
+        return today - timedelta(days=364), today    # 365 days inclusive
     if preset == PeriodPreset.YTD.value:
         return today.replace(month=1, day=1), today
 
-    # Fallback
-    return today - timedelta(days=30), today
+    raise ValueError(f"Unknown period preset: {preset!r}")
 
 
 def pick_interval(from_date: date, to_date: date) -> str:
     """Auto-pick a sensible interval based on the range span."""
     days = (to_date - from_date).days
-    if days <= 1:
-        return Interval.DAY.value
     if days <= 31:
         return Interval.DAY.value
     if days <= 120:

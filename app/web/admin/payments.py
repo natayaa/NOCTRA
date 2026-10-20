@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 from urllib.parse import quote
 from uuid import UUID
 
@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
@@ -21,6 +22,7 @@ from app.modules.finance.constants import (
     PAYMENT_METHODS,
     PAYMENT_METHOD_LABELS,
     PAYMENT_REFERENCE_TYPES,
+    today_local,
 )
 from app.modules.finance.repository import (
     AccountRepository,
@@ -30,6 +32,7 @@ from app.modules.finance.repository import (
 from app.modules.finance.schemas import PaymentCreate
 from app.modules.finance.service import PaymentService
 from app.modules.inventory.models import Supplier
+from app.web.admin._perms import read, write
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin/payments", tags=["admin-payments"])
@@ -42,12 +45,17 @@ def _form_error(exc: Exception) -> str:
     return msg.strip() or "Invalid input"
 
 
+# ════════════════════════════════════════════════════════════════
+# LIST
+# ════════════════════════════════════════════════════════════════
+
 @router.get("", response_class=HTMLResponse)
 async def list_view(
     request: Request,
     db: DbSession,
     params: PageParams = Depends(page_params),
     direction: str | None = Query(None),
+    _=read(PermissionCode.FINANCE_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     stmt = PaymentRepository(db).query(direction=direction)
@@ -57,16 +65,20 @@ async def list_view(
     sids = {r.supplier_id for r in rows if r.supplier_id}
     customers, suppliers = {}, {}
     if cids:
-        c_rows = await db.execute(select(Customer).where(Customer.id.in_(cids)))
-        customers = {c.id: c for c in c_rows.scalars().all()}
+        c_rows = await db.execute(
+            select(Customer.id, Customer.name).where(Customer.id.in_(cids))
+        )
+        customers = {cid: name for cid, name in c_rows.all()}
     if sids:
-        s_rows = await db.execute(select(Supplier).where(Supplier.id.in_(sids)))
-        suppliers = {s.id: s for s in s_rows.scalars().all()}
+        s_rows = await db.execute(
+            select(Supplier.id, Supplier.name).where(Supplier.id.in_(sids))
+        )
+        suppliers = {sid: name for sid, name in s_rows.all()}
 
     enriched = [{
         "payment": p,
-        "customer": customers.get(p.customer_id),
-        "supplier": suppliers.get(p.supplier_id),
+        "customer_name": customers.get(p.customer_id),
+        "supplier_name": suppliers.get(p.supplier_id),
     } for p in rows]
 
     return templates.render(
@@ -83,6 +95,10 @@ async def list_view(
     )
 
 
+# ════════════════════════════════════════════════════════════════
+# NEW / CREATE
+# ════════════════════════════════════════════════════════════════
+
 @router.get("/new", response_class=HTMLResponse)
 async def new_view(
     request: Request,
@@ -92,11 +108,11 @@ async def new_view(
     reference_type: str | None = Query(None),
     reference_id: UUID | None = Query(None),
     customer_id: UUID | None = Query(None),
+    _=write(PermissionCode.PAYMENT_WRITE),      # ← was read()
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from app.modules.finance.constants import InvoiceStatus
     from app.modules.finance.models import Invoice
-    from app.modules.finance.repository import InvoiceRepository
 
     if direction not in PAYMENT_DIRECTIONS:
         direction = "IN"
@@ -112,28 +128,26 @@ async def new_view(
             await db.execute(select(Customer).order_by(Customer.name))
         ).scalars().all()
 
-        # Load every open invoice the admin might want to link against.
-        # Capped at 500 rows — plenty for a workshop.
         inv_repo = InvoiceRepository(db)
         inv_rows = (
             await db.execute(
                 select(Invoice)
-                .where(
-                    Invoice.status.not_in([
-                        InvoiceStatus.PAID.value,
-                        InvoiceStatus.CANCELLED.value,
-                    ])
-                )
+                .where(Invoice.status.not_in([
+                    InvoiceStatus.PAID.value,
+                    InvoiceStatus.CANCELLED.value,
+                ]))
                 .order_by(Invoice.issue_date.desc())
                 .limit(500)
             )
         ).scalars().all()
 
-        # Enrich with customer name + outstanding balance so the UI can
-        # filter by customer and auto-fill the amount.
+        # Batch paid lookup — 1 query for all 500 invoices.
+        invoice_ids = [inv.id for inv in inv_rows]
+        paid_map = await inv_repo.batch_paid_amount(invoice_ids)
+
         cust_map = {c.id: c for c in customers}
         for inv in inv_rows:
-            paid = await inv_repo.paid_amount(inv.id)
+            paid = paid_map.get(inv.id, 0.0)
             balance = float(inv.total) - paid
             open_invoices.append({
                 "id": str(inv.id),
@@ -151,7 +165,6 @@ async def new_view(
             await db.execute(select(Supplier).order_by(Supplier.name))
         ).scalars().all()
 
-    today = datetime.now(UTC).date()
     return templates.render(
         request,
         "admin/payments/form.html",
@@ -169,12 +182,18 @@ async def new_view(
             "payment_methods": PAYMENT_METHODS,
             "payment_method_labels": PAYMENT_METHOD_LABELS,
             "reference_types": PAYMENT_REFERENCE_TYPES,
-            "today": today,
+            "today": today_local(),                 # ← was datetime.now(UTC).date()
         },
     )
 
+
 @router.post("")
-async def create_submit(request: Request, db: DbSession, current=Depends(get_current_user)):
+async def create_submit(
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.PAYMENT_WRITE),
+    current=Depends(get_current_user),
+):
     form = await request.form()
     direction = (form.get("direction") or "IN").strip()
     if direction not in PAYMENT_DIRECTIONS:
@@ -206,15 +225,21 @@ async def create_submit(request: Request, db: DbSession, current=Depends(get_cur
     return RedirectResponse(url=f"/admin/payments/{payment.id}", status_code=303)
 
 
+# ════════════════════════════════════════════════════════════════
+# DETAIL
+# ════════════════════════════════════════════════════════════════
+
 @router.get("/{payment_id}", response_class=HTMLResponse)
 async def detail_view(
     payment_id: UUID,
     request: Request,
     db: DbSession,
     error: str | None = Query(None),
+    _=read(PermissionCode.FINANCE_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from app.modules.finance.models import Payment as PaymentModel
+    from app.modules.finance.repository import PaymentRepository as _PR
 
     p = await PaymentRepository(db).get(payment_id)
     if not p:
@@ -228,23 +253,13 @@ async def detail_view(
     if p.reference_type == "INVOICE" and p.reference_id:
         invoice = await InvoiceRepository(db).get(p.reference_id)
 
-    reversal = (
-        await db.execute(
-            select(PaymentModel)
-            .where(PaymentModel.notes.like(f"Reversal of {p.code}%"))
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    # FK-based reversal lookup (see finance follow-up).
+    reversal = await _PR(db).find_reversal_for(p.id)
 
-    is_reversal = bool(p.notes and p.notes.startswith("Reversal of "))
+    is_reversal = p.reversal_of_id is not None
     original = None
     if is_reversal:
-        original_code = p.notes.split("Reversal of ", 1)[1].split(" ", 1)[0]
-        original = (
-            await db.execute(
-                select(PaymentModel).where(PaymentModel.code == original_code).limit(1)
-            )
-        ).scalar_one_or_none()
+        original = await db.get(PaymentModel, p.reversal_of_id)
 
     return templates.render(
         request,
@@ -265,11 +280,16 @@ async def detail_view(
     )
 
 
+# ════════════════════════════════════════════════════════════════
+# REVERSE
+# ════════════════════════════════════════════════════════════════
+
 @router.post("/{payment_id}/reverse")
 async def reverse_payment_submit(
     payment_id: UUID,
     request: Request,
     db: DbSession,
+    _=write(PermissionCode.PAYMENT_WRITE),
     current=Depends(get_current_user),
 ):
     form = await request.form()

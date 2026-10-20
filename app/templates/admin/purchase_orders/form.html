@@ -1,33 +1,99 @@
 {% extends "admin/base.html" %}
 {% block content %}
+
 <div class="page-header">
-  <div><h1 class="page-title">New Purchase Order</h1></div>
-  <div class="page-actions"><a href="/admin/purchase-orders" class="btn btn-secondary btn-sm">Back</a></div>
+  <div>
+    <h1 class="page-title">New Purchase Order</h1>
+    <p class="page-subtitle">Create a draft PO, then add line items</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/purchase-orders" class="btn btn-secondary btn-sm">Back</a>
+  </div>
 </div>
 
-<form method="post" action="/admin/purchase-orders" class="max-w-2xl panel space-y-5" data-guard>
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
+  </div>
+</div>
+{% endif %}
+
+<form method="post" action="/admin/purchase-orders" class="max-w-2xl space-y-5" data-guard data-shortcut-submit>
   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
 
-  <div class="form-row"><label class="form-label" for="supplier_id">Supplier <span class="req">*</span></label>
-    <select class="select" id="supplier_id" name="supplier_id" required>
-      <option value="">Choose supplier…</option>
-      {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }} ({{ s.code }})</option>{% endfor %}
-    </select></div>
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Order Info</h2>
+      <span class="text-xs text-noctra-dim">Required</span>
+    </div>
 
-  <div class="grid md:grid-cols-2 gap-5">
-    <div class="form-row"><label class="form-label" for="order_date">Order date <span class="req">*</span></label>
-      <input class="input" type="date" id="order_date" name="order_date" required /></div>
-    <div class="form-row"><label class="form-label" for="expected_date">Expected date</label>
-      <input class="input" type="date" id="expected_date" name="expected_date" /></div>
+    <div class="form-row">
+      <label class="form-label" for="supplier_id">Supplier <span class="req">*</span></label>
+      <select class="select" id="supplier_id" name="supplier_id" required>
+        <option value="">Choose supplier…</option>
+        {% for s in suppliers %}
+          <option value="{{ s.id }}">{{ s.name }} ({{ s.code }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-5 mt-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="order_date">Order date <span class="req">*</span></label>
+        <input class="input" type="date" id="order_date" name="order_date" required />
+      </div>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="expected_date">Expected date</label>
+        <input class="input" type="date" id="expected_date" name="expected_date" />
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title mb-4">Notes</div>
+    <div class="form-row !mb-0">
+      <textarea class="textarea" id="notes" name="notes" rows="3" placeholder="Delivery instructions, special requests…"></textarea>
+    </div>
+  </section>
+
+  {# ── Sticky save bar ────────────────────────────── #}
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">
+        Create draft PO
+      </button>
+      <a href="/admin/purchase-orders" class="btn btn-secondary">Cancel</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
+    </div>
   </div>
-
-  <div class="form-row"><label class="form-label" for="notes">Notes</label>
-    <textarea class="textarea" id="notes" name="notes" rows="2"></textarea></div>
-
-  <div class="flex gap-2 pt-2">
-    <button class="btn btn-primary">Create draft PO</button>
-    <a href="/admin/purchase-orders" class="btn btn-secondary">Cancel</a>
-  </div>
-  <p class="text-xs text-neutral-500">Add line items on the PO detail page after creating.</p>
+  
+  <p class="text-xs text-noctra-dim text-center mt-4">
+    You'll add line items on the PO detail page after creating.
+  </p>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const form = document.querySelector('form[data-shortcut-submit]');
+  if (!form) return;
+  form.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+    if (e.target && e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    if (form.requestSubmit) form.requestSubmit(); else form.submit();
+  });
+})();
+</script>
 {% endblock %}

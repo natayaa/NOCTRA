@@ -8,14 +8,19 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
 from app.core.pagination import PageParams, paginate, page_params
 from app.modules.auth.dependencies import get_current_user
 from app.modules.pricing.models import PricingSnapshot
 from app.modules.pricing.repository import PricingSnapshotRepository
+from app.web.admin._perms import read
 from app.web.templates_env import templates
 
-router = APIRouter(prefix="/admin/pricing-analytics", tags=["admin-pricing-analytics"])
+router = APIRouter(
+    prefix="/admin/pricing-analytics",
+    tags=["admin-pricing-analytics"],
+)
 
 
 @router.get("", response_class=HTMLResponse)
@@ -24,9 +29,9 @@ async def overview(
     db: DbSession,
     params: PageParams = Depends(page_params),
     project_id: UUID | None = Query(None),
+    _=read(PermissionCode.PRICING_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
-    # Aggregate stats over all snapshots
     agg_stmt = select(
         func.count(PricingSnapshot.id).label("total"),
         func.avg(PricingSnapshot.actual_margin_pct).label("avg_actual_margin"),
@@ -36,7 +41,6 @@ async def overview(
     )
     row = (await db.execute(agg_stmt)).one()
 
-    # Per-service aggregation
     by_service_stmt = (
         select(
             PricingSnapshot.service_interest,
@@ -51,7 +55,6 @@ async def overview(
     )
     by_service = (await db.execute(by_service_stmt)).all()
 
-    # Recent snapshots
     stmt = PricingSnapshotRepository(db).query(project_id=project_id)
     rows, meta = await paginate(db, stmt, params)
 
