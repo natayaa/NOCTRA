@@ -1,16 +1,20 @@
 {% extends "admin/base.html" %}
 
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script defer src="/static/js/dashboard-charts.js"></script>
+  {{ super() }}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script defer src="{{ asset_url('js/dashboard-charts.js') }}"></script>
 {% endblock %}
 
 {% block content %}
 
+{% set display_name = current_user.full_name or current_user.username if current_user else 'there' %}
+
 <div class="page-header">
   <div>
-    <h1 class="page-title">Dashboard</h1>
-    <p class="page-subtitle">Overview of NOCTRA Autoworks</p>
+    <div class="page-eyebrow">Workshop overview</div>
+    <h1 class="page-title">Welcome back, {{ display_name }}</h1>
+    <p class="page-subtitle">{{ today() | date_id('%d %B %Y') }} · Here's where things stand.</p>
   </div>
   <div class="page-actions">
     <a href="/admin/reports/pnl" class="btn btn-secondary btn-sm">P&amp;L Report</a>
@@ -18,12 +22,64 @@
   </div>
 </div>
 
+<nav class="quick-actions" aria-label="Quick actions">
+  <a href="/admin/inquiries/new" class="quick-action is-primary">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20l1.2-5.2A8.5 8.5 0 1 1 21 11.5Z"
+            stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    New inquiry
+  </a>
+  <a href="/admin/projects/new" class="quick-action">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 7h6l2 2h10v10H3V7Z" stroke="currentColor" stroke-width="1.75"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    New project
+  </a>
+  <a href="/admin/invoices/new" class="quick-action">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M9 13h6M9 17h4"
+            stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    New invoice
+  </a>
+  <a href="/admin/purchase-orders/new" class="quick-action">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6h15l-1.5 9h-12L5 3H2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+            stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Purchase order
+  </a>
+  <a href="/admin/expenses/new" class="quick-action">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 4h16v16l-3-2-2 2-3-2-3 2-2-2-3 2V4ZM8 10h8M8 14h5"
+            stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Expense
+  </a>
+</nav>
+
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Period selector ────────────────────────────── #}
 {% if period_presets %}
 <div class="mb-6">
   <div class="segmented-control" role="tablist" aria-label="Time period">
     {% for p in period_presets %}
-    <a href="/admin/dashboard?preset={{ p }}" class="segmented-item{% if period_preset == p %} is-active{% endif %}"
-      role="tab" {% if period_preset==p %}aria-selected="true" {% endif %}>
+    <a href="/admin/dashboard?preset={{ p }}"
+       class="segmented-item{% if period_preset == p %} is-active{% endif %}"
+       role="tab" {% if period_preset == p %}aria-selected="true"{% endif %}>
       {{ period_labels.get(p, p) }}
     </a>
     {% endfor %}
@@ -31,36 +87,36 @@
 </div>
 {% endif %}
 
+{# ── KPI cards ──────────────────────────────────── #}
 {% set icons = {
-'revenue': 'M3 7h18v10H3zM3 7l2-3h14l2 3M16 12h2',
-'gross_profit': 'M3 17l6-6 4 4 8-8M21 7v6h-6',
-'net_profit': 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
-'gross_margin': 'M19 5 5 19M6.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm11 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
-'active_projects': 'M22 12h-4l-3 9L9 3l-3 9H2',
-'open_inquiries': 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0
-0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z',
-'unpaid_invoices': 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 0v6h6M9 13h6M9 17h4',
-'low_stock': 'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0ZM12 9v4M12
-17h.01',
+  'revenue': 'M3 7h18v10H3zM3 7l2-3h14l2 3M16 12h2',
+  'gross_profit': 'M3 17l6-6 4 4 8-8M21 7v6h-6',
+  'net_profit': 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  'gross_margin': 'M19 5 5 19M6.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm11 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
+  'active_projects': 'M22 12h-4l-3 9L9 3l-3 9H2',
+  'open_inquiries': 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z',
+  'unpaid_invoices': 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 0v6h6M9 13h6M9 17h4',
+  'low_stock': 'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0ZM12 9v4M12 17h.01',
 } %}
 {% set tones = {
-'revenue': 'blue',
-'gross_profit': 'green',
-'net_profit': 'green',
-'gross_margin': 'purple',
-'active_projects': 'purple',
-'open_inquiries': 'orange',
-'unpaid_invoices': 'pink',
-'low_stock': 'orange',
+  'revenue': 'blue',
+  'gross_profit': 'green',
+  'net_profit': 'green',
+  'gross_margin': 'purple',
+  'active_projects': 'purple',
+  'open_inquiries': 'orange',
+  'unpaid_invoices': 'pink',
+  'low_stock': 'orange',
 } %}
 
+{% if kpis and kpis.cards %}
 <div class="stat-grid">
   {% for card in kpis.cards %}
   <div class="stat">
     <div class="stat-icon tone-{{ tones.get(card.key, 'blue') }}" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none">
         <path d="{{ icons.get(card.key, icons['revenue']) }}" stroke="currentColor" stroke-width="1.9"
-          stroke-linecap="round" stroke-linejoin="round" />
+              stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </div>
     <div class="stat-content">
@@ -78,16 +134,21 @@
   </div>
   {% endfor %}
 </div>
+{% else %}
+<div class="panel mb-6 text-center py-8">
+  <p class="text-noctra-dim text-sm">No KPI data available for this period.</p>
+</div>
+{% endif %}
 
-{# ── Charts row ───────────────────────────────────── #}
+{# ── Charts ─────────────────────────────────────── #}
 <div class="grid lg:grid-cols-3 gap-6 mb-6">
   <div class="panel lg:col-span-2">
     <div class="flex items-center justify-between">
       <div>
         <div class="panel-title">Revenue &amp; Gross Profit</div>
-        <div class="panel-subtitle">{{ interval_label }} trend</div>
+        <div class="panel-subtitle">{{ interval_label or '—' }} trend</div>
       </div>
-      <div class="flex items-center gap-4 text-xs text-neutral-400">
+      <div class="flex items-center gap-4 text-xs text-noctra-dim">
         <span class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-noctra-accent"></span> Revenue
         </span>
@@ -96,7 +157,7 @@
         </span>
       </div>
     </div>
-    <div class="mt-4" style="height: 280px;">
+    <div class="chart-host mt-4" style="height: 280px;">
       <canvas id="revenueChart"></canvas>
     </div>
   </div>
@@ -104,52 +165,60 @@
   <div class="panel">
     <div class="panel-title">Cash Flow</div>
     <div class="panel-subtitle">Money in vs money out</div>
-    <div class="mt-4" style="height: 280px;">
+    <div class="chart-host mt-4" style="height: 280px;">
       <canvas id="cashFlowChart"></canvas>
     </div>
   </div>
 </div>
 
-{# ── Second row ───────────────────────────────────── #}
+{# ── Funnel / Accuracy / Customers ──────────────── #}
 <div class="grid lg:grid-cols-3 gap-6 mb-6">
 
-  {# Inquiry funnel #}
+  {# Funnel #}
   <div class="panel">
     <div class="panel-title">Inquiry Pipeline</div>
-    <div class="panel-subtitle">{{ funnel.total }} total in period</div>
+    <div class="panel-subtitle">{{ funnel.total if funnel else 0 }} total in period</div>
 
-    {% if funnel.total > 0 %}
+    {% if funnel and funnel.total > 0 %}
     <div class="mt-4 space-y-3">
       {% for stage in funnel.stages %}
       {% if stage.count > 0 or stage.status in ('NEW', 'CONTACTED', 'QUOTED', 'NEGOTIATING', 'APPROVED') %}
       <div>
         <div class="flex items-center justify-between text-xs mb-1">
-          <span class="text-neutral-400">{{ stage.label }}</span>
+          <span class="text-noctra-muted">{{ stage.label }}</span>
           <span class="font-mono">{{ stage.count }}</span>
         </div>
         <div class="h-2 rounded-full bg-noctra-surface2 overflow-hidden">
           <div class="h-full
-              {% if stage.status in ('CONVERTED',) %}bg-noctra-success
+              {% if stage.status == 'CONVERTED' %}bg-noctra-success
               {% elif stage.status == 'LOST' %}bg-noctra-danger
               {% elif stage.status == 'APPROVED' %}bg-noctra-accent
               {% elif stage.status == 'NEGOTIATING' %}bg-noctra-warning
-              {% else %}bg-neutral-600{% endif %}" style="width: {{ stage.pct_of_total }}%"></div>
+              {% else %}bg-neutral-600{% endif %}"
+              style="width: {{ stage.pct_of_total }}%"></div>
         </div>
       </div>
       {% endif %}
       {% endfor %}
     </div>
     {% else %}
-    <p class="text-neutral-500 text-sm mt-4">No inquiries in this period.</p>
+    <div class="panel-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20l1.2-5.2A8.5 8.5 0 1 1 21 11.5Z"/>
+      </svg>
+      <div class="panel-empty-title">No inquiries yet</div>
+      <div class="panel-empty-text">New inquiries from the public site will show up here.</div>
+    </div>
     {% endif %}
   </div>
 
-  {# Estimate accuracy #}
+  {# Accuracy #}
   <div class="panel">
     <div class="panel-title">Estimate Accuracy</div>
     <div class="panel-subtitle">Estimated vs actual HPP</div>
 
-    {% if accuracy.project_count > 0 %}
+    {% if accuracy and accuracy.project_count > 0 %}
     <div class="mt-4">
       <div class="text-3xl font-semibold
         {% if accuracy.avg_variance_pct <= 5 %}text-noctra-success
@@ -157,29 +226,36 @@
         {% else %}text-noctra-danger{% endif %}">
         {{ '%+.1f'|format(accuracy.avg_variance_pct) }}%
       </div>
-      <div class="text-xs text-neutral-500 mt-1">Average variance (positive = overrun)</div>
+      <div class="text-xs text-noctra-dim mt-1">Average variance (positive = overrun)</div>
 
       <div class="grid grid-cols-2 gap-3 mt-4 text-sm">
         <div>
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Projects</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Projects</div>
           <div class="font-mono">{{ accuracy.project_count }}</div>
         </div>
         <div>
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Median</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Median</div>
           <div class="font-mono">{{ '%+.1f'|format(accuracy.median_variance_pct) }}%</div>
         </div>
         <div>
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Worst overrun</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Worst overrun</div>
           <div class="font-mono text-noctra-danger">{{ '%+.1f'|format(accuracy.worst_overrun_pct) }}%</div>
         </div>
         <div>
-          <div class="text-neutral-500 text-xs uppercase tracking-wider">Best case</div>
+          <div class="text-noctra-dim text-xs uppercase tracking-wider">Best case</div>
           <div class="font-mono text-noctra-success">{{ '%+.1f'|format(accuracy.best_case_pct) }}%</div>
         </div>
       </div>
     </div>
     {% else %}
-    <p class="text-neutral-500 text-sm mt-4">Not enough completed projects to measure accuracy yet.</p>
+    <div class="panel-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+      </svg>
+      <div class="panel-empty-title">Not enough data yet</div>
+      <div class="panel-empty-text">Complete a few projects to measure estimate accuracy.</div>
+    </div>
     {% endif %}
   </div>
 
@@ -194,27 +270,35 @@
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
           <a href="/admin/customers/{{ c.customer_id }}"
-            class="font-medium text-sm hover:text-noctra-accent truncate block">
+             class="font-medium text-sm hover:text-noctra-accent truncate block">
             {{ c.name }}
           </a>
-          <div class="text-xs text-neutral-500">
+          <div class="text-xs text-noctra-dim">
             {{ c.project_count }} project{{ 's' if c.project_count != 1 else '' }}
           </div>
         </div>
         <div class="text-right shrink-0">
           <div class="font-mono text-sm">{{ c.total_revenue | rupiah }}</div>
-          <div class="text-xs text-neutral-500">{{ '%.1f'|format(c.margin_pct) }}% margin</div>
+          <div class="text-xs text-noctra-dim">{{ c.margin_pct | pct }}</div>
         </div>
       </div>
       {% endfor %}
     </div>
     {% else %}
-    <p class="text-neutral-500 text-sm mt-4">No customer revenue in this period.</p>
+    <div class="panel-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>
+        <path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>
+      </svg>
+      <div class="panel-empty-title">No customer revenue</div>
+      <div class="panel-empty-text">Revenue by customer appears once invoices are paid.</div>
+    </div>
     {% endif %}
   </div>
 </div>
 
-{# ── Third row ────────────────────────────────────── #}
+{# ── Materials / Activity ───────────────────────── #}
 <div class="grid lg:grid-cols-2 gap-6">
 
   {# Top materials #}
@@ -239,19 +323,22 @@
               <a href="/admin/materials/{{ m.material_id }}" class="text-sm hover:text-noctra-accent">
                 {{ m.name }}
               </a>
-              <div class="text-xs text-neutral-500">{{ m.category }}</div>
+              <div class="text-xs text-noctra-dim">{{ m.category }}</div>
             </td>
-            <td class="text-right font-mono text-sm">
-              {{ '%.2f'|format(m.total_consumed) }} <span class="text-xs text-neutral-500">{{ m.unit }}</span>
+            <td class="text-right font-mono text-sm whitespace-nowrap">
+              {{ m.total_consumed | qty(decimals=2) }}
+              <span class="text-xs text-noctra-dim">{{ m.unit }}</span>
             </td>
-            <td class="text-right font-mono text-sm">{{ m.total_cost | rupiah }}</td>
+            <td class="text-right font-mono text-sm whitespace-nowrap">
+              {{ m.total_cost | rupiah }}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
     {% else %}
-    <p class="text-neutral-500 text-sm mt-4">No material consumption in this period.</p>
+    <p class="text-noctra-dim text-sm mt-4">No material consumption in this period.</p>
     {% endif %}
   </div>
 
@@ -265,16 +352,16 @@
       {% for a in activity %}
       <div class="flex items-center gap-3 text-xs py-1.5 border-b border-noctra-border last:border-0">
         <span class="badge badge-xs
-    {% if a.action == 'CREATE' %}badge-success
-    {% elif a.action == 'UPDATE' or a.action == 'STATUS_CHANGE' %}badge-info
-    {% elif a.action == 'DELETE' %}badge-danger
-    {% elif a.action == 'LOGIN_FAILED' %}badge-warning
-    {% else %}badge-neutral{% endif %}">
+          {% if a.action == 'CREATE' %}badge-success
+          {% elif a.action in ('UPDATE', 'STATUS_CHANGE') %}badge-info
+          {% elif a.action == 'DELETE' %}badge-danger
+          {% elif a.action == 'LOGIN_FAILED' %}badge-warning
+          {% else %}badge-neutral{% endif %}">
           {{ a.action }}
         </span>
-        <span class="text-neutral-400 truncate">{{ a.table_name }}</span>
-        <span class="text-neutral-600 font-mono ml-auto shrink-0">
-          {{ a.created_at.strftime('%H:%M') }}
+        <span class="text-noctra-muted truncate">{{ a.table_name }}</span>
+        <span class="text-noctra-dim font-mono ml-auto shrink-0">
+          {{ a.created_at | dt_id('%H:%M') }}
         </span>
       </div>
       {% endfor %}
@@ -283,12 +370,12 @@
       <a href="/admin/audit" class="text-xs text-noctra-accent hover:underline">View full audit →</a>
     </div>
     {% else %}
-    <p class="text-neutral-500 text-sm mt-4">No activity yet.</p>
+    <p class="text-noctra-dim text-sm mt-4">No activity yet.</p>
     {% endif %}
   </div>
 </div>
 
-{# ── Chart data bridge ────────────────────────────── #}
+{# ── Chart data bridge ──────────────────────────── #}
 <script id="dashboard-data" type="application/json">
   {{ {
     "periods": chart_periods,
@@ -296,7 +383,7 @@
     "gross_profit": chart_gross_profit,
     "cash_periods": chart_cash_periods,
     "cash_in": chart_cash_in,
-    "cash_out": chart_cash_out,
+    "cash_out": chart_cash_out
   } | tojson }}
 </script>
 

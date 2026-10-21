@@ -13,6 +13,7 @@
 
     function syncAria(open) {
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
     }
     function open() {
       sidebar.classList.add('open');
@@ -35,14 +36,68 @@
 
     if (scrim) scrim.addEventListener('click', close);
 
+    const closeBtn = sidebar.querySelector('[data-sidebar-close]');
+    if (closeBtn) closeBtn.addEventListener('click', close);
+
+    sidebar.querySelectorAll('.sidebar-link').forEach((link) => {
+      link.addEventListener('click', () => {
+        if (isOpen()) close();
+      });
+    });
+
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && isOpen()) close();
+      if (e.key === 'Escape' && isOpen()) {
+        close();
+        toggle.focus();
+      }
     });
 
     document.addEventListener('htmx:beforeSwap', close);
 
     window.addEventListener('resize', () => {
       if (window.innerWidth > 900 && isOpen()) close();
+    });
+  }
+
+  /* ── Collapsible sidebar groups ───────────────── */
+  const NAV_STORAGE_KEY = 'noctra.nav.collapsed';
+
+  function readCollapsedNav() {
+    try {
+      const raw = localStorage.getItem(NAV_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function initSidebarGroups() {
+    const groups = document.querySelectorAll('[data-nav-key]');
+    if (!groups.length) return;
+
+    const collapsed = readCollapsedNav();
+
+    groups.forEach((group) => {
+      const key = group.getAttribute('data-nav-key');
+      const toggle = group.querySelector('[data-nav-toggle]');
+      const panel = group.querySelector('.sidebar-group-items');
+      if (!toggle || !panel) return;
+
+      function apply(isCollapsed) {
+        group.classList.toggle('is-collapsed', isCollapsed);
+        toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+      }
+
+      apply(collapsed[key] === true);
+
+      toggle.addEventListener('click', () => {
+        const next = !group.classList.contains('is-collapsed');
+        apply(next);
+        collapsed[key] = next;
+        try {
+          localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify(collapsed));
+        } catch (err) { /* storage unavailable — collapse still works */ }
+      });
     });
   }
 
@@ -137,34 +192,10 @@
   }
   window.formatRupiah = formatRupiah;
 
-  /* ── Search shortcuts + dropdown dismiss ──────── */
-  function initSearchShortcuts() {
-    if (window.__noctraSearchShortcut) return;
-    window.__noctraSearchShortcut = true;
-
-    function focusSearch() {
-      const input = document.querySelector('[data-search-input]');
-      if (!input) return false;
-      input.focus();
-      if (input.select) input.select();
-      return true;
-    }
-
-    document.addEventListener('keydown', (e) => {
-      // ⌘K / Ctrl+K
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
-        if (focusSearch()) e.preventDefault();
-        return;
-      }
-      // "/" — hanya kalau tidak sedang mengetik di input/textarea/select
-      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const a = document.activeElement;
-        const tag = (a && a.tagName || '').toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-        if (a && a.isContentEditable) return;
-        if (focusSearch()) e.preventDefault();
-      }
-    });
+  /* ── Dropdown dismiss ─────────────────────────── */
+  function initDropdownDismiss() {
+    if (window.__noctraDropdowns) return;
+    window.__noctraDropdowns = true;
 
     // Escape menutup semua <details> dropdown
     document.addEventListener('keydown', (e) => {
@@ -176,6 +207,26 @@
     document.addEventListener('click', (e) => {
       document.querySelectorAll('details.user-menu[open]').forEach((d) => {
         if (!d.contains(e.target)) d.open = false;
+      });
+    });
+  }
+
+  /* ── Password visibility toggles ──────────────── */
+  function initPasswordToggles() {
+    document.querySelectorAll('[data-password-toggle]').forEach((btn) => {
+      if (btn.__noctraPwBound) return;
+      btn.__noctraPwBound = true;
+
+      btn.addEventListener('click', () => {
+        const wrap = btn.closest('.input-wrap, .auth-input');
+        const input = wrap ? wrap.querySelector('input') : null;
+        if (!input) return;
+
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.classList.toggle('is-visible', show);
+        btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+        btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
       });
     });
   }
@@ -231,10 +282,12 @@
   /* ── Boot ─────────────────────────────────────── */
   function initAll() {
     initSidebarToggle();
+    initSidebarGroups();
     initActiveNav();
     initFlash();
     watchFlashMutations();
-    initSearchShortcuts();
+    initDropdownDismiss();
+    initPasswordToggles();
     initFormGuards();
   }
 

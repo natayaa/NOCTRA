@@ -54,6 +54,15 @@ async def paginate(
     stmt: Select,
     params: PageParams,
 ) -> tuple[list, PageMeta]:
+    if stmt._limit is not None or stmt._offset is not None:
+        # If the caller already applied LIMIT/OFFSET, the count query
+        # below would count the limited subquery — producing wrong totals
+        # and impossible page counts. Surface the mistake instead.
+        raise ValueError(
+            "paginate() received a SELECT with existing LIMIT/OFFSET. "
+            "Remove them or call paginate() on a fresh statement."
+        )
+
     # Drop ORDER BY from the count — irrelevant and forces a pointless sort.
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     total = (await db.execute(count_stmt)).scalar_one()

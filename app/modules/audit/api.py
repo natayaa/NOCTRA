@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Path, Query
 
+from app.core.config import settings
 from app.core.constants import AuditAction, PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, page_params, paginate
 from app.modules.audit.repository import AuditRepository
 from app.modules.audit.schemas import (
@@ -17,13 +19,22 @@ from app.modules.auth.dependencies import require_permission
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
+_APP_TZ = ZoneInfo(settings.APP_TIMEZONE)
+_KNOWN_ACTIONS = {a.value for a in AuditAction}
+
 
 def _to_utc(dt: datetime | None) -> datetime | None:
-    """Normalize incoming datetimes to UTC; naive values are assumed UTC."""
+    """Normalize incoming datetimes to UTC.
+
+    Naive values are interpreted in the app's configured timezone
+    (`APP_TIMEZONE`), matching how a browser date picker means "Jan 1
+    local" and how the analytics module resolves period presets.
+    Explicitly-tagged values (`Z`, `+07:00`, etc.) are honoured.
+    """
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
+        return dt.replace(tzinfo=_APP_TZ).astimezone(UTC)
     return dt.astimezone(UTC)
 
 
@@ -52,14 +63,27 @@ async def list_audit(
     until: datetime | None = Query(None, description="Exclusive upper bound"),
     _=Depends(require_permission(PermissionCode.AUDIT_READ)),
 ) -> Page[AuditLogItem]:
+    # Reject unknown actions early — an empty page in response to a typo
+    # is confusing for API clients that bypass /audit/catalog.
+    if action is not None and action not in _KNOWN_ACTIONS:
+        raise ValidationError(
+            f"Unknown action {action!r}. "
+            f"Valid: {', '.join(sorted(_KNOWN_ACTIONS))}"
+        )
+
+    since_utc = _to_utc(since)
+    until_utc = _to_utc(until)
+    if since_utc is not None and until_utc is not None and since_utc >= until_utc:
+        raise ValidationError("`since` must be strictly before `until`")
+
     repo = AuditRepository(db)
     stmt = repo.query(
         user_id=user_id,
         action=action,
         table_name=table_name,
         record_id=record_id,
-        since=_to_utc(since),
-        until=_to_utc(until),
+        since=since_utc,
+        until=until_utc,
     )
     rows, meta = await paginate(db, stmt, params)
 

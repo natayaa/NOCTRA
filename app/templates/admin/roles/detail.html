@@ -1,35 +1,114 @@
 {% extends "admin/base.html" %}
+
+{# Compute total permissions across all groups #}
+{% set ns = namespace(total=0) %}
+{% for _, perms in permission_groups.items() %}
+  {% set ns.total = ns.total + perms | length %}
+{% endfor %}
+{% set total_perms = ns.total %}
+{% set granted_count = assigned_codes | length %}
+
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">{{ role.name }}</h1>
-    <p class="page-subtitle">{{ role.description or '' }}</p>
+    <h1 class="page-title flex items-center gap-2 flex-wrap">
+      {{ role.name }}
+      {% if role.is_system %}
+        <span class="badge badge-info">System</span>
+      {% else %}
+        <span class="badge badge-neutral">Custom</span>
+      {% endif %}
+    </h1>
+    <p class="page-subtitle">
+      {{ role.description or 'No description' }}
+    </p>
   </div>
   <div class="page-actions">
     <a href="/admin/roles" class="btn btn-secondary btn-sm">Back</a>
   </div>
 </div>
 
-<form method="post" action="/admin/roles/{{ role.id }}" class="panel" data-guard>
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+{# ── System role warning ──────────────────────── #}
+{% if role.is_system %}
+<div class="panel mb-4" style="border-color: rgba(59,130,246,0.3); background: rgba(59,130,246,0.05);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M12 16v-4M12 8h.01" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-blue-200">
+      <strong>System role.</strong>
+      Changes here affect every user who has this role. Only administrators
+      should modify system role permissions. If you remove a permission that
+      an active workflow depends on, related pages may return 403.
+    </div>
+  </div>
+</div>
+{% endif %}
 
-  <div class="panel-title">Permissions</div>
-  <p class="text-xs text-neutral-500 mt-1 mb-4">
-    Check the permissions this role should grant. Superusers bypass all checks.
+<form method="post" action="/admin/roles/{{ role.id }}" class="panel" data-guard>
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+
+  {# ── Header with live count ──────────────── #}
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div class="panel-title !mb-0">Permissions</div>
+    <div class="text-xs">
+      <span id="granted-count" class="font-mono font-semibold text-noctra-text">
+        {{ granted_count }}
+      </span>
+      <span class="text-noctra-dim">/ {{ total_perms }} granted</span>
+    </div>
+  </div>
+  <p class="text-xs text-noctra-dim mt-1 mb-4">
+    Superusers — users with the <code class="font-mono">is_superuser</code> flag or the
+    <code class="font-mono">superuser</code> role — bypass all permission checks.
+    For everyone else, only permissions granted to at least one of their roles
+    take effect.
   </p>
 
+  {# ── Bulk toolbar ────────────────────────── #}
+  <div class="flex flex-wrap items-center gap-2 mb-4 pb-4 border-b border-noctra-border">
+    <span class="text-xs text-noctra-dim mr-2">Bulk:</span>
+    <button type="button" class="btn btn-ghost btn-sm" data-bulk="all">
+      Select all
+    </button>
+    <button type="button" class="btn btn-ghost btn-sm" data-bulk="none">
+      Clear all
+    </button>
+    <span id="zero-warning" class="text-xs text-noctra-danger ml-auto hidden">
+      ⚠ This role will have <strong>no permissions</strong>
+    </span>
+  </div>
+
+  {# ── Permission groups ───────────────────── #}
   <div class="space-y-5">
-    {% for prefix, perms in permission_groups.items() | sort %}
-    <div>
-      <div class="text-xs uppercase tracking-wider text-neutral-500 font-semibold mb-2">
-        {{ prefix.replace('_', ' ').title() }}
+    {% for prefix, perms in permission_groups | dictsort %}
+    <div data-perm-group data-prefix="{{ prefix }}">
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <div class="text-xs uppercase tracking-wider text-noctra-muted font-semibold">
+          {{ prefix.replace('_', ' ').title() }}
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-noctra-dim font-mono">
+            <span data-group-count="{{ prefix }}">
+              {{ perms | selectattr('code', 'in', assigned_codes) | list | length }}
+            </span>
+            / {{ perms | length }}
+          </span>
+          <button type="button" class="btn btn-ghost btn-sm !px-2 !py-0.5 text-[11px]"
+                  data-bulk-group="all" data-group="{{ prefix }}">all</button>
+          <button type="button" class="btn btn-ghost btn-sm !px-2 !py-0.5 text-[11px]"
+                  data-bulk-group="none" data-group="{{ prefix }}">none</button>
+        </div>
       </div>
       <div class="grid md:grid-cols-3 gap-2">
         {% for p in perms %}
-        <label class="flex items-center gap-2 text-sm px-3 py-2 rounded-md hover:bg-noctra-surface2 cursor-pointer">
+        <label class="flex items-center gap-2 text-sm px-3 py-2 rounded-md
+                      hover:bg-noctra-surface2 cursor-pointer">
           <input type="checkbox" name="permission_codes" value="{{ p.code }}"
+                 data-prefix="{{ prefix }}"
                  {% if p.code in assigned_codes %}checked{% endif %} />
-          <span class="mono text-xs">{{ p.code }}</span>
+          <span class="font-mono text-xs">{{ p.code }}</span>
         </label>
         {% endfor %}
       </div>
@@ -37,9 +116,79 @@
     {% endfor %}
   </div>
 
+  {# ── Save bar ──────────────────────────────── #}
   <div class="flex gap-2 mt-6 pt-4 border-t border-noctra-border">
     <button class="btn btn-primary">Save permissions</button>
     <a href="/admin/roles" class="btn btn-secondary">Cancel</a>
+    <span class="text-xs text-noctra-dim ml-auto self-center hidden sm:inline">
+      Changes apply immediately after save
+    </span>
   </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const form = document.querySelector('form[data-guard]');
+  if (!form) return;
+
+  const checkboxes = form.querySelectorAll('input[name="permission_codes"]');
+  const grantCount = document.getElementById('granted-count');
+  const zeroWarning = document.getElementById('zero-warning');
+  const total = checkboxes.length;
+
+  function updateUI() {
+    let checked = 0;
+    const perGroup = {};
+
+    checkboxes.forEach(cb => {
+      const prefix = cb.dataset.prefix || '';
+      perGroup[prefix] = perGroup[prefix] || 0;
+      if (cb.checked) {
+        checked++;
+        perGroup[prefix]++;
+      }
+    });
+
+    if (grantCount) grantCount.textContent = checked;
+
+    form.querySelectorAll('[data-group-count]').forEach(el => {
+      const prefix = el.dataset.groupCount;
+      el.textContent = perGroup[prefix] || 0;
+    });
+
+    if (zeroWarning) {
+      zeroWarning.classList.toggle('hidden', checked !== 0);
+    }
+  }
+
+  // Update on change
+  checkboxes.forEach(cb => cb.addEventListener('change', updateUI));
+
+  // Bulk toggle — global
+  form.querySelectorAll('[data-bulk]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.bulk;
+      checkboxes.forEach(cb => { cb.checked = (mode === 'all'); });
+      updateUI();
+    });
+  });
+
+  // Bulk toggle — per group
+  form.querySelectorAll('[data-bulk-group]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.bulkGroup;
+      const prefix = btn.dataset.group;
+      form.querySelectorAll(`input[data-prefix="${prefix}"]`).forEach(cb => {
+        cb.checked = (mode === 'all');
+      });
+      updateUI();
+    });
+  });
+
+  // Initial state
+  updateUI();
+})();
+</script>
 {% endblock %}

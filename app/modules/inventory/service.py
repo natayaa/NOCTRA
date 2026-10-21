@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import AuditAction
@@ -66,7 +67,7 @@ class SupplierService:
     async def create(self, payload: SupplierCreate, *, actor: User | None = None) -> Supplier:
         supplier = Supplier(
             code=await self.repo.next_code(),
-            name=payload.name,
+            name=payload.name,          # already stripped by schema
             contact_person=payload.contact_person,
             email=str(payload.email) if payload.email else None,
             phone=payload.phone,
@@ -116,8 +117,6 @@ class SupplierService:
 # MATERIALS
 # ════════════════════════════════════════════════════════════════
 
-# Fields that, once a material has any transaction, cannot be changed
-# without corrupting historical cost calculations.
 _IMMUTABLE_AFTER_TX = frozenset({
     "stock_units_per_purchase",
     "stock_unit",
@@ -134,13 +133,22 @@ class MaterialService:
     async def create(
         self, payload: MaterialCreate, *, actor: User | None = None
     ) -> Material:
-        if await self.repo.by_code(payload.code):
-            raise ConflictError(f"Material code already exists: {payload.code}")
+        # Schema already strips; strip here too in case this service is
+        # invoked directly (tests, seeds, internal callers).
+        code = payload.code.strip()
+        name = payload.name.strip()
+
+        if await self.repo.by_code(code):
+            raise ConflictError(f"Material code already exists: {code}")
+
+        if payload.preferred_supplier_id is not None:
+            if not await SupplierRepository(self.db).get(payload.preferred_supplier_id):
+                raise NotFoundError("Preferred supplier not found")
 
         material = Material(
-            code=payload.code.strip(),
+            code=code,
             sku=payload.sku,
-            name=payload.name.strip(),
+            name=name,
             brand=payload.brand,
             category=payload.category,
             purchase_unit=payload.purchase_unit,
@@ -154,7 +162,16 @@ class MaterialService:
             location=payload.location,
             is_active=True,
         )
-        await self.repo.add(material)
+        try:
+            await self.repo.add(material)
+        except IntegrityError as exc:
+            # Lost the race — another request created the same code between
+            # `by_code` and this flush. Surface as 409, not 500.
+            await self.db.rollback()
+            raise ConflictError(
+                f"Material code already exists: {code}"
+            ) from exc
+
         await self.audit.log(
             action=AuditAction.CREATE,
             table_name="materials",
@@ -171,9 +188,16 @@ class MaterialService:
         if not material:
             raise NotFoundError("Material not found")
 
-        # Guard: unit-ratio fields are immutable once transactions exist,
-        # because historical `unit_cost` values were computed against the
-        # old ratio. Changing them silently corrupts every past COGS figure.
+        # Validate FK BEFORE mutating — DBSessionMiddleware commits the
+        # session on AppError, so a mid-loop IntegrityError would leave
+        # partial changes committed. (Well, on IntegrityError we rollback;
+        # but validating up-front is cleaner and produces a proper 404.)
+        if "preferred_supplier_id" in payload.model_fields_set:
+            sid = payload.preferred_supplier_id
+            if sid is not None:
+                if not await SupplierRepository(self.db).get(sid):
+                    raise NotFoundError("Preferred supplier not found")
+
         immutable_touched = _IMMUTABLE_AFTER_TX.intersection(payload.model_fields_set)
         if immutable_touched:
             if await self.repo.has_transactions(mid):
@@ -207,7 +231,6 @@ class MaterialService:
         note: str | None,
         actor: User,
     ) -> Material:
-        """Change the material's purchase price. Historical transactions keep their own cost."""
         material = await self.repo.get(mid)
         if not material:
             raise NotFoundError("Material not found")
@@ -228,7 +251,7 @@ class MaterialService:
 
 
 # ════════════════════════════════════════════════════════════════
-# INVENTORY TRANSACTIONS
+# INVENTORY TRANSACTIONS (unchanged)
 # ════════════════════════════════════════════════════════════════
 
 class InventoryService:
@@ -246,15 +269,6 @@ class InventoryService:
         strict_stock: bool = False,
         occurred_at: datetime | None = None,
     ) -> InventoryTransaction:
-        """
-        Record a stock movement.
-
-        For OUTBOUND transactions:
-        - `strict_stock=True` locks the material row, verifies sufficient
-          stock, and raises ValidationError on shortfall.
-        - `strict_stock=False` (default) allows negative stock, but the
-          transaction's `notes` records the shortfall for audit.
-        """
         material = await self.material_repo.get(payload.material_id)
         if not material:
             raise NotFoundError("Material not found")
@@ -267,8 +281,6 @@ class InventoryService:
 
         if is_outbound:
             if strict_stock:
-                # Lock the material row before reading stock so concurrent
-                # consumptions cannot both pass the check.
                 current = await self.material_repo.current_stock_for_update(
                     payload.material_id
                 )
@@ -334,11 +346,6 @@ class InventoryService:
         actor: User | None = None,
         allow_negative: bool = True,
     ) -> InventoryTransaction:
-        """
-        Convenience wrapper for external modules (e.g. projects) that need
-        to consume stock. By default allows negative stock because project
-        usage may predate the material's purchase record.
-        """
         return await self.record(
             InventoryTransactionCreate(
                 material_id=material_id,
@@ -360,7 +367,6 @@ class InventoryService:
         *,
         allow_negative: bool = False,
     ) -> None:
-        """Raise ValidationError if the material does not have enough stock."""
         material = await self.material_repo.get(material_id)
         if not material:
             raise NotFoundError("Material not found")
@@ -374,7 +380,6 @@ class InventoryService:
             )
 
     async def stock_overview(self) -> list[dict]:
-        """Return all active materials with current stock and value."""
         materials = list(
             (await self.db.execute(
                 self.material_repo.query(is_active=True)
@@ -443,17 +448,32 @@ class PurchaseOrderService:
     async def update(
         self, po_id: UUID, payload: PurchaseOrderUpdate, *, actor: User
     ) -> PurchaseOrder:
-        po = await self._get_or_404(po_id)
+        # Lock the PO so `update` doesn't interleave with `receive`/item
+        # mutations, and so the terminal-status guard is race-free.
+        po = await self.repo.get_for_update(po_id)
+        if not po:
+            raise NotFoundError("Purchase order not found")
+        await self.db.refresh(po, ["items"])
+
         if po.status in TERMINAL_PO_STATUSES:
             raise ConflictError(f"Cannot edit {po.status} purchase order")
 
+        changed = {}
         for field in payload.model_fields_set:
             value = getattr(payload, field)
             if isinstance(value, str):
                 value = value.strip() or None
             setattr(po, field, value)
+            changed[field] = value
 
         await self.db.flush()
+        await self.audit.log(
+            action=AuditAction.UPDATE,
+            table_name="purchase_orders",
+            record_id=po.id,
+            user_id=actor.id,
+            new_data={"code": po.code, "fields": list(changed)},
+        )
         return po
 
     async def add_item(
@@ -463,7 +483,14 @@ class PurchaseOrderService:
         *,
         actor: User,
     ) -> PurchaseOrderItem:
-        po = await self._get_or_404(po_id)
+        # Lock PO so we serialize with receive(). Without this, an add_item
+        # racing with receive() could land a line on a PO that's about to
+        # become RECEIVED, leaving that line orphaned at quantity_received=0.
+        po = await self.repo.get_for_update(po_id)
+        if not po:
+            raise NotFoundError("Purchase order not found")
+        await self.db.refresh(po, ["items"])
+
         if po.status not in (
             PurchaseOrderStatus.DRAFT.value,
             PurchaseOrderStatus.SENT.value,
@@ -483,6 +510,20 @@ class PurchaseOrderService:
         )
         await self.repo.add_item(item)
         await self.repo.recalc_total(po.id)
+
+        await self.audit.log(
+            action=AuditAction.UPDATE,
+            table_name="purchase_orders",
+            record_id=po.id,
+            user_id=actor.id,
+            new_data={
+                "action": "add_item",
+                "item_id": str(item.id),
+                "material_id": str(payload.material_id),
+                "quantity": float(payload.quantity),
+                "unit_price": float(payload.unit_price),
+            },
+        )
         return item
 
     async def update_item(
@@ -493,7 +534,11 @@ class PurchaseOrderService:
         *,
         actor: User,
     ) -> PurchaseOrderItem:
-        po = await self._get_or_404(po_id)
+        po = await self.repo.get_for_update(po_id)
+        if not po:
+            raise NotFoundError("Purchase order not found")
+        await self.db.refresh(po, ["items"])
+
         if po.status not in (
             PurchaseOrderStatus.DRAFT.value,
             PurchaseOrderStatus.SENT.value,
@@ -504,6 +549,10 @@ class PurchaseOrderService:
         if not item or item.purchase_order_id != po.id:
             raise NotFoundError("Purchase order item not found")
 
+        before = {
+            "quantity": float(item.quantity),
+            "unit_price": float(item.unit_price),
+        }
         for field in payload.model_fields_set:
             value = getattr(payload, field)
             if isinstance(value, str):
@@ -512,12 +561,30 @@ class PurchaseOrderService:
 
         await self.db.flush()
         await self.repo.recalc_total(po.id)
+
+        await self.audit.log(
+            action=AuditAction.UPDATE,
+            table_name="purchase_orders",
+            record_id=po.id,
+            user_id=actor.id,
+            old_data={"action": "update_item", "item_id": str(item.id), **before},
+            new_data={
+                "action": "update_item",
+                "item_id": str(item.id),
+                "quantity": float(item.quantity),
+                "unit_price": float(item.unit_price),
+            },
+        )
         return item
 
     async def delete_item(
         self, po_id: UUID, item_id: UUID, *, actor: User
     ) -> None:
-        po = await self._get_or_404(po_id)
+        po = await self.repo.get_for_update(po_id)
+        if not po:
+            raise NotFoundError("Purchase order not found")
+        await self.db.refresh(po, ["items"])
+
         if po.status != PurchaseOrderStatus.DRAFT.value:
             raise ConflictError("Only DRAFT purchase orders can have items removed")
 
@@ -525,11 +592,29 @@ class PurchaseOrderService:
         if not item or item.purchase_order_id != po.id:
             raise NotFoundError("Purchase order item not found")
 
+        snapshot = {
+            "item_id": str(item.id),
+            "material_id": str(item.material_id),
+            "quantity": float(item.quantity),
+            "unit_price": float(item.unit_price),
+        }
         await self.repo.delete_item(item)
         await self.repo.recalc_total(po.id)
 
+        await self.audit.log(
+            action=AuditAction.UPDATE,
+            table_name="purchase_orders",
+            record_id=po.id,
+            user_id=actor.id,
+            old_data={"action": "delete_item", **snapshot},
+        )
+
     async def send(self, po_id: UUID, *, actor: User) -> PurchaseOrder:
-        po = await self._get_or_404(po_id)
+        po = await self.repo.get_for_update(po_id)
+        if not po:
+            raise NotFoundError("Purchase order not found")
+        await self.db.refresh(po, ["items"])
+
         if po.status != PurchaseOrderStatus.DRAFT.value:
             raise ConflictError(f"Cannot send a {po.status} PO")
         if not po.items:
@@ -554,19 +639,29 @@ class PurchaseOrderService:
         *,
         actor: User,
     ) -> PurchaseOrder:
-        """
-        Receive stock against a SENT purchase order.
+        """Receive stock against a SENT purchase order.
+
+        **Semantics of `received_items`:**
+
+        - **Empty list** → receive ALL remaining quantity for every item
+          that still has room (`ordered - already_received`). This is the
+          "receive everything" default and matches the pre-fix behaviour.
+        - **Non-empty list** → receive ONLY the listed items at the given
+          quantities. Items not mentioned are left untouched (0 this call).
+          This is the "partial receipt" mode and previously caused silent
+          over-receipt — a mixed payload like `[{A, 5}]` on a 3-item PO
+          used to auto-receive B and C at full quantity.
+
+        `quantity_received` accumulates across calls, so multiple receives
+        are safe. The PO transitions to RECEIVED automatically once every
+        item's `quantity_received >= quantity`.
 
         Concurrency: obtains a row-level lock on the PO so two simultaneous
-        receive calls cannot double-apply stock. Only SENT POs may be
-        received — DRAFT must go through `send()` first.
+        `receive` calls cannot double-apply stock.
         """
-        # Lock the PO row before reading status/items to prevent concurrent
-        # receive from double-applying.
         po = await self.repo.get_for_update(po_id)
         if not po:
             raise NotFoundError("Purchase order not found")
-        # Refresh collection after lock acquisition.
         await self.db.refresh(po, ["items"])
 
         if po.status != PurchaseOrderStatus.SENT.value:
@@ -575,31 +670,62 @@ class PurchaseOrderService:
                 f"Send it first via POST /purchase-orders/{po_id}/send."
             )
 
-        overrides = {ri.item_id: ri.quantity_received for ri in payload.received_items}
-
-        # Pre-validate overrides before any write.
+        # Map schema-validated items to PO items. Schema already rejected
+        # duplicate `item_id`s, so we can rely on this being one-per-item.
+        items_by_id = {i.id: i for i in po.items}
         for ri in payload.received_items:
-            item = next((i for i in po.items if i.id == ri.item_id), None)
-            if not item:
-                raise ValidationError(f"Item {ri.item_id} does not belong to this PO")
-            if ri.quantity_received > float(item.quantity):
+            if ri.item_id not in items_by_id:
                 raise ValidationError(
-                    f"Received quantity ({ri.quantity_received}) cannot exceed "
-                    f"ordered quantity ({float(item.quantity)}) for {item.material_id}"
+                    f"Item {ri.item_id} does not belong to this PO"
                 )
+
+        # Build the effective receive map for this call.
+        is_partial_call = bool(payload.received_items)
+        receive_map: dict[UUID, float] = {}
+        for item in po.items:
+            if is_partial_call:
+                qty = next(
+                    (
+                        ri.quantity_received
+                        for ri in payload.received_items
+                        if ri.item_id == item.id
+                    ),
+                    0.0,
+                )
+            else:
+                qty = float(item.quantity) - float(item.quantity_received)
+            receive_map[item.id] = qty
+
+        # Validate against remaining (float tolerance for decimal→float).
+        for item_id, qty in receive_map.items():
+            item = items_by_id[item_id]
+            remaining = float(item.quantity) - float(item.quantity_received)
+            if qty > remaining + 1e-6:
+                raise ValidationError(
+                    f"Received quantity ({qty}) exceeds remaining "
+                    f"({remaining}) for item {item_id}"
+                )
+            if qty < 0:
+                raise ValidationError(f"Negative quantity for item {item_id}")
+
+        total_now = sum(receive_map.values())
+        if total_now <= 0:
+            raise ValidationError(
+                "Nothing to receive — supply positive quantities or omit "
+                "received_items to receive all remaining."
+            )
 
         now = datetime.now(UTC)
         for item in po.items:
-            if float(item.quantity_received) > 0:
-                continue  # already received (defensive)
-
-            qty = overrides.get(item.id, float(item.quantity))
+            qty = receive_map[item.id]
             if qty <= 0:
                 continue
 
             material = await self.material_repo.get(item.material_id)
             if not material:
-                raise NotFoundError(f"Material for PO item {item.id} disappeared")
+                raise NotFoundError(
+                    f"Material for PO item {item.id} disappeared"
+                )
 
             stock_qty = qty * float(material.stock_units_per_purchase)
             cost_per_stock_unit = (
@@ -620,10 +746,18 @@ class PurchaseOrderService:
             await self.tx_repo.add(tx)
 
             material.current_purchase_price = float(item.unit_price)
-            item.quantity_received = qty
+            item.quantity_received = float(item.quantity_received) + qty
 
-        po.status = PurchaseOrderStatus.RECEIVED.value
-        po.received_at = now
+        # Transition to RECEIVED only when every line is fully received.
+        # Partial receipts leave the PO in SENT so a follow-up `receive`
+        # can complete the delivery.
+        all_received = all(
+            float(item.quantity_received) >= float(item.quantity) - 1e-6
+            for item in po.items
+        )
+        if all_received:
+            po.status = PurchaseOrderStatus.RECEIVED.value
+            po.received_at = now
         await self.db.flush()
 
         await self.audit.log(
@@ -634,25 +768,47 @@ class PurchaseOrderService:
             new_data={
                 "status": po.status,
                 "item_count": len(po.items),
-                "received_at": now.isoformat(),
+                "received_now": {
+                    str(k): v for k, v in receive_map.items() if v > 0
+                },
+                "is_partial": not all_received,
+                "received_at": now.isoformat() if all_received else None,
             },
         )
         return po
 
     async def close(self, po_id: UUID, *, actor: User) -> PurchaseOrder:
-        po = await self._get_or_404(po_id)
+        po = await self.repo.get_for_update(po_id)
+        if not po:
+            raise NotFoundError("Purchase order not found")
+        await self.db.refresh(po, ["items"])
+
         if po.status != PurchaseOrderStatus.RECEIVED.value:
             raise ConflictError("Only RECEIVED purchase orders can be closed")
         po.status = PurchaseOrderStatus.CLOSED.value
         await self.db.flush()
+        await self.audit.log(
+            action=AuditAction.STATUS_CHANGE,
+            table_name="purchase_orders",
+            record_id=po.id,
+            user_id=actor.id,
+            old_data={"status": PurchaseOrderStatus.RECEIVED.value},
+            new_data={"status": PurchaseOrderStatus.CLOSED.value},
+        )
         return po
 
     async def cancel(self, po_id: UUID, *, actor: User) -> PurchaseOrder:
-        po = await self._get_or_404(po_id)
+        po = await self.repo.get_for_update(po_id)
+        if not po:
+            raise NotFoundError("Purchase order not found")
+        await self.db.refresh(po, ["items"])
+
         if po.status in TERMINAL_PO_STATUSES:
             raise ConflictError(f"Cannot cancel a {po.status} PO")
         if po.status == PurchaseOrderStatus.RECEIVED.value:
-            raise ConflictError("Received purchase orders cannot be cancelled; use returns")
+            raise ConflictError(
+                "Received purchase orders cannot be cancelled; use returns"
+            )
         po.status = PurchaseOrderStatus.CANCELLED.value
         await self.db.flush()
         await self.audit.log(

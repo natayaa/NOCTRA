@@ -1,5 +1,4 @@
-"""
-Minimal in-process background task runner.
+"""Minimal in-process background task runner.
 
 For Phase 1 we only need fire-and-forget jobs (emails, audit fan-out,
 notifications). When you outgrow this, swap for Arq or Dramatiq with Redis.
@@ -23,47 +22,61 @@ class JobQueue:
 
     async def start(self) -> None:
         if self._worker is None:
+            self._shutdown.clear()  # allow restart after stop()
             self._worker = asyncio.create_task(self._run())
 
     async def stop(self, *, drain_timeout: float = 5.0) -> None:
+        """Signal shutdown, drain remaining jobs up to `drain_timeout`.
+
+        If the worker is stuck on a long job past the deadline, it is
+        cancelled — remaining jobs are logged and dropped.
+        """
         self._shutdown.set()
-        if self._worker:
-            await self._worker
-            self._worker = None
-        # Give pending jobs a short grace period, then drop + log.
-        deadline = asyncio.get_event_loop().time() + drain_timeout
-        while not self._queue.empty() and asyncio.get_event_loop().time() < deadline:
+        if self._worker is None:
+            return
+        try:
+            await asyncio.wait_for(self._worker, timeout=drain_timeout)
+        except asyncio.TimeoutError:
+            log.warning(
+                "background_worker_drain_timeout",
+                pending=self._queue.qsize(),
+                drain_timeout=drain_timeout,
+            )
+            self._worker.cancel()
             try:
-                job, _, _ = self._queue.get_nowait()
-                log.warning(
-                    "background_job_dropped",
-                    job=getattr(job, "__name__", str(job)),
-                )
-                self._queue.task_done()
-            except asyncio.QueueEmpty:
-                break
+                await self._worker
+            except (asyncio.CancelledError, Exception):
+                pass
+        finally:
+            self._worker = None
 
     async def enqueue(self, job: Job, *args: Any, **kwargs: Any) -> None:
         await self._queue.put((job, args, kwargs))
 
     async def _run(self) -> None:
-        while not self._shutdown.is_set():
+        while True:
             try:
                 job, args, kwargs = await asyncio.wait_for(
                     self._queue.get(), timeout=0.25
                 )
-            except TimeoutError:
+            except asyncio.TimeoutError:
+                # Only exit once we've been asked to stop AND the queue is
+                # empty — otherwise pending jobs would be silently lost.
+                if self._shutdown.is_set() and self._queue.empty():
+                    return
                 continue
             try:
                 await asyncio.wait_for(
                     job(*args, **kwargs), timeout=self._job_timeout
                 )
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 log.warning(
                     "background_job_timeout",
                     job=getattr(job, "__name__", str(job)),
                     timeout=self._job_timeout,
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 log.exception(
                     "background_job_failed",

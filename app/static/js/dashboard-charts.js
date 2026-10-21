@@ -43,16 +43,44 @@
     /* ← baris "ccccccc" penyebab SyntaxError sudah dihapus */
   }
 
-  function linearGradient(ctx, hexRgb) {
-    const g = ctx.createLinearGradient(0, 0, 0, 280);
-    g.addColorStop(0, hexRgb.replace('RGBA', 'rgba'));
-    g.addColorStop(1, hexRgb.replace(/,[\d.]+\)$/, ',0)'));
-    return g;
+  function hasSeries(series) {
+    return Array.isArray(series) && series.some((v) => Number(v) !== 0);
+  }
+
+  function renderEmpty(canvas, title, message) {
+    const host = canvas.closest('.chart-host');
+    if (!host || host.querySelector('.chart-empty')) return;
+
+    const empty = document.createElement('div');
+    empty.className = 'chart-empty';
+    empty.innerHTML = `
+      <span class="chart-empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/>
+        </svg>
+      </span>
+      <div class="chart-empty-title"></div>
+      <div class="chart-empty-sub"></div>
+    `;
+    empty.querySelector('.chart-empty-title').textContent = title;
+    empty.querySelector('.chart-empty-sub').textContent = message;
+    host.appendChild(empty);
   }
 
   function initRevenueChart(data) {
     const canvas = document.getElementById('revenueChart');
     if (!canvas) return;
+
+    if (!hasSeries(data.revenue) && !hasSeries(data.gross_profit)) {
+      renderEmpty(
+        canvas,
+        'No revenue in this period',
+        'The chart fills in once invoices are issued or payments are recorded.'
+      );
+      return;
+    }
+
     const ctx = canvas.getContext('2d');
 
     const fillAccent = ctx.createLinearGradient(0, 0, 0, 280);
@@ -144,6 +172,15 @@
   function initCashFlowChart(data) {
     const canvas = document.getElementById('cashFlowChart');
     if (!canvas) return;
+
+    if (!hasSeries(data.cash_in) && !hasSeries(data.cash_out)) {
+      renderEmpty(
+        canvas,
+        'No cash movement',
+        'Payments in and expenses out will appear here once recorded.'
+      );
+      return;
+    }
 
     new Chart(canvas.getContext('2d'), {
       type: 'bar',

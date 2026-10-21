@@ -1,5 +1,3 @@
-"""Read/write helpers for the finance module."""
-
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -76,8 +74,6 @@ class InvoiceRepository:
         to_date: date | None = None,
         only_unpaid: bool = False,
     ) -> Select:
-        # `noload` prevents `selectin` from firing for `Invoice.items` in
-        # list views — not needed and costs 1 extra query per page.
         stmt = (
             select(Invoice)
             .options(noload(Invoice.items))
@@ -133,6 +129,23 @@ class InvoiceRepository:
         await self.db.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
             {"k": f"invoice-project:{project_id}"},
+        )
+
+    async def lock_for_payment(self, invoice_id: UUID) -> None:
+        """Serialize payment operations against a specific invoice.
+
+        Holds a transaction-scoped advisory lock keyed by the invoice id,
+        so concurrent `record` / `reverse` calls for the same invoice run
+        sequentially. Prevents the classic race where two IN payments both
+        read the same `remaining` balance and overpay.
+
+        `SELECT ... FOR UPDATE` on the invoice row does NOT help here —
+        payment inserts don't touch the invoice row, so they aren't blocked
+        by the row lock.
+        """
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": f"payment-invoice:{invoice_id}"},
         )
 
     async def add(self, invoice: Invoice) -> Invoice:

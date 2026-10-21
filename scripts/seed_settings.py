@@ -1,7 +1,8 @@
 """
 Seed default application settings.
 
-Idempotent — safe to re-run.
+Idempotent — safe to re-run. Existing values are never overwritten;
+only missing keys are created and registry metadata is reconciled.
 
 Run: python -m scripts.seed_settings
 """
@@ -14,222 +15,147 @@ import sys
 from sqlalchemy import select
 
 from app.core.database import SessionLocal
+from app.modules.settings import constants as s
 from app.modules.settings.models import AppSetting
 
 # Register every model module.
 import app.core.models_registry  # noqa: F401
 
 
-SETTINGS: list[dict] = [
+# Default values, keyed by the constants in app/modules/settings/constants.py.
+# Category, description, secret flag, and validation all come from
+# KNOWN_SETTINGS — this file only supplies the initial values.
+DEFAULTS: dict[str, str] = {
     # ── Business identity ───────────────────────────────
-    {
-        "key": "business.name",
-        "value": "NOCTRA Autoworks",
-        "category": "business",
-        "description": "Legal business name",
-    },
-    {
-        "key": "business.tagline",
-        "value": "Precision motorcycle refinishing",
-        "category": "business",
-        "description": "Short tagline shown on invoices",
-    },
-    {
-        "key": "business.address",
-        "value": "Jl. Contoh No. 123, Jakarta",
-        "category": "business",
-        "description": "Workshop address",
-    },
-    {
-        "key": "business.phone",
-        "value": "+62 812 3456 7890",
-        "category": "business",
-        "description": "Public contact phone",
-    },
-    {
-        "key": "business.email",
-        "value": "hello@noctra.local",
-        "category": "business",
-        "description": "Public contact email",
-    },
-    {
-        "key": "business.tax_id",
-        "value": "",
-        "category": "business",
-        "description": "NPWP / Tax ID",
-    },
-    {
-        "key": "business.currency",
-        "value": "IDR",
-        "category": "business",
-        "description": "Default currency code",
-    },
-    {
-        "key": "business.timezone",
-        "value": "Asia/Jakarta",
-        "category": "business",
-        "description": "Operational timezone",
-    },
+    s.KEY_BUSINESS_NAME: "NOCTRA Autoworks",
+    s.KEY_BUSINESS_TAGLINE: "Precision motorcycle refinishing",
+    s.KEY_BUSINESS_ADDRESS: "Jl. Contoh No. 123, Jakarta",
+    s.KEY_BUSINESS_PHONE: "+62 812 3456 7890",
+    s.KEY_BUSINESS_EMAIL: "hello@noctra.local",
+    s.KEY_BUSINESS_TAX_ID: "",
+    s.KEY_BUSINESS_CURRENCY: "IDR",
+    s.KEY_BUSINESS_TIMEZONE: "Asia/Jakarta",
 
-    # ── CRM ────────────────────────────────────────────
-    {
-        "key": "crm.lead_auto_status",
-        "value": "LEAD",
-        "category": "crm",
-        "description": "Status assigned to new customers from public intake",
-    },
-    {
-        "key": "crm.inquiry_auto_assign",
-        "value": "false",
-        "category": "crm",
-        "description": "Auto-assign inquiries to sales team round-robin",
-    },
-    {
-        "key": "crm.inquiry_followup_hours",
-        "value": "24",
-        "category": "crm",
-        "description": "Hours before an uncontacted inquiry is flagged",
-    },
+    # ── CRM ─────────────────────────────────────────────
+    s.KEY_CRM_LEAD_AUTO_STATUS: "LEAD",
+    s.KEY_CRM_INQUIRY_AUTO_ASSIGN: "false",
+    s.KEY_CRM_INQUIRY_FOLLOWUP_HOURS: "24",
 
-    # ── Costing / Pricing ──────────────────────────────
-    {
-        "key": "costing.overhead_monthly",
-        "value": "5500000",
-        "category": "costing",
-        "description": "Total monthly overhead in IDR (rent+utilities+admin)",
-    },
-    {
-        "key": "costing.monthly_labor_hours",
-        "value": "220",
-        "category": "costing",
-        "description": "Standard productive hours per painter per month",
-    },
-    {
-        "key": "costing.default_target_margin_pct",
-        "value": "50",
-        "category": "costing",
-        "description": "Default target gross margin percentage",
-    },
-    {
-        "key": "costing.default_markup_pct",
-        "value": "100",
-        "category": "costing",
-        "description": "Default markup percentage on HPP",
-    },
-    {
-        "key": "costing.minimum_margin_pct",
-        "value": "30",
-        "category": "costing",
-        "description": "Below this margin, quote requires approval",
-    },
+    # ── Costing / pricing ───────────────────────────────
+    s.KEY_COSTING_OVERHEAD_MONTHLY: "5500000",
+    s.KEY_COSTING_MONTHLY_LABOR_HOURS: "220",
+    s.KEY_COSTING_DEFAULT_TARGET_MARGIN: "50",
+    s.KEY_COSTING_DEFAULT_MARKUP: "100",
+    s.KEY_COSTING_MIN_MARGIN: "30",
 
-    # ── Inventory ──────────────────────────────────────
-    {
-        "key": "inventory.low_stock_threshold_pct",
-        "value": "20",
-        "category": "inventory",
-        "description": "Flag materials when stock falls below this % of min_stock",
-    },
-    {
-        "key": "inventory.waste_tolerance_pct",
-        "value": "5",
-        "category": "inventory",
-        "description": "Acceptable material waste percentage per project",
-    },
+    # ── Email / SMTP ────────────────────────────────────
+    # Blank host/credentials mean "not configured yet". `EMAIL_ENABLED`
+    # in app/core/config.py still gates actual sending.
+    s.KEY_EMAIL_SMTP_HOST: "",
+    s.KEY_EMAIL_SMTP_PORT: "587",
+    s.KEY_EMAIL_SMTP_USERNAME: "",
+    s.KEY_EMAIL_SMTP_PASSWORD: "",
+    s.KEY_EMAIL_FROM_ADDRESS: "hello@noctra.local",
 
-    # ── Finance ────────────────────────────────────────
-    {
-        "key": "finance.invoice_prefix",
-        "value": "INV",
-        "category": "finance",
-        "description": "Invoice code prefix",
-    },
-    {
-        "key": "finance.payment_terms_days",
-        "value": "14",
-        "category": "finance",
-        "description": "Default payment terms in days",
-    },
-    {
-        "key": "finance.tax_rate_pct",
-        "value": "11",
-        "category": "finance",
-        "description": "Default VAT/PPN percentage",
-    },
+    # ── Finance ─────────────────────────────────────────
+    s.KEY_FINANCE_INVOICE_PREFIX: "INV",
+    s.KEY_FINANCE_PAYMENT_TERMS_DAYS: "14",
+    s.KEY_FINANCE_TAX_RATE_PCT: "11",
 
-    # ── Public intake ──────────────────────────────────
-    {
-        "key": "public.inquiry_enabled",
-        "value": "true",
-        "category": "public",
-        "description": "Whether the public inquiry form is open",
-    },
-    {
-        "key": "public.inquiry_rate_limit_per_hour",
-        "value": "5",
-        "category": "public",
-        "description": "Max inquiries per IP per hour",
-    },
-    {
-        "key": "public.auto_response_enabled",
-        "value": "true",
-        "category": "public",
-        "description": "Send confirmation email to inquiry submitters",
-    },
-    {
-        "key": "public.auto_response_subject",
-        "value": "Terima kasih atas inquiry Anda — NOCTRA Autoworks",
-        "category": "public",
-        "description": "Subject line for auto-response email",
-    },
+    # ── Inventory ───────────────────────────────────────
+    s.KEY_INVENTORY_LOW_STOCK_THRESHOLD_PCT: "20",
+    s.KEY_INVENTORY_WASTE_TOLERANCE_PCT: "5",
 
-    # ── Notifications ──────────────────────────────────
-    {
-        "key": "notifications.sales_email",
-        "value": "sales@noctra.local",
-        "category": "notifications",
-        "description": "Where new inquiries are announced",
-    },
-    {
-        "key": "notifications.workshop_email",
-        "value": "workshop@noctra.local",
-        "category": "notifications",
-        "description": "Where project status changes are announced",
-    },
-]
+    # ── Notifications ───────────────────────────────────
+    s.KEY_NOTIFICATIONS_SALES_EMAIL: "sales@noctra.local",
+    s.KEY_NOTIFICATIONS_WORKSHOP_EMAIL: "workshop@noctra.local",
+
+    # ── Public site & intake ────────────────────────────
+    s.KEY_PUBLIC_INQUIRY_ENABLED: "true",
+    s.KEY_PUBLIC_INQUIRY_RATE_LIMIT: "5",
+    s.KEY_PUBLIC_AUTO_RESPONSE_ENABLED: "true",
+    s.KEY_PUBLIC_AUTO_RESPONSE_SUBJECT: "Terima kasih atas inquiry Anda — NOCTRA Autoworks",
+    s.KEY_PUBLIC_PHONE: "+62 812 3456 7890",
+    s.KEY_PUBLIC_EMAIL: "hello@noctra.local",
+    s.KEY_PUBLIC_ADDRESS: "Jl. Contoh No. 123, Jakarta",
+    s.KEY_PUBLIC_WHATSAPP: "+62 812 3456 7890",
+}
 
 
 async def main() -> int:
     print("Seeding app settings...")
+
+    # Fail loudly if a default has no registry entry — that would mean
+    # the seed and the settings registry have drifted apart.
+    unregistered = sorted(set(DEFAULTS) - set(s.KNOWN_SETTINGS))
+    unseeded = sorted(set(s.KNOWN_SETTINGS) - set(DEFAULTS))
+    if unregistered or unseeded:
+        if unregistered:
+            print(
+                "  ! no registry spec for: " + ", ".join(unregistered),
+                file=sys.stderr,
+            )
+        if unseeded:
+            print(
+                "  ! registry keys without a default: " + ", ".join(unseeded),
+                file=sys.stderr,
+            )
+        return 1
+
+    validated: dict[str, str | None] = {}
+    for key, raw_value in DEFAULTS.items():
+        try:
+            validated[key] = s.validate_value(key, raw_value)
+        except ValueError as exc:
+            print(f"  ! invalid default for {key}: {exc}", file=sys.stderr)
+            return 1
+
     created = 0
     updated = 0
+    unchanged = 0
 
     async with SessionLocal() as db:
         try:
-            for item in SETTINGS:
-                existing = (
-                    await db.execute(
-                        select(AppSetting).where(AppSetting.key == item["key"])
-                    )
-                ).scalar_one_or_none()
+            existing = {
+                row.key: row
+                for row in (await db.execute(select(AppSetting))).scalars().all()
+            }
 
-                if existing is None:
+            for key, value in validated.items():
+                spec = s.KNOWN_SETTINGS[key]
+                row = existing.get(key)
+
+                if row is None:
                     db.add(
                         AppSetting(
-                            key=item["key"],
-                            value=item["value"],
-                            category=item["category"],
-                            description=item["description"],
-                            is_secret=False,
+                            key=key,
+                            value=value,
+                            category=spec.category,
+                            description=spec.description,
+                            is_secret=spec.is_secret,
                         )
                     )
                     created += 1
+                    print(f"  + {key}")
+                    continue
+
+                # Values belong to the operator — never overwrite them.
+                # Metadata belongs to the registry, so reconcile it.
+                changed = False
+                if row.category != spec.category:
+                    row.category = spec.category
+                    changed = True
+                if row.is_secret != spec.is_secret:
+                    row.is_secret = spec.is_secret
+                    changed = True
+                if not row.description:
+                    row.description = spec.description
+                    changed = True
+
+                if changed:
+                    updated += 1
                 else:
-                    # Don't overwrite values the operator has changed.
-                    # Only fill in missing descriptions.
-                    if not existing.description and item.get("description"):
-                        existing.description = item["description"]
-                        updated += 1
+                    unchanged += 1
 
             await db.commit()
         except Exception as exc:
@@ -237,7 +163,10 @@ async def main() -> int:
             print(f"\n❌ Settings seed failed: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 1
 
-    print(f"\n✅ Settings seed complete. Created: {created}, updated: {updated}")
+    print(
+        f"\n✅ Settings seed complete. "
+        f"Created: {created}, updated: {updated}, unchanged: {unchanged}"
+    )
     return 0
 
 

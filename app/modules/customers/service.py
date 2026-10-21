@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import AuditAction
@@ -32,6 +33,7 @@ class CustomerService:
     async def create(
         self, payload: CustomerCreate, *, actor: User | None = None
     ) -> Customer:
+        # Fast path: fail before doing any work.
         if payload.email and (
             existing := await self.repo.find_by_email(str(payload.email))
         ):
@@ -52,7 +54,7 @@ class CustomerService:
 
         customer = Customer(
             code=code,
-            name=payload.name,           # already stripped by schema validator
+            name=payload.name,
             email=payload.email,
             phone=payload.phone,
             alt_phone=payload.alt_phone,
@@ -68,7 +70,29 @@ class CustomerService:
             status=CustomerStatus.LEAD.value,
             is_active=True,
         )
-        await self.repo.add(customer)
+        try:
+            await self.repo.add(customer)
+        except IntegrityError as exc:
+            # Concurrent request inserted the same email/phone between our
+            # pre-check and this flush. Roll back the failed transaction,
+            # re-query to find the winning row, and surface the same
+            # ConflictError the fast path would have raised.
+            await self.db.rollback()
+            if payload.email and (
+                existing := await self.repo.find_by_email(str(payload.email))
+            ):
+                raise ConflictError(
+                    f"Customer with this email already exists ({existing.code})",
+                    context={"existing_id": str(existing.id)},
+                ) from exc
+            if payload.phone and (
+                existing := await self.repo.find_by_phone(payload.phone)
+            ):
+                raise ConflictError(
+                    f"Customer with this phone already exists ({existing.code})",
+                    context={"existing_id": str(existing.id)},
+                ) from exc
+            raise ConflictError("Duplicate customer") from exc
 
         await self.audit.log(
             action=AuditAction.CREATE,
@@ -83,9 +107,8 @@ class CustomerService:
             },
         )
 
-        # `selectin` lazy strategy does not fire for freshly created objects
-        # — force-load contacts so the API response includes them.
-        await self.db.refresh(customer, ["contacts"])
+        # New customer has no contacts — no need to `refresh` (saves a query).
+        customer.contacts = []   # set explicitly to satisfy the response DTO
         return customer
 
     # ── Find-or-create (used by public intake) ─────────
@@ -101,6 +124,7 @@ class CustomerService:
         if not name_clean:
             raise ValidationError("name cannot be blank")
 
+        # Fast path — most calls hit an existing customer.
         if email and (existing := await self.repo.find_by_email(email)):
             return existing, False
         if phone and (existing := await self.repo.find_by_phone(phone)):
@@ -117,7 +141,18 @@ class CustomerService:
             status=CustomerStatus.LEAD.value,
             is_active=True,
         )
-        await self.repo.add(customer)
+        try:
+            await self.repo.add(customer)
+        except IntegrityError:
+            # Lost the race — another request created this email/phone
+            # between our pre-check and this insert. Roll back and return
+            # the winner (find-or-create semantics).
+            await self.db.rollback()
+            if email and (existing := await self.repo.find_by_email(email)):
+                return existing, False
+            if phone and (existing := await self.repo.find_by_phone(phone)):
+                return existing, False
+            raise
 
         await self.audit.log(
             action=AuditAction.CREATE,
@@ -126,7 +161,7 @@ class CustomerService:
             new_data={"code": customer.code, "name": customer.name, "source": source},
         )
 
-        await self.db.refresh(customer, ["contacts"])
+        customer.contacts = []
         return customer, True
 
     # ── Update ────────────────────────────────────────
@@ -141,7 +176,7 @@ class CustomerService:
         if "name" in fields:
             if payload.name is None:
                 raise ValidationError("name cannot be null")
-            customer.name = payload.name             # already stripped
+            customer.name = payload.name
 
         if "country" in fields:
             if payload.country is None:
@@ -173,7 +208,15 @@ class CustomerService:
             if field in fields:
                 setattr(customer, field, getattr(payload, field))
 
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError as exc:
+            # Concurrent update set the same email/phone between our
+            # pre-check and this flush.
+            await self.db.rollback()
+            raise ConflictError(
+                "Email or phone already in use by another customer"
+            ) from exc
 
         after = self._snapshot(customer)
         if before != after:
@@ -194,7 +237,7 @@ class CustomerService:
         customer = await self._get_or_404(customer_id)
         contact = CustomerContact(
             customer_id=customer.id,
-            name=payload.name,                       # already stripped
+            name=payload.name,
             role=payload.role,
             phone=payload.phone,
             email=payload.email,

@@ -24,6 +24,7 @@ async def wait(retries: int = 30, delay: float = 1.0) -> int:
                 user=settings.POSTGRES_USER,
                 password=settings.POSTGRES_PASSWORD,
                 database=settings.POSTGRES_DB,
+                timeout=5,
             )
             await conn.close()
             print(f"[wait_for_db] connected after {attempt} attempt(s)")

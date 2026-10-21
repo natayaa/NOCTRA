@@ -17,13 +17,13 @@ async def landing(request: Request) -> HTMLResponse:
 
 @router.get("/about", response_class=HTMLResponse)
 async def about(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "public/about.html", {"title": "About — NOCTRA"})
+    return templates.TemplateResponse(request, "public/about.html", {"title": "Tentang — NOCTRA"})
 
 
 @router.get("/services", response_class=HTMLResponse)
 async def services(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
-        request, "public/services.html", {"title": "Services — NOCTRA"}
+        request, "public/services.html", {"title": "Layanan — NOCTRA"}
     )
 
 

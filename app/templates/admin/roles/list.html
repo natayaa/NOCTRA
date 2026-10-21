@@ -1,32 +1,56 @@
 {% extends "admin/base.html" %}
+{% from "components/empty_state.html" import empty_state %}
+
+{% set system_count = roles | selectattr('is_system') | list | length %}
+{% set custom_count = (roles | length) - system_count %}
+
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Roles</h1>
-    <p class="page-subtitle">{{ roles | length }} roles</p>
+    <p class="page-subtitle">
+      {{ roles | length }} role{% if roles | length != 1 %}s{% endif %}
+      {% if system_count %}
+        · <span class="text-noctra-muted">{{ system_count }} system</span>
+      {% endif %}
+      {% if custom_count %}
+        · <span class="text-noctra-muted">{{ custom_count }} custom</span>
+      {% endif %}
+    </p>
   </div>
 </div>
 
+{% if roles %}
 <div class="table-wrap">
-  <table class="table">
+  <table class="table w-full">
     <thead>
       <tr>
-        <th>Role</th>
-        <th>Description</th>
-        <th class="text-right">Permissions</th>
-        <th></th>
+        <th class="text-left w-56">Role</th>
+        <th class="text-left">Description</th>
+        <th class="text-right w-28">Permissions</th>
+        <th class="text-right w-16"></th>
       </tr>
     </thead>
     <tbody>
       {% for r in roles %}
       <tr>
-        <td>
-          <div class="font-medium">{{ r.name }}</div>
-          {% if r.is_system %}<div class="text-xs text-neutral-500">system</div>{% endif %}
+        <td class="text-left">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-medium">{{ r.name }}</span>
+            {% if r.is_system %}
+              <span class="badge badge-info badge-xs">System</span>
+            {% else %}
+              <span class="badge badge-neutral badge-xs">Custom</span>
+            {% endif %}
+          </div>
         </td>
-        <td class="text-sm text-neutral-400">{{ r.description or '—' }}</td>
-        <td class="text-right font-mono text-sm">{{ permission_counts.get(r.id, 0) }}</td>
-        <td class="text-right">
+        <td class="text-sm text-noctra-muted text-left">
+          {{ r.description or '—' }}
+        </td>
+        <td class="text-right font-mono text-sm whitespace-nowrap">
+          {{ permission_counts.get(r.id, 0) }}
+        </td>
+        <td class="text-right whitespace-nowrap">
           <a href="/admin/roles/{{ r.id }}" class="btn btn-ghost btn-sm">View</a>
         </td>
       </tr>
@@ -34,4 +58,11 @@
     </tbody>
   </table>
 </div>
+{% else %}
+{{ empty_state(
+  title='No roles defined',
+  message='Run the RBAC seed to initialize system roles, or contact your administrator.',
+  icon='list'
+) }}
+{% endif %}
 {% endblock %}

@@ -20,7 +20,6 @@ from PIL import Image, UnidentifiedImageError
 from app.core.config import settings
 from app.core.exceptions import ValidationError
 
-# Decompression-bomb guard (Pillow defaults to ~89M px which is generous).
 Image.MAX_IMAGE_PIXELS = 40_000_000  # ~40 MP
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -35,8 +34,9 @@ EXT_FORMAT: dict[str, str] = {
     ".webp": "WEBP",
     ".gif": "GIF",
 }
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE = 10 * 1024 * 1024
 MAX_FILES_PER_UPLOAD = 5
+_READ_CHUNK = 64 * 1024
 
 
 def ensure_dirs() -> None:
@@ -44,22 +44,20 @@ def ensure_dirs() -> None:
 
 
 def _is_valid_image(data: bytes) -> bool:
-    """Magic-byte check for JPEG / PNG / GIF / WebP."""
     if len(data) < 12:
         return False
-    if data[:3] == b"\xff\xd8\xff":                      # JPEG
+    if data[:3] == b"\xff\xd8\xff":
         return True
-    if data[:8] == b"\x89PNG\r\n\x1a\n":                 # PNG
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
         return True
-    if data[:6] in (b"GIF87a", b"GIF89a"):               # GIF
+    if data[:6] in (b"GIF87a", b"GIF89a"):
         return True
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":    # WebP
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return True
     return False
 
 
 def _strip_exif(data: bytes, expected_fmt: str) -> bytes:
-    """Re-encode to strip EXIF. Preserves animation for GIF/WEBP."""
     try:
         img = Image.open(BytesIO(data))
         detected = (img.format or "").upper()
@@ -68,12 +66,11 @@ def _strip_exif(data: bytes, expected_fmt: str) -> bytes:
                 f"Extension says {expected_fmt} but file is {detected or 'unknown'}"
             )
 
-        # Re-encoding an animated image frame-by-frame would drop the frames.
-        # GIFs/WEBPs rarely carry EXIF in practice — pass through untouched.
         if getattr(img, "is_animated", False) or getattr(img, "n_frames", 1) > 1:
+            # Re-encoding frame-by-frame would drop animation; EXIF in
+            # animated GIF/WEBP is rare in practice, so pass through.
             return data
 
-        # JPEG can't store RGBA/P — flatten to RGB.
         if detected == "JPEG" and img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
 
@@ -94,7 +91,9 @@ def _strip_exif(data: bytes, expected_fmt: str) -> bytes:
     except ValidationError:
         raise
     except Exception as exc:
-        raise ValidationError(f"Could not process image: {exc}") from exc
+        # Log-worthy detail is preserved in the chained exception; the
+        # caller only sees a generic message so PIL internals don't leak.
+        raise ValidationError("Could not process image") from exc
 
 
 def _safe_extension(file: UploadFile) -> str:
@@ -110,21 +109,33 @@ def _safe_extension(file: UploadFile) -> str:
 async def save_inquiry_photo(file: UploadFile) -> str:
     """Persist one uploaded photo. Returns the public URL path."""
     ensure_dirs()
-
     ext = _safe_extension(file)
-    contents = await file.read()
 
+    # Stream-read with a hard cap — never buffer more than MAX_FILE_SIZE.
+    chunks: list[bytes] = []
+    total = 0
+    try:
+        while True:
+            chunk = await file.read(_READ_CHUNK)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_FILE_SIZE:
+                raise ValidationError(
+                    f"File too large. Max is {MAX_FILE_SIZE // (1024 * 1024)} MB."
+                )
+            chunks.append(chunk)
+    finally:
+        # Starlette's UploadFile is not auto-closed — release the spool
+        # file whether or not the read succeeded.
+        await file.close()
+
+    contents = b"".join(chunks)
     if not contents:
         raise ValidationError("File is empty")
-    if len(contents) > MAX_FILE_SIZE:
-        raise ValidationError(
-            f"File too large ({len(contents) // 1024} KB). "
-            f"Max is {MAX_FILE_SIZE // (1024 * 1024)} MB."
-        )
     if not _is_valid_image(contents):
         raise ValidationError("File does not appear to be a valid image")
 
-    # Re-encode off the event loop — PIL is CPU-bound.
     stripped = await asyncio.to_thread(_strip_exif, contents, EXT_FORMAT[ext])
 
     now = datetime.now(UTC)
@@ -144,6 +155,12 @@ async def save_inquiry_photos(files: list[UploadFile]) -> list[dict]:
     real_files = [f for f in files if f and f.filename]
 
     if len(real_files) > MAX_FILES_PER_UPLOAD:
+        # Close everything we were given so nothing leaks.
+        for f in real_files:
+            try:
+                await f.close()
+            except Exception:
+                pass
         raise ValidationError(
             f"At most {MAX_FILES_PER_UPLOAD} photos allowed per inquiry"
         )

@@ -2,14 +2,24 @@
 
 {% block title %}{{ title or "NOCTRA Admin" }} — {{ app_name }}{% endblock %}
 {% block meta_robots %}noindex, nofollow{% endblock %}
+{% block body_class %}admin-body{% endblock %}
 
 {% block extra_css %}
-  <link rel="stylesheet" href="/static/css/admin.css" />
+  {# `{{ super() }}` first so root base.html styles are preserved. #}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ asset_url('css/admin.css') }}" />
 {% endblock %}
 
-{% block body %}
-  {# Flash sudah di-include oleh base.html — jangan duplikasi. #}
+{#
+  ⚠️ CRITICAL: These pass-through blocks MUST exist. Without them,
+  `{% block extra_head %}` and `{% block extra_js %}` declared in child
+  templates (dashboard.html, projects/form.html, etc.) are silently
+  dropped — Chart.js never loads, HTMX scripts never run.
+#}
+{% block extra_head %}{{ super() }}{% endblock %}
+{% block extra_js %}{{ super() }}{% endblock %}
 
+{% block body %}
   <div class="admin-shell">
     {% include "components/sidebar.html" %}
     <div class="sidebar-scrim" data-sidebar-scrim></div>
@@ -18,4 +28,8 @@
       {% block content %}{% endblock %}
     </main>
   </div>
+
+  {% include "components/command_palette.html" %}
+
+  <script defer src="{{ asset_url('js/command-palette.js') }}"></script>
 {% endblock %}

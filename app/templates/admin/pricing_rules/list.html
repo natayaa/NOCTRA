@@ -1,65 +1,237 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
 
+{% set has_filters = q or is_active_filter is not none %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
+{% set specificity_label = {
+  3: 'Service + cat.',
+  2: 'Service',
+  1: 'Category',
+  0: 'Default',
+} %}
+
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Pricing Rules</h1>
-    <p class="page-subtitle">{{ page_meta.total }} total</p>
+    <p class="page-subtitle">
+      {{ page_meta.total }} total
+      {% if has_filters %}
+        · <a class="text-accent" href="/admin/pricing-rules">Clear filters</a>
+      {% endif %}
+    </p>
   </div>
   <div class="page-actions">
     <a href="/admin/pricing-rules/new" class="btn btn-primary btn-sm">New Rule</a>
   </div>
 </div>
 
-<p class="text-xs text-neutral-500 mb-4">
-  The most specific rule wins. Service + category beats service-only, which beats category-only, which beats the default.
+<p class="text-xs text-noctra-dim mb-4">
+  The most specific rule wins. Service + category beats service-only, which
+  beats category-only, which beats the default.
 </p>
 
-<form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
-  <div class="form-row !mb-0 flex-1 min-w-[240px]">
-    <label class="form-label" for="q">Search</label>
-    <input class="input" id="q" name="q" value="{{ q }}" data-search-input />
+{# ── Status chips ───────────────────────────────── #}
+<div class="mb-4 flex flex-wrap gap-2">
+  <a href="/admin/pricing-rules{{ qs(is_active='') }}"
+     class="badge whitespace-nowrap {% if is_active_filter is none %}badge-accent{% else %}badge-neutral{% endif %}">
+    All
+  </a>
+  <a href="/admin/pricing-rules{{ qs(is_active='true') }}"
+     class="badge whitespace-nowrap {% if is_active_filter is sameas true %}badge-accent{% else %}badge-neutral{% endif %}">
+    Active
+  </a>
+  <a href="/admin/pricing-rules{{ qs(is_active='false') }}"
+     class="badge whitespace-nowrap {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
+    Inactive
+  </a>
+</div>
+
+{# ── Filter form ────────────────────────────────── #}
+<form method="get" action="/admin/pricing-rules" class="panel mb-4">
+  {% if is_active_filter is not none %}
+    <input type="hidden" name="is_active" value="{{ 'true' if is_active_filter else 'false' }}" />
+  {% endif %}
+  <input type="hidden" name="per_page" value="{{ current_per_page }}" />
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+    <div class="form-row !mb-0 md:col-span-2">
+      <label class="form-label" for="q">Search</label>
+      <input class="input" id="q" name="q" value="{{ q }}"
+             placeholder="Rule name or notes…" data-search-input />
+    </div>
+    <div class="flex gap-2">
+      <button class="btn btn-secondary flex-1">Filter</button>
+      <a href="/admin/pricing-rules" class="btn btn-ghost">Reset</a>
+    </div>
   </div>
-  <button class="btn btn-secondary">Filter</button>
 </form>
 
+{# ── Toolbar ──────────────────────────────────── #}
 {% if rules %}
-<div class="table-wrap">
-  <table class="table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Service</th>
-        <th>Vehicle category</th>
-        <th class="text-right">Target</th>
-        <th class="text-right">Min</th>
-        <th class="text-right">Complexity</th>
-        <th>Status</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in rules %}
-      <tr>
-        <td class="font-medium">{{ r.name }}</td>
-        <td class="text-xs text-neutral-400">{{ service_labels.get(r.service_interest, r.service_interest) if r.service_interest else 'any' }}</td>
-        <td class="text-xs text-neutral-400">{{ r.vehicle_category or 'any' }}</td>
-        <td class="text-right font-mono text-sm text-noctra-accent">{{ r.target_margin_pct }}%</td>
-        <td class="text-right font-mono text-sm text-neutral-400">{{ r.min_margin_pct }}%</td>
-        <td class="text-right font-mono text-sm">{{ r.complexity_factor }}×</td>
-        <td>
-          {% if r.is_active %}<span class="badge badge-success">Active</span>
-          {% else %}<span class="badge badge-neutral">Inactive</span>{% endif %}
-        </td>
-        <td class="text-right"><a href="/admin/pricing-rules/{{ r.id }}" class="btn btn-ghost btn-sm">View</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+    {% if has_filters %}· <span class="text-noctra-muted">filtered</span>{% endif %}
+  </div>
+
+  <form method="get" class="per-page-form">
+    {% for k, v in request.query_params.items() %}
+      {% if k not in ('per_page', 'page') and v %}
+        <input type="hidden" name="{{ k }}" value="{{ v }}" />
+      {% endif %}
+    {% endfor %}
+    <label for="per_page_pr">Show</label>
+    <select id="per_page_pr" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
 </div>
+{% endif %}
+
+{% if rules %}
+
+{# ── Desktop table ──────────────────────────────── #}
+<div class="hidden md:block">
+  <div class="table-wrap table-wrap--sticky">
+    <table class="table w-full">
+      <thead>
+        <tr>
+          <th class="text-left">Name</th>
+          <th class="text-left w-32">Service</th>
+          <th class="text-left w-32">Category</th>
+          <th class="text-center w-28">Specificity</th>
+          <th class="text-right w-20">Target</th>
+          <th class="text-right w-20">Min</th>
+          <th class="text-right w-24">Factor</th>
+          <th class="text-left w-24">Status</th>
+          <th class="text-right w-16"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rules %}
+        {% set spec = specificity_map.get(r.id, 0) %}
+        <tr>
+          <td class="font-medium text-left">{{ r.name }}</td>
+          <td class="text-xs text-noctra-muted text-left">
+            {% if r.service_interest %}
+              {{ service_labels.get(r.service_interest, r.service_interest) }}
+            {% else %}
+              <span class="text-noctra-dim italic">Any</span>
+            {% endif %}
+          </td>
+          <td class="text-xs text-noctra-muted text-left">
+            {% if r.vehicle_category %}
+              {{ vehicle_category_labels.get(r.vehicle_category, r.vehicle_category | replace('_', ' ') | title) }}
+            {% else %}
+              <span class="text-noctra-dim italic">Any</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            <span class="badge {% if spec >= 3 %}badge-accent{% elif spec == 2 %}badge-info{% elif spec == 1 %}badge-neutral{% else %}badge-neutral{% endif %} whitespace-nowrap">
+              <span class="mono">{{ spec }}</span>
+              <span class="opacity-70 ml-1">{{ specificity_label.get(spec, '?') }}</span>
+            </span>
+          </td>
+          <td class="text-right font-mono text-sm text-noctra-accent whitespace-nowrap">
+            {{ r.target_margin_pct | qty(decimals=2) }}%
+          </td>
+          <td class="text-right font-mono text-sm text-noctra-muted whitespace-nowrap">
+            {{ r.min_margin_pct | qty(decimals=2) }}%
+          </td>
+          <td class="text-right font-mono text-sm whitespace-nowrap">
+            {{ r.complexity_factor | qty(decimals=2) }}×
+          </td>
+          <td class="text-left">
+            {% if r.is_active %}
+              <span class="badge badge-success whitespace-nowrap">Active</span>
+            {% else %}
+              <span class="badge badge-neutral whitespace-nowrap">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <a href="/admin/pricing-rules/{{ r.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Mobile cards ──────────────────────────────── #}
+<div class="md:hidden space-y-3">
+  {% for r in rules %}
+  {% set spec = specificity_map.get(r.id, 0) %}
+  <a href="/admin/pricing-rules/{{ r.id }}"
+     class="block panel !p-4 active:scale-[0.995] transition">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <span class="font-medium text-sm">{{ r.name }}</span>
+      {% if r.is_active %}
+        <span class="badge badge-success shrink-0">Active</span>
+      {% else %}
+        <span class="badge badge-neutral shrink-0">Inactive</span>
+      {% endif %}
+    </div>
+
+    <div class="text-xs text-noctra-dim space-y-0.5">
+      <div>
+        <span class="text-noctra-muted">Service:</span>
+        {% if r.service_interest %}
+          {{ service_labels.get(r.service_interest, r.service_interest) }}
+        {% else %}<span class="italic">Any</span>{% endif %}
+        · <span class="text-noctra-muted">Category:</span>
+        {% if r.vehicle_category %}
+          {{ vehicle_category_labels.get(r.vehicle_category, r.vehicle_category | replace('_', ' ') | title) }}
+        {% else %}<span class="italic">Any</span>{% endif %}
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="badge {% if spec >= 3 %}badge-accent{% elif spec == 2 %}badge-info{% else %}badge-neutral{% endif %} badge-xs">
+          <span class="mono">{{ spec }}</span> · {{ specificity_label.get(spec, '?') }}
+        </span>
+      </div>
+    </div>
+
+    <div class="flex items-end justify-between mt-3">
+      <div class="text-xs text-noctra-muted">
+        <div>Target <span class="font-mono text-noctra-accent">{{ r.target_margin_pct | qty(decimals=2) }}%</span></div>
+        <div>Min <span class="font-mono">{{ r.min_margin_pct | qty(decimals=2) }}%</span></div>
+      </div>
+      <div class="text-right font-mono text-sm">
+        {{ r.complexity_factor | qty(decimals=2) }}×
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
 {% include "components/pagination.html" %}
+
 {% else %}
-{{ empty_state('No pricing rules', 'Create a rule to start pricing from HPP.', '/admin/pricing-rules/new', 'New Rule', 'plus') }}
+
+{% if has_filters %}
+  {{ empty_state(
+    title='No rules match your filters',
+    message='Try adjusting filters or clear them to see all rules.',
+    action_url='/admin/pricing-rules',
+    action_label='Clear filters',
+    icon='search'
+  ) }}
+{% else %}
+  {{ empty_state(
+    title='No pricing rules yet',
+    message='Create a rule to start computing recommended prices from HPP.',
+    action_url='/admin/pricing-rules/new',
+    action_label='New Rule',
+    icon='plus'
+  ) }}
+{% endif %}
+
 {% endif %}
 {% endblock %}

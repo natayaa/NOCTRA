@@ -1,104 +1,208 @@
 {% extends "admin/base.html" %}
-{% block content %}
 {% set fv = form_values or {} %}
 
+{# Macro: preserves empty string (user clear) — key must exist in fv to override #}
+{% macro v(key, default='') -%}
+{{- fv[key] if key in fv else default -}}
+{%- endmacro %}
+
+{# Checkbox sentinel — distinguishes "user unchecked" from "not submitted" #}
+{% if '_has_is_active' in fv %}
+  {% set cur_active = fv.get('is_active') == 'true' %}
+{% else %}
+  {% set cur_active = rule.is_active if rule else True %}
+{% endif %}
+
+{% block content %}
 <div class="page-header">
-  <div><h1 class="page-title">{{ 'New Pricing Rule' if mode == 'create' else 'Edit Pricing Rule' }}</h1></div>
-  <div class="page-actions"><a href="/admin/pricing-rules" class="btn btn-secondary btn-sm">Back</a></div>
+  <div>
+    <h1 class="page-title">{{ 'New Pricing Rule' if mode == 'create' else 'Edit Pricing Rule' }}</h1>
+    {% if rule %}<p class="page-subtitle">{{ rule.name }}</p>{% endif %}
+  </div>
+  <div class="page-actions">
+    <a href="/admin/pricing-rules{% if rule %}/{{ rule.id }}{% endif %}"
+       class="btn btn-secondary btn-sm">Back</a>
+  </div>
 </div>
 
-{% if error %}<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);"><div class="form-error">{{ error }}</div></div>{% endif %}
-
-<form method="post" action="{{ '/admin/pricing-rules' if mode == 'create' else '/admin/pricing-rules/' ~ rule.id }}"
-      class="max-w-3xl panel space-y-5" data-guard>
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-
-  <div class="form-row">
-    <label class="form-label" for="name">Name <span class="req">*</span></label>
-    <input class="input" id="name" name="name" required maxlength="255"
-           placeholder="e.g. Full body repaint — Scooter"
-           value="{{ fv.get('name') or (rule.name if rule else '') }}" />
+{% if error %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
   </div>
+</div>
+{% endif %}
 
-  <section>
-    <h2 class="panel-title">Match criteria</h2>
-    <p class="text-xs text-neutral-500 mt-1 mb-3">Leave blank for "any". More specific rules win.</p>
+<form method="post"
+      action="{{ '/admin/pricing-rules' if mode == 'create' else '/admin/pricing-rules/' ~ rule.id }}"
+      class="max-w-3xl space-y-5"
+      data-guard
+      data-shortcut-submit>
+
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+  {% if mode == 'edit' %}
+  <input type="hidden" name="_has_is_active" value="1" />
+  {% endif %}
+
+  {# ── Identity ──────────────────────── #}
+  <section class="panel">
+    <div class="panel-title mb-4">Rule name</div>
+    <div class="form-row !mb-0">
+      <label class="form-label" for="name">Name <span class="req">*</span></label>
+      <input class="input" id="name" name="name" required maxlength="255"
+             {% if mode == 'create' %}autofocus{% endif %}
+             placeholder="e.g. Full body repaint — Scooter"
+             value="{{ v('name', rule.name if rule else '') }}" />
+      <div class="form-hint">Human-readable label — shown in admin and audit logs.</div>
+    </div>
+  </section>
+
+  {# ── Match criteria ────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Match criteria</h2>
+      <span class="text-xs text-noctra-dim">Optional</span>
+    </div>
+    <p class="text-xs text-noctra-dim mb-3">
+      Leave blank for "any". More specific rules win.
+    </p>
     <div class="grid md:grid-cols-2 gap-5">
-      <div class="form-row">
+      <div class="form-row !mb-0">
         <label class="form-label" for="service_interest">Service interest</label>
         <select class="select" id="service_interest" name="service_interest">
           <option value="">Any service</option>
+          {% set cur_svc = fv.get('service_interest', rule.service_interest if rule else '') %}
           {% for s in services %}
-            {% set cur = fv.get('service_interest') or (rule.service_interest if rule else '') %}
-            <option value="{{ s }}" {% if cur == s %}selected{% endif %}>{{ service_labels.get(s, s) }}</option>
+            <option value="{{ s }}" {% if cur_svc == s %}selected{% endif %}>
+              {{ service_labels.get(s, s) }}
+            </option>
           {% endfor %}
         </select>
       </div>
-      <div class="form-row">
+      <div class="form-row !mb-0">
         <label class="form-label" for="vehicle_category">Vehicle category</label>
         <select class="select" id="vehicle_category" name="vehicle_category">
           <option value="">Any category</option>
+          {% set cur_cat = fv.get('vehicle_category', rule.vehicle_category if rule else '') %}
           {% for c in vehicle_categories %}
-            {% set cur = fv.get('vehicle_category') or (rule.vehicle_category if rule else '') %}
-            <option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c.replace('_', ' ').title() }}</option>
+            <option value="{{ c }}" {% if cur_cat == c %}selected{% endif %}>
+              {{ vehicle_category_labels.get(c, c | replace('_', ' ') | title) }}
+            </option>
           {% endfor %}
         </select>
       </div>
     </div>
   </section>
 
-  <section>
-    <h2 class="panel-title">Margin policy</h2>
-    <div class="grid md:grid-cols-3 gap-5 mt-3">
-      <div class="form-row">
-        <label class="form-label" for="target_margin_pct">Target margin (%) <span class="req">*</span></label>
+  {# ── Margin policy ────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Margin policy</h2>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="form-row !mb-0">
+        <label class="form-label" for="target_margin_pct">
+          Target margin (%) <span class="req">*</span>
+        </label>
         <input class="input" type="number" step="0.1" min="0" max="99.9"
                id="target_margin_pct" name="target_margin_pct" required
-               value="{{ fv.get('target_margin_pct') or (rule.target_margin_pct if rule else '50') }}" />
+               value="{{ v('target_margin_pct',
+                 rule.target_margin_pct if rule else '50'
+               ) }}" />
         <div class="form-hint">Recommended price derives from this.</div>
       </div>
-      <div class="form-row">
-        <label class="form-label" for="min_margin_pct">Minimum margin (%) <span class="req">*</span></label>
+      <div class="form-row !mb-0">
+        <label class="form-label" for="min_margin_pct">
+          Minimum margin (%) <span class="req">*</span>
+        </label>
         <input class="input" type="number" step="0.1" min="0" max="99.9"
                id="min_margin_pct" name="min_margin_pct" required
-               value="{{ fv.get('min_margin_pct') or (rule.min_margin_pct if rule else '30') }}" />
-        <div class="form-hint">Below this, quote requires approval.</div>
+               value="{{ v('min_margin_pct',
+                 rule.min_margin_pct if rule else '30'
+               ) }}" />
+        <div class="form-hint">Must be &lt; target. Below this, approval required.</div>
       </div>
-      <div class="form-row">
+      <div class="form-row !mb-0">
         <label class="form-label" for="complexity_factor">Complexity factor</label>
         <input class="input" type="number" step="0.05" min="0.1" max="10"
                id="complexity_factor" name="complexity_factor"
-               value="{{ fv.get('complexity_factor') or (rule.complexity_factor if rule else '1.0') }}" />
+               value="{{ v('complexity_factor',
+                 rule.complexity_factor if rule else '1.0'
+               ) }}" />
         <div class="form-hint">1.0 = baseline. 1.15 = +15% on HPP.</div>
       </div>
     </div>
 
-    <div class="form-row mt-3">
+    <div class="form-row mt-5">
       <label class="form-label" for="min_price_floor">Minimum price floor (IDR)</label>
-      <input class="input" type="number" step="10000" min="0"
+      <input class="input" type="number" step="any" min="0"
              id="min_price_floor" name="min_price_floor"
-             value="{{ fv.get('min_price_floor') or (rule.min_price_floor if rule else '') or '' }}" />
-      <div class="form-hint">Optional. If the computed minimum is below this, use this instead.</div>
+             value="{{ v('min_price_floor',
+               rule.min_price_floor if rule and rule.min_price_floor is not none else ''
+             ) }}" />
+      <div class="form-hint">
+        Optional. If computed minimum is below this, use this instead.
+      </div>
     </div>
   </section>
 
-  <section>
-    <h2 class="panel-title">Notes</h2>
-    <div class="form-row mt-3">
+  {# ── Notes ──────────────────────── #}
+  <section class="panel">
+    <div class="panel-title mb-4">Notes</div>
+    <div class="form-row !mb-0">
       <label class="form-label" for="notes">Internal notes</label>
-      <textarea class="textarea" id="notes" name="notes" rows="2">{{ fv.get('notes') or (rule.notes if rule else '') }}</textarea>
+      <textarea class="textarea" id="notes" name="notes" rows="2" maxlength="5000"
+                placeholder="Why this rule exists, when it should apply…">{{ v('notes', rule.notes if rule else '') }}</textarea>
     </div>
   </section>
 
+  {# ── Status ──────────────────────── #}
   {% if mode == 'edit' %}
-  <label class="flex items-center gap-2 text-sm">
-    <input type="checkbox" name="is_active" value="true" {% if rule.is_active %}checked{% endif %} /> Active
-  </label>
+  <section class="panel">
+    <div class="panel-title mb-4">Status</div>
+    <label class="flex items-center gap-2 text-sm cursor-pointer">
+      <input type="checkbox" name="is_active" value="true"
+             {% if cur_active %}checked{% endif %} />
+      Active (participates in rule matching)
+    </label>
+  </section>
   {% endif %}
 
-  <div class="flex gap-2 pt-2">
-    <button class="btn btn-primary">{{ 'Create' if mode == 'create' else 'Save changes' }}</button>
-    <a href="/admin/pricing-rules" class="btn btn-secondary">Cancel</a>
+  {# ── Sticky save bar ──────────────── #}
+  <div class="sticky bottom-3 z-20">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Create' if mode == 'create' else 'Save changes' }}
+      </button>
+      <a href="/admin/pricing-rules{% if rule %}/{{ rule.id }}{% endif %}"
+         class="btn btn-secondary">Cancel</a>
+      <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">⌘</kbd>
+        <kbd class="mono px-1.5 py-0.5 rounded border border-noctra-border">↵</kbd>
+      </span>
+    </div>
   </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const form = document.querySelector('form[data-shortcut-submit]');
+  if (!form) return;
+  form.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
+    if (e.target && e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    if (form.requestSubmit) form.requestSubmit(); else form.submit();
+  });
+})();
+</script>
 {% endblock %}

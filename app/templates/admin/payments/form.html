@@ -1,23 +1,37 @@
 {% extends "admin/base.html" %}
-{% block content %}
 {% set today_date = today() if today is callable else today %}
 
+{% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Record {{ 'Payment In' if direction == 'IN' else 'Payment Out' }}</h1>
-    <p class="page-subtitle">Catat uang masuk/keluar dari customer atau supplier.</p>
+    <h1 class="page-title">
+      Record {{ 'Payment In' if direction == 'IN' else 'Payment Out' }}
+    </h1>
+    <p class="page-subtitle">
+      {{ 'Catat uang masuk dari customer.' if direction == 'IN' else 'Catat uang keluar ke supplier.' }}
+    </p>
   </div>
-  <div class="page-actions"><a href="/admin/payments" class="btn btn-secondary btn-sm">Back</a></div>
+  <div class="page-actions">
+    <a href="/admin/payments" class="btn btn-secondary btn-sm">Back</a>
+  </div>
 </div>
 
 {% if error %}
 <div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
-  <div class="text-sm text-red-200">{{ error }}</div>
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
+  </div>
 </div>
 {% endif %}
 
-<form method="post" action="/admin/payments" class="max-w-3xl space-y-5" data-guard data-shortcut-submit>
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+<form method="post" action="/admin/payments"
+      class="max-w-3xl space-y-5" data-guard data-shortcut-submit>
+
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
   <input type="hidden" name="direction" value="{{ direction }}" />
   <input type="hidden" name="reference_type" id="reference_type" value="{{ reference_type or '' }}" />
   <input type="hidden" name="reference_id" id="reference_id" value="{{ reference_id or '' }}" />
@@ -32,22 +46,28 @@
       <div class="form-row !mb-0">
         <label class="form-label" for="method">Metode</label>
         <select class="select" id="method" name="method">
-          {% for m in payment_methods %}<option value="{{ m }}">{{ payment_method_labels.get(m, m) }}</option>{% endfor %}
+          {% for m in payment_methods %}
+            <option value="{{ m }}">{{ payment_method_labels.get(m, m) }}</option>
+          {% endfor %}
         </select>
       </div>
       <div class="form-row !mb-0">
         <label class="form-label" for="amount">Nominal (IDR) <span class="req">*</span></label>
-        <input class="input" type="number" id="amount" name="amount" required />
+        <input class="input" type="number" step="any" min="0.01"
+               id="amount" name="amount" required autofocus />
       </div>
       <div class="form-row !mb-0">
         <label class="form-label" for="payment_date">Tanggal Bayar <span class="req">*</span></label>
-        <input class="input" type="date" id="payment_date" name="payment_date" required value="{{ today_date.isoformat() }}" />
+        <input class="input" type="date" id="payment_date" name="payment_date" required
+               value="{{ today_date.isoformat() }}" />
       </div>
       <div class="form-row !mb-0">
         <label class="form-label" for="account_id">Akun (Kas / Bank)</label>
         <select class="select" id="account_id" name="account_id">
           <option value="">—</option>
-          {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
+          {% for a in accounts %}
+            <option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>
+          {% endfor %}
         </select>
       </div>
     </div>
@@ -55,14 +75,22 @@
 
   <section class="panel">
     <div class="flex items-baseline justify-between gap-3 mb-4">
-      <h2 class="panel-title !mb-0">{{ 'Customer & Invoice' if direction == 'IN' else 'Supplier' }}</h2>
+      <h2 class="panel-title !mb-0">
+        {{ 'Customer & Invoice' if direction == 'IN' else 'Supplier' }}
+      </h2>
     </div>
 
     {% if direction == 'IN' %}
       {% if reference_type == 'PROJECT' and reference_id %}
-      <div class="mb-4 rounded-lg p-3 text-xs flex items-start gap-2" style="border: 1px solid rgba(14,165,233,0.3); background: rgba(14,165,233,0.05);">
+      <div class="mb-4 rounded-lg p-3 text-xs flex items-start gap-2"
+           style="border: 1px solid rgba(14,165,233,0.3); background: rgba(14,165,233,0.05);">
+        <svg class="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
         <span class="text-noctra-muted">
-          Mencatat <strong>DP (Down Payment)</strong> untuk Project ID <span class="mono font-semibold">{{ reference_id }}</span>.
+          Mencatat <strong>DP (Down Payment)</strong> untuk Project ID
+          <span class="mono font-semibold">{{ reference_id }}</span>.
           Uang ini otomatis akan memotong tagihan saat Invoice dibuat.
         </span>
       </div>
@@ -71,27 +99,38 @@
       <div class="form-row" data-party-picker>
         <label class="form-label" for="customer_id">Customer</label>
         {% if customers %}
-        <input class="input mb-2" type="text" placeholder="Cari nama customer…" data-party-search autocomplete="off" />
+        <input class="input mb-2" type="text" placeholder="Cari nama customer…"
+               data-party-search autocomplete="off" />
         <select class="select" id="customer_id" name="customer_id" data-party-select>
           <option value="">— Pilih Customer —</option>
           {% for c in customers %}
-          <option value="{{ c.id }}" data-search="{{ ((c.code or '') ~ ' ' ~ c.name)|lower }}" {% if customer_id and customer_id|string==c.id|string %}selected{% endif %}>
+          <option value="{{ c.id }}"
+                  data-search="{{ ((c.code or '') ~ ' ' ~ c.name)|lower }}"
+                  {% if customer_id and customer_id|string == c.id|string %}selected{% endif %}>
             {% if c.code %}{{ c.code }} — {% endif %}{{ c.name }}
           </option>
           {% endfor %}
         </select>
         {% else %}
-        <p class="text-noctra-dim text-xs">Belum ada customer. <a href="/admin/customers/new" class="text-noctra-accent hover:underline">Buat dulu</a>.</p>
+        <p class="text-noctra-dim text-xs">
+          Belum ada customer.
+          <a href="/admin/customers/new" class="text-noctra-accent hover:underline">Buat dulu</a>.
+        </p>
         {% endif %}
       </div>
 
       {% if reference_type != 'PROJECT' %}
       <div class="form-row mt-5" id="invoice-picker-row">
-        <label class="form-label" for="invoice_id">Kaitkan ke Invoice <span class="text-noctra-dim text-xs">(opsional — kosongkan jika hanya DP/Advance)</span></label>
+        <label class="form-label" for="invoice_id">
+          Kaitkan ke Invoice
+          <span class="text-noctra-dim text-xs">(opsional — kosongkan jika hanya DP/Advance)</span>
+        </label>
         <select class="select" id="invoice_id" name="__invoice_picker">
           <option value="">— Customer Advance (Belum ada invoice) —</option>
           {% for inv in open_invoices %}
-          <option value="{{ inv.id }}" data-customer="{{ inv.customer_id }}" data-balance="{{ inv.balance }}">
+          <option value="{{ inv.id }}"
+                  data-customer="{{ inv.customer_id }}"
+                  data-balance="{{ inv.balance }}">
             {{ inv.code }} — {{ inv.customer_name }} — sisa Rp {{ '{:,.0f}'.format(inv.balance) }}
           </option>
           {% endfor %}
@@ -104,17 +143,22 @@
       <div class="form-row" data-party-picker>
         <label class="form-label" for="supplier_id">Supplier</label>
         {% if suppliers %}
-        <input class="input mb-2" type="text" placeholder="Cari supplier…" data-party-search autocomplete="off" />
+        <input class="input mb-2" type="text" placeholder="Cari supplier…"
+               data-party-search autocomplete="off" />
         <select class="select" id="supplier_id" name="supplier_id" data-party-select>
           <option value="">— Pilih Supplier —</option>
           {% for s in suppliers %}
-          <option value="{{ s.id }}" data-search="{{ ((s.code or '') ~ ' ' ~ s.name)|lower }}">
+          <option value="{{ s.id }}"
+                  data-search="{{ ((s.code or '') ~ ' ' ~ s.name)|lower }}">
             {% if s.code %}{{ s.code }} — {% endif %}{{ s.name }}
           </option>
           {% endfor %}
         </select>
         {% else %}
-        <p class="text-noctra-dim text-xs">Belum ada supplier. <a href="/admin/suppliers/new" class="text-noctra-accent hover:underline">Buat dulu</a>.</p>
+        <p class="text-noctra-dim text-xs">
+          Belum ada supplier.
+          <a href="/admin/suppliers/new" class="text-noctra-accent hover:underline">Buat dulu</a>.
+        </p>
         {% endif %}
       </div>
     {% endif %}
@@ -125,7 +169,8 @@
     <div class="grid md:grid-cols-2 gap-5">
       <div class="form-row !mb-0">
         <label class="form-label" for="reference_number">No. Referensi / Bukti</label>
-        <input class="input" id="reference_number" name="reference_number" maxlength="100" placeholder="No. transfer, dll" />
+        <input class="input" id="reference_number" name="reference_number"
+               maxlength="100" placeholder="No. transfer, dll" />
       </div>
       <div class="form-row !mb-0">
         <label class="form-label" for="notes">Catatan</label>
@@ -135,7 +180,9 @@
   </section>
 
   <div class="sticky bottom-3 z-20">
-    <div class="panel !p-3 flex items-center gap-2 shadow-lg" style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%); backdrop-filter: blur(12px);">
+    <div class="panel !p-3 flex items-center gap-2 shadow-lg"
+         style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
       <button type="submit" class="btn btn-primary">Simpan Pembayaran</button>
       <a href="/admin/payments" class="btn btn-secondary">Batal</a>
       <span class="ml-auto text-xs text-noctra-dim hidden sm:inline">
@@ -150,6 +197,7 @@
 {% block extra_js %}
 <script>
 (() => {
+  /* ── Party search filter (customer / supplier) ──── */
   document.querySelectorAll('[data-party-picker]').forEach(picker => {
     const search = picker.querySelector('[data-party-search]');
     const select = picker.querySelector('[data-party-select]');
@@ -162,13 +210,18 @@
       select.innerHTML = '';
       select.appendChild(noneOpt);
       for (const opt of all.slice(1)) {
-        if (!q || opt.dataset.search.includes(q)) select.appendChild(opt);
+        if (!q || (opt.dataset.search || '').includes(q)) {
+          select.appendChild(opt);
+        }
       }
-      if (Array.from(select.options).some(o => o.value === currentValue)) select.value = currentValue;
+      if (Array.from(select.options).some(o => o.value === currentValue)) {
+        select.value = currentValue;
+      }
       select.dispatchEvent(new Event('change'));
     });
   });
 
+  /* ── Invoice picker + reference linkage ─────────── */
   const customerSelect = document.getElementById('customer_id');
   const invoiceSelect = document.getElementById('invoice_id');
   const amountInput = document.getElementById('amount');
@@ -199,26 +252,42 @@
   function updateFromInvoice() {
     if (!invoiceSelect) return;
     const opt = invoiceSelect.options[invoiceSelect.selectedIndex];
+
     if (!opt || !opt.value) {
-      refTypeInput.value = ''; refIdInput.value = '';
+      // Only clear reference fields if there isn't a pre-linked PROJECT ref
+      if (refTypeInput.value !== 'PROJECT') {
+        refTypeInput.value = '';
+        refIdInput.value = '';
+      }
       if (invoiceHint) invoiceHint.textContent = '';
       return;
     }
+
     const rawBalance = parseFloat(opt.dataset.balance || '0');
-    refTypeInput.value = 'INVOICE'; refIdInput.value = opt.value;
+    refTypeInput.value = 'INVOICE';
+    refIdInput.value = opt.value;
 
     if (rawBalance > 0) {
-      if (amountInput) amountInput.value = Math.round(rawBalance);
-      if (invoiceHint) invoiceHint.textContent = `Sisa tagihan invoice ini: Rp ${rawBalance.toLocaleString('id-ID')}`;
+      if (amountInput && !amountInput.value) {
+        amountInput.value = Math.round(rawBalance);
+      }
+      if (invoiceHint) {
+        invoiceHint.textContent = `Sisa tagihan invoice ini: Rp ${rawBalance.toLocaleString('id-ID')}`;
+      }
     } else if (invoiceHint) {
       invoiceHint.textContent = 'Invoice ini sudah lunas.';
     }
   }
 
   if (customerSelect) customerSelect.addEventListener('change', refreshInvoiceOptions);
+
   if (invoiceSelect) {
     invoiceSelect.addEventListener('change', updateFromInvoice);
-    refreshInvoiceOptions();
+    // FIX (T5): skip init filtering when pre-linked to a PROJECT — otherwise
+    // `updateFromInvoice()` would clear the PROJECT reference fields.
+    if (refTypeInput.value !== 'PROJECT') {
+      refreshInvoiceOptions();
+    }
   }
 })();
 </script>

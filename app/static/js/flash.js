@@ -50,7 +50,10 @@
     const el = document.createElement('div');
     el.className = `flash flash-${kind}`;
     el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-    if (timeout > 0) el.setAttribute('data-auto-dismiss', String(timeout));
+    if (timeout > 0) {
+      el.setAttribute('data-auto-dismiss', String(timeout));
+      el.style.setProperty('--flash-duration', `${timeout}ms`);
+    }
 
     el.innerHTML = `
       <svg class="flash-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">

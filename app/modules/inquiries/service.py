@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -34,7 +34,6 @@ from app.modules.inquiries.schemas import (
 from app.modules.vehicles.repository import VehicleRepository
 
 
-# Fields whose changes should be tracked in the audit snapshot
 _SNAPSHOT_FIELDS = (
     "status", "service_interest", "description",
     "color_preference", "color_family", "finish_preference",
@@ -67,7 +66,7 @@ class InquiryService:
             customer_id=payload.customer_id,
             vehicle_id=payload.vehicle_id,
             service_interest=payload.service_interest,
-            description=payload.description.strip(),
+            description=payload.description,  # already stripped by schema
             color_preference=payload.color_preference,
             color_family=payload.color_family,
             finish_preference=payload.finish_preference,
@@ -109,21 +108,47 @@ class InquiryService:
         before = self._snapshot(inquiry)
         fields = payload.model_fields_set
 
+        # ── Validate BEFORE mutating ─────────────────────
+        # DBSessionMiddleware commits the session on AppError to persist
+        # auth-side effects. Any AppError raised AFTER we've already
+        # `setattr`'d would commit a partial update. So the cross-field
+        # date check has to run against the *would-be* state first.
         if "customer_id" in fields:
             if payload.customer_id and not await self.customers.get(payload.customer_id):
                 raise NotFoundError("Customer not found")
-            inquiry.customer_id = payload.customer_id
 
         if "vehicle_id" in fields:
             if payload.vehicle_id and not await self.vehicles.get(payload.vehicle_id):
                 raise NotFoundError("Vehicle not found")
-            inquiry.vehicle_id = payload.vehicle_id
 
-        # `has_custom_graphics` is NOT NULL in DB — reject explicit null.
-        # Schema validator covers this; defence in depth for direct service use.
         if "has_custom_graphics" in fields:
             if payload.has_custom_graphics is None:
                 raise ValidationError("has_custom_graphics cannot be null")
+
+        if "desired_date" in fields or "follow_up_date" in fields:
+            new_desired = (
+                payload.desired_date if "desired_date" in fields
+                else inquiry.desired_date
+            )
+            new_follow_up = (
+                payload.follow_up_date if "follow_up_date" in fields
+                else inquiry.follow_up_date
+            )
+            if (
+                new_desired is not None
+                and new_follow_up is not None
+                and new_follow_up > new_desired
+            ):
+                raise ValidationError(
+                    "follow_up_date must be on or before desired_date"
+                )
+
+        # ── Apply changes ─────────────────────────────────
+        if "customer_id" in fields:
+            inquiry.customer_id = payload.customer_id
+
+        if "vehicle_id" in fields:
+            inquiry.vehicle_id = payload.vehicle_id
 
         for field in (
             "service_interest", "description", "color_preference",
@@ -132,11 +157,7 @@ class InquiryService:
             "follow_up_date", "notes",
         ):
             if field in fields:
-                value = getattr(payload, field)
-                # Normalise description like create does.
-                if field == "description" and value is not None:
-                    value = value.strip()
-                setattr(inquiry, field, value)
+                setattr(inquiry, field, getattr(payload, field))
 
         await self.db.flush()
 
@@ -156,12 +177,16 @@ class InquiryService:
     async def assign(
         self, inquiry_id: UUID, assignee_id: UUID | None, *, actor: User
     ) -> Inquiry:
+        # Serialize with change_status / convert so the terminal check
+        # can't race a concurrent LOST transition.
+        await self.repo.lock_for_mutation(inquiry_id)
+
         inquiry = await self._get_or_404(inquiry_id)
+        await self.db.refresh(inquiry)     # reload after waiting on the lock
+
         if inquiry.status in TERMINAL_STATUSES:
             raise ConflictError("Cannot reassign a closed inquiry")
 
-        # Validate assignee exists and is active — otherwise the FK write
-        # would surface as a 500 IntegrityError.
         if assignee_id is not None:
             user = await self.users.get(assignee_id)
             if not user:
@@ -191,7 +216,29 @@ class InquiryService:
         *,
         actor: User,
     ) -> Inquiry:
+        # CONVERTED has its own workflow (creates a Project + closes inquiry)
+        # and acquires the same lock inside `convert_to_project`. Delegate.
+        if payload.status == InquiryStatus.CONVERTED.value:
+            # Pre-check for a clearer error before the (lock-acquiring)
+            # conversion path runs. `convert_to_project` re-checks too.
+            inquiry = await self._get_or_404(inquiry_id)
+            if inquiry.status != InquiryStatus.APPROVED.value:
+                raise ConflictError(
+                    f"Cannot convert an inquiry in status '{inquiry.status}'. "
+                    f"Move it to APPROVED first."
+                )
+            inquiry, _ = await self.convert_to_project(
+                inquiry_id,
+                actor=actor,
+                closing_note=payload.closing_note,
+            )
+            return inquiry
+
+        await self.repo.lock_for_mutation(inquiry_id)
+
         inquiry = await self._get_or_404(inquiry_id)
+        await self.db.refresh(inquiry)
+
         current, target = inquiry.status, payload.status
 
         allowed = ALLOWED_TRANSITIONS.get(current, frozenset())
@@ -210,23 +257,16 @@ class InquiryService:
                 "A closing note is required when marking an inquiry as LOST"
             )
 
-        # CONVERTED delegates to the conversion workflow.
-        if target == InquiryStatus.CONVERTED.value:
-            inquiry, _ = await self.convert_to_project(inquiry_id, actor=actor)
-            if payload.closing_note:
-                inquiry.closing_note = payload.closing_note
-                await self.db.flush()
-            return inquiry
-
         inquiry.status = target
 
-        # Refresh `last_contacted_at` whenever the transition implies
-        # real contact. Config flag preserves the legacy NEW-only path.
         if settings.INQUIRY_TRACK_CONTACT_ON_TRANSITION:
             if target in CONTACT_IMPLYING_STATUSES:
                 inquiry.last_contacted_at = datetime.now(UTC)
         else:
-            if current == InquiryStatus.NEW.value and target == InquiryStatus.CONTACTED.value:
+            if (
+                current == InquiryStatus.NEW.value
+                and target == InquiryStatus.CONTACTED.value
+            ):
                 inquiry.last_contacted_at = datetime.now(UTC)
 
         if "closing_note" in payload.model_fields_set:
@@ -259,6 +299,11 @@ class InquiryService:
     async def add_photo(
         self, inquiry_id: UUID, payload: InquiryPhotoIn, *, actor: User
     ) -> InquiryPhoto:
+        # Hold the photo lock so concurrent uploads serialize — otherwise
+        # two requests could both see `count == MAX-1` and both insert,
+        # exceeding MAX_PHOTOS_PER_INQUIRY.
+        await self.repo.lock_for_photo(inquiry_id)
+
         inquiry = await self._get_or_404(inquiry_id)
 
         if inquiry.status in TERMINAL_STATUSES:
@@ -266,14 +311,20 @@ class InquiryService:
                 f"Cannot add photos to inquiry in terminal state {inquiry.status}"
             )
 
-        if len(inquiry.photos or []) >= MAX_PHOTOS_PER_INQUIRY:
+        count = await self.repo.photo_count(inquiry_id)
+        if count >= MAX_PHOTOS_PER_INQUIRY:
             raise ConflictError(
                 f"Maximum {MAX_PHOTOS_PER_INQUIRY} photos per inquiry reached"
             )
 
         if payload.is_primary:
-            for existing in await self.repo.list_photos(inquiry_id):
-                existing.is_primary = False
+            # Bulk UPDATE — one query, not a fetch-then-mutate loop.
+            await self.db.execute(
+                update(InquiryPhoto)
+                .where(InquiryPhoto.inquiry_id == inquiry_id)
+                .where(InquiryPhoto.is_primary.is_(True))
+                .values(is_primary=False)
+            )
 
         photo = InquiryPhoto(
             inquiry_id=inquiry.id,
@@ -296,7 +347,6 @@ class InquiryService:
     async def delete_photo(
         self, inquiry_id: UUID, photo_id: UUID, *, actor: User
     ) -> None:
-        """Delete a photo, verifying it belongs to the given inquiry."""
         photo = await self.db.get(InquiryPhoto, photo_id)
         if not photo or photo.inquiry_id != inquiry_id:
             raise NotFoundError("Photo not found")
@@ -319,17 +369,16 @@ class InquiryService:
         actor: User,
         quoted_price: float | None = None,
         approved_price: float | None = None,
+        closing_note: str | None = None,
     ) -> tuple[Inquiry, "Project"]:
         from app.modules.projects.service import ProjectService  # noqa: F401
 
-        # Serialise concurrent conversions of the same inquiry. Released
-        # at transaction end — same pattern as `next_code()`.
-        await self.db.execute(
-            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
-            {"k": f"inquiry-convert:{inquiry_id}"},
-        )
+        # Workflow lock — serializes with assign / change_status.
+        await self.repo.lock_for_mutation(inquiry_id)
 
         inquiry = await self._get_or_404(inquiry_id)
+        await self.db.refresh(inquiry)
+
         if inquiry.status != InquiryStatus.APPROVED.value:
             raise ConflictError(
                 f"Cannot convert an inquiry in status '{inquiry.status}'. "
@@ -344,6 +393,8 @@ class InquiryService:
         )
 
         inquiry.status = InquiryStatus.CONVERTED.value
+        if closing_note:
+            inquiry.closing_note = closing_note
         await self.db.flush()
 
         await self.audit.log(
@@ -356,6 +407,7 @@ class InquiryService:
                 "status": InquiryStatus.CONVERTED.value,
                 "project_id": str(project.id),
                 "project_code": project.code,
+                "closing_note": closing_note,
             },
         )
         log.info(
@@ -369,16 +421,10 @@ class InquiryService:
     async def get_timeline(
         self, inquiry_id: UUID, params: PageParams
     ) -> tuple[list[dict], PageMeta]:
-        """
-        Paginated activity feed from the audit log, with user names enriched
-        in one batch query. Ordered newest-first with a stable `id` tiebreaker
-        so deep pagination does not drift.
-        """
         from sqlalchemy import select as _select
 
         from app.modules.audit.models import AuditLog
 
-        # Existence check — return 404 for ghost UUIDs instead of empty page.
         await self._get_or_404(inquiry_id)
 
         stmt = (
@@ -389,7 +435,6 @@ class InquiryService:
         )
         rows, meta = await paginate(self.db, stmt, params)
 
-        # Batch-fetch user names for the current page only.
         user_ids = {r.user_id for r in rows if r.user_id}
         users: dict[UUID, str] = {}
         if user_ids:

@@ -1,11 +1,21 @@
 {% extends "admin/base.html" %}
+
+{% set direction_tone = {
+  'IN': 'badge-success',
+  'OUT': 'badge-danger',
+} %}
+{% set direction_label = {
+  'IN': 'Money in',
+  'OUT': 'Money out',
+} %}
+
 {% block content %}
 <div class="page-header">
   <div>
     <div class="flex items-center gap-3 flex-wrap mb-1">
       <h1 class="page-title mono">{{ payment.code }}</h1>
-      <span class="badge {% if payment.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %}">
-        {{ payment.direction }}
+      <span class="badge {{ direction_tone.get(payment.direction, 'badge-neutral') }}">
+        {{ direction_label.get(payment.direction, payment.direction) }}
       </span>
       {% if reversal %}<span class="badge badge-warning">Reversed</span>{% endif %}
       {% if is_reversal %}<span class="badge badge-info">Reversal entry</span>{% endif %}
@@ -36,12 +46,13 @@
 <div class="panel mb-4" style="border-color: rgba(234,179,8,0.4); background: rgba(234,179,8,0.06);">
   <div class="flex items-start gap-3">
     <svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <div class="text-sm text-amber-200">
       This payment has been reversed by
       <a href="/admin/payments/{{ reversal.id }}" class="mono hover:underline font-medium">{{ reversal.code }}</a>
-      on {{ reversal.created_at.strftime('%d %b %Y') }}.
+      on {{ reversal.created_at | date_id }}.
     </div>
   </div>
 </div>
@@ -67,7 +78,11 @@
   <dl class="grid grid-cols-2 gap-6 text-sm">
     <div>
       <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Direction</dt>
-      <dd><span class="badge {% if payment.direction == 'IN' %}badge-success{% else %}badge-danger{% endif %}">{{ payment.direction }}</span></dd>
+      <dd>
+        <span class="badge {{ direction_tone.get(payment.direction, 'badge-neutral') }}">
+          {{ direction_label.get(payment.direction, payment.direction) }}
+        </span>
+      </dd>
     </div>
     <div>
       <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Amount</dt>
@@ -75,7 +90,7 @@
     </div>
     <div>
       <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Date</dt>
-      <dd>{{ payment.payment_date.strftime('%d %b %Y') }}</dd>
+      <dd>{{ payment.payment_date | date_id }}</dd>
     </div>
     <div>
       <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Method</dt>
@@ -110,9 +125,18 @@
       <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-1">Applied to</dt>
       <dd>
         {% if invoice %}
-          <a href="/admin/invoices/{{ invoice.id }}" class="hover:text-noctra-accent font-medium">{{ invoice.code }}</a>
+          <a href="/admin/invoices/{{ invoice.id }}" class="hover:text-noctra-accent font-medium">
+            {{ invoice.code }}
+          </a>
         {% elif payment.reference_type %}
-          {{ payment.reference_type }}
+          <span class="badge badge-neutral">
+            {{ reference_labels.get(payment.reference_type, payment.reference_type | replace('_', ' ')) }}
+          </span>
+          {% if payment.reference_id %}
+            <div class="mono text-xs text-noctra-dim mt-1">
+              {{ payment.reference_id | string | truncate(8, True, '…') }}
+            </div>
+          {% endif %}
         {% else %}
           <span class="text-noctra-dim">—</span>
         {% endif %}
@@ -122,7 +146,7 @@
 
   {% if payment.notes %}
   <div class="mt-6 pt-4 border-t border-noctra-border">
-    <dt class="text-noctra-dim text-xs uppercase tracking-wider mb-2">Notes</dt>
+    <div class="text-noctra-dim text-xs uppercase tracking-wider mb-2">Notes</div>
     <p class="text-noctra-muted text-sm whitespace-pre-line leading-relaxed">{{ payment.notes }}</p>
   </div>
   {% endif %}
@@ -138,7 +162,7 @@
   <form method="post" action="/admin/payments/{{ payment.id }}/reverse"
         class="grid md:grid-cols-4 gap-3 items-end" data-guard
         data-confirm="Reverse this payment? This cannot be undone.">
-    <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
     <div class="form-row !mb-0 md:col-span-3">
       <label class="form-label" for="reverse_reason">Reason <span class="req">*</span></label>
       <input class="input" id="reverse_reason" name="reason" required

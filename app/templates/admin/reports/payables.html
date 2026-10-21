@@ -1,4 +1,5 @@
-{% extends "base.html" %}
+{% extends "admin/base.html" %}
+
 {% block content %}
 <div class="page-header">
   <div><h1 class="page-title">Payables</h1></div>
@@ -8,6 +9,7 @@
   </div>
 </div>
 
+{% if summary %}
 <div class="stat-grid">
   <div class="stat">
     <div class="stat-label">Total outstanding to suppliers</div>
@@ -19,7 +21,15 @@
   </div>
 </div>
 
-<p class="text-sm text-neutral-500">
-  See purchase orders at <a href="/admin/purchase-orders" class="text-noctra-accent hover:underline">/admin/purchase-orders</a>
+<p class="text-sm text-noctra-dim">
+  See purchase orders at
+  <a href="/admin/purchase-orders" class="text-noctra-accent hover:underline">
+    /admin/purchase-orders
+  </a>
 </p>
+{% else %}
+<div class="panel text-center py-16">
+  <p class="text-noctra-dim">No payables data available.</p>
+</div>
+{% endif %}
 {% endblock %}

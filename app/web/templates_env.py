@@ -20,6 +20,7 @@ from app.web.filters import register_filters
 
 APP_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = APP_DIR / "templates"
+STATIC_DIR = APP_DIR / "static"
 
 if not TEMPLATES_DIR.is_dir():
     raise RuntimeError(f"Templates directory not found: {TEMPLATES_DIR}")
@@ -39,6 +40,16 @@ def _today_local() -> date:
     `{% if project.target_end_date < today() %}`.
     """
     return datetime.now(ZoneInfo(settings.APP_TIMEZONE)).date()
+
+
+def _asset_url(path: str) -> str:
+    """Cache-busted static URL: /static/<path>?v=<mtime>."""
+    rel = path.lstrip("/")
+    try:
+        version = (STATIC_DIR / rel).stat().st_mtime_ns
+    except OSError:
+        version = 0
+    return f"/static/{rel}?v={version}"
 
 
 def _csrf_value(request: Request | None) -> str:
@@ -104,6 +115,8 @@ templates.env.globals.update(
     # ── Time ────────────────────────────────────────────
     today=_today_local,
     today_local=_today_local,
+    # ── Static assets ───────────────────────────────────
+    asset_url=_asset_url,
     # ── App metadata ────────────────────────────────────
     app_name=settings.APP_NAME,
     app_env=settings.APP_ENV,

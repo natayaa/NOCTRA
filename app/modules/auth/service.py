@@ -19,6 +19,7 @@ from app.modules.auth.schemas import LoginRequest, TokenPair
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_WINDOW = timedelta(minutes=15)
+_CLOCK_SKEW = timedelta(seconds=1)
 
 # Lazily-computed dummy hash — equalizes timing when the user does not exist.
 _dummy_hash: str | None = None
@@ -67,10 +68,20 @@ class AuthService:
 
         if not user or not password_ok:
             if user:
-                user.failed_login_attempts += 1
-                if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
-                    user.locked_until = datetime.now(UTC) + LOCKOUT_WINDOW
-                    user.failed_login_attempts = 0
+                # Re-fetch with SELECT ... FOR UPDATE and a fresh read of
+                # `failed_login_attempts`. Two parallel failures would
+                # otherwise both read the same count and both write `+1`,
+                # losing an increment — an attacker could exceed the
+                # 5-attempt lockout by firing requests in parallel.
+                locked = await self.users.by_username(
+                    payload.username, for_update=True
+                )
+                if locked is not None:
+                    locked.failed_login_attempts += 1
+                    if locked.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+                        locked.locked_until = datetime.now(UTC) + LOCKOUT_WINDOW
+                        locked.failed_login_attempts = 0
+
             await self.audit.log(
                 action=AuditAction.LOGIN_FAILED,
                 table_name="users",
@@ -78,9 +89,10 @@ class AuthService:
                 ip_address=ip,
                 user_agent=user_agent,
             )
-            # Commit explicitly so lockout counters / audit rows persist
-            # even though we raise immediately (get_session also commits on
-            # AppError, but being explicit here is intentional for auth).
+            # Commit explicitly so the counter / audit row persist even
+            # though we raise immediately. (DBSessionMiddleware will also
+            # commit on AppError; the explicit call is intentional for
+            # auth's defence-in-depth.)
             await self.db.commit()
             raise UnauthorizedError("Invalid username or password")
 
@@ -125,8 +137,19 @@ class AuthService:
         if not user or not user.is_active:
             raise UnauthorizedError("User not found or inactive")
 
+        # Same invalidation rule as `get_current_user`. Without this,
+        # a stolen refresh token could obtain a fresh access token even
+        # after the victim's password is reset, defeating the entire
+        # force-logout mechanism for stateless JWTs.
+        if user.password_changed_at is not None:
+            token_iat = datetime.fromtimestamp(payload.iat, tz=UTC)
+            if token_iat < user.password_changed_at - _CLOCK_SKEW:
+                raise UnauthorizedError(
+                    "Session expired — password was changed. Please log in again."
+                )
+
         await self.audit.log(
-            action=AuditAction.REFRESH,   # TODO: add AuditAction.REFRESH to enum
+            action=AuditAction.REFRESH,
             table_name="users",
             record_id=user.id,
             user_id=user.id,

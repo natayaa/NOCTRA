@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+
 {% block content %}
 <div class="page-header">
   <div><h1 class="page-title">Receivables</h1></div>
@@ -8,6 +9,7 @@
   </div>
 </div>
 
+{% if summary %}
 <div class="stat-grid">
   <div class="stat">
     <div class="stat-label">Total outstanding</div>
@@ -15,7 +17,9 @@
   </div>
   <div class="stat">
     <div class="stat-label">Overdue</div>
-    <div class="stat-value {% if summary.total_overdue > 0 %}text-noctra-danger{% endif %}">{{ summary.total_overdue | rupiah }}</div>
+    <div class="stat-value {% if summary.total_overdue > 0 %}text-noctra-danger{% endif %}">
+      {{ summary.total_overdue | rupiah }}
+    </div>
   </div>
   <div class="stat">
     <div class="stat-label">Open invoices</div>
@@ -24,7 +28,15 @@
   </div>
 </div>
 
-<p class="text-sm text-neutral-500">
-  See the full list at <a href="/admin/invoices?only_unpaid=true" class="text-noctra-accent hover:underline">/admin/invoices?only_unpaid=true</a>
+<p class="text-sm text-noctra-dim">
+  See the full list at
+  <a href="/admin/invoices?only_unpaid=true" class="text-noctra-accent hover:underline">
+    /admin/invoices?only_unpaid=true
+  </a>
 </p>
+{% else %}
+<div class="panel text-center py-16">
+  <p class="text-noctra-dim">No receivables data available.</p>
+</div>
+{% endif %}
 {% endblock %}

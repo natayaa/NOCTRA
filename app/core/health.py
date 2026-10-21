@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
 from app.core.deps import DbSession
@@ -13,5 +13,8 @@ async def liveness() -> dict[str, str]:
 
 @router.get("/readyz")
 async def readiness(db: DbSession) -> dict[str, str]:
-    await db.execute(text("SELECT 1"))
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="db unavailable") from exc
     return {"status": "ready"}

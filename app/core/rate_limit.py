@@ -50,6 +50,12 @@ class InMemoryRateLimiter:
             self._buckets.pop(k, None)
 
     def hit(self, key: str, limit: int, window_seconds: int) -> tuple[bool, int]:
+        # `limit == 0` (or negative) means "limiter disabled" — a common
+        # convention for turning it off in tests / envs without raising
+        # IndexError when the bucket is empty.
+        if limit <= 0:
+            return True, 0
+
         self._cleanup_if_due()
         now = time.monotonic()
         cutoff = now - window_seconds

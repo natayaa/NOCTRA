@@ -32,6 +32,8 @@ from app.modules.projects.constants import (
     PROJECT_STATUS_TONE,
     PROJECT_STATUSES,
 )
+from app.modules.finance.constants import PAYMENT_METHOD_LABELS
+from app.modules.inquiries.constants import INQUIRY_STATUS_LABELS
 from app.modules.projects.repository import (
     EmployeeRepository,
     ProjectRepository,
@@ -473,6 +475,8 @@ async def detail_view(
             "payments": payments,
             "total_received": total_received,
             "error": error,
+            "payment_method_labels": PAYMENT_METHOD_LABELS,      # ← NEW
+            "inquiry_status_labels": INQUIRY_STATUS_LABELS,      # ← NEW
             **_catalog(),
         },
     )

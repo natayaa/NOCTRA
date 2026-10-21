@@ -14,6 +14,9 @@ from starlette.responses import Response
 
 from app.core.config import settings
 
+EXEMPT_PREFIXES = ("/static/", "/favicon", "/media/")
+EXEMPT_PATHS = {"/health", "/healthz", "/readyz"}
+
 
 def _clean(value: str | None) -> str | None:
     if value is None:
@@ -35,8 +38,7 @@ class CsrfTokenMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        # Only set the cookie if the client didn't already have a valid one.
-        if not cookie_token:
+        if not cookie_token and not self._is_exempt(request):
             response.set_cookie(
                 settings.CSRF_COOKIE_NAME,
                 token,
@@ -47,3 +49,8 @@ class CsrfTokenMiddleware(BaseHTTPMiddleware):
                 path="/",
             )
         return response
+
+    @staticmethod
+    def _is_exempt(request: Request) -> bool:
+        path = request.url.path
+        return path in EXEMPT_PATHS or any(path.startswith(p) for p in EXEMPT_PREFIXES)

@@ -18,7 +18,6 @@ from app.modules.inquiries.constants import (
     FINISH_LABELS,
     FINISH_TYPES,
     PREFERENCE_KEYS,
-    SERVICE_INTEREST_LABELS,
     SERVICE_INTERESTS,
 )
 from app.modules.vehicles.constants import VEHICLE_CATEGORIES
@@ -27,11 +26,32 @@ from app.web.templates_env import templates
 
 router = APIRouter(tags=["public-contact"])
 
+# Admin-facing labels stay English; the public form uses Indonesian.
+PUBLIC_SERVICE_LABELS: dict[str, str] = {
+    "REPAINT": "Full Body Repaint",
+    "PANEL_REPAINT": "Panel Repaint",
+    "RESTORATION": "Restorasi",
+    "CUSTOM_PAINT": "Custom Paint",
+    "DETAILING": "Detailing & Poles",
+    "PANEL_REPAIR": "Perbaikan Panel",
+    "OTHER": "Lainnya / belum yakin",
+}
+
+PUBLIC_PREFERENCE_LABELS: dict[str, str] = {
+    "keep_decals": "Pertahankan decal asli",
+    "pinstripe": "Pinstriping",
+    "chrome_work": "Area krom yang perlu dipoles",
+    "preferred_brand_clearcoat": "Merek clear coat pilihan",
+    "matching_oem_color": "Warna OEM yang ingin disamakan",
+    "reference_photo_url": "URL foto referensi",
+    "custom_notes": "Permintaan khusus lainnya",
+}
+
 
 def _catalog_context() -> dict:
     return {
         "services": SERVICE_INTERESTS,
-        "service_labels": SERVICE_INTEREST_LABELS,
+        "service_labels": PUBLIC_SERVICE_LABELS,
         "finishes": FINISH_TYPES,
         "finish_labels": FINISH_LABELS,
         "color_families": COLOR_FAMILIES,
@@ -39,16 +59,21 @@ def _catalog_context() -> dict:
         "budget_ranges": BUDGET_RANGES,
         "budget_labels": BUDGET_LABELS,
         "vehicle_categories": VEHICLE_CATEGORIES,
-        "preference_keys": PREFERENCE_KEYS,
+        "preference_keys": [
+            {**pk, "label": PUBLIC_PREFERENCE_LABELS.get(pk["key"], pk["label"])}
+            for pk in PREFERENCE_KEYS
+        ],
     }
 
 
 @router.get("/contact", response_class=HTMLResponse)
 async def contact_form(request: Request) -> HTMLResponse:
+    requested = (request.query_params.get("service") or "").strip().upper()
+    form_values = {"service_interest": requested} if requested in SERVICE_INTERESTS else {}
     return templates.render(
         request,
         "public/contact.html",
-        {"title": "Contact NOCTRA", **_catalog_context()},
+        {"title": "Kontak — NOCTRA", "form_values": form_values, **_catalog_context()},
     )
 
 
@@ -137,7 +162,7 @@ async def contact_submit(request: Request, db: DbSession):
             request,
             "public/contact.html",
             {
-                "title": "Contact NOCTRA",
+                "title": "Kontak — NOCTRA",
                 "error": exc.message,
                 "form_values": dict(form),
                 **_catalog_context(),

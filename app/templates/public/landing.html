@@ -29,7 +29,7 @@
 
     <div class="pub-hero-actions">
       <a href="/services" class="pub-btn pub-btn-primary">
-        Explore Services
+        Lihat layanan
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16">
           <path d="M5 12h14m-6-6 6 6-6 6"/>
         </svg>
@@ -78,11 +78,11 @@
 
     <div class="pub-grid-3">
       {% for svc in [
-        {'title': 'Full Body Repaint', 'desc': 'Bongkar total, persiapan panel, primer, base coat, clear coat, dan perakitan ulang. Ganti warna atau samakan dengan OEM.', 'code': 'REPAINT'},
-        {'title': 'Restorasi', 'desc': 'Dari sentuhan halus yang menjaga patina hingga restorasi total baut-demi-baut.', 'code': 'RESTORE'},
-        {'title': 'Custom Paint', 'desc': 'Airbrush, grafis, pinstriping, dan skema warna satu-satunya.', 'code': 'CUSTOM'},
+        {'title': 'Full Body Repaint', 'desc': 'Bongkar total, persiapan panel, primer, base coat, clear coat, dan perakitan ulang. Ganti warna atau samakan dengan OEM.', 'code': 'REPAINT', 'anchor': 'repaint'},
+        {'title': 'Restorasi', 'desc': 'Dari sentuhan halus yang menjaga patina hingga restorasi total baut-demi-baut.', 'code': 'RESTORE', 'anchor': 'restore'},
+        {'title': 'Custom Paint', 'desc': 'Airbrush, grafis, pinstriping, dan skema warna satu-satunya.', 'code': 'CUSTOM', 'anchor': 'custom'},
       ] %}
-      <a href="/services" class="pub-card">
+      <a href="/services#{{ svc.anchor }}" class="pub-card">
         <div class="pub-card-code">{{ svc.code }}</div>
         <h3 class="pub-card-title">{{ svc.title }}</h3>
         <p class="pub-card-desc">{{ svc.desc }}</p>

@@ -71,7 +71,8 @@ class CustomerCreate(BaseModel):
     city: str | None = Field(None, max_length=100)
     province: str | None = Field(None, max_length=100)
     postal_code: str | None = Field(None, max_length=20)
-    country: str = Field("Indonesia", max_length=64)
+    # min_length=1 after strip — `""` and `"   "` are rejected.
+    country: str = Field("Indonesia", min_length=1, max_length=64)
 
     tax_id: str | None = Field(None, max_length=64)
     notes: str | None = Field(None, max_length=5000)
@@ -90,6 +91,14 @@ class CustomerCreate(BaseModel):
     @classmethod
     def _clean_optional(cls, v):
         return _normalize_optional_str(v)
+
+    @field_validator("country", mode="before")
+    @classmethod
+    def _strip_country(cls, v):
+        # Let min_length=1 catch the blank-after-strip case for a 422.
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     @field_validator("source")
     @classmethod
@@ -125,10 +134,12 @@ class CustomerUpdate(BaseModel):
     @field_validator(
         "email", "phone", "alt_phone", "tax_id",
         "address_line1", "address_line2", "city", "province",
-        "postal_code", "notes", mode="before",
+        "postal_code", "notes", "country", mode="before",
     )
     @classmethod
     def _clean_optional(cls, v):
+        # `country=""` is normalised to `None` — the service then raises
+        # "country cannot be null" rather than writing an empty string.
         return _normalize_optional_str(v)
 
     @field_validator("status")

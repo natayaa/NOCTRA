@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -39,10 +39,18 @@ router = APIRouter(prefix="/admin/payments", tags=["admin-payments"])
 
 _FORM_ERRORS = (AppError, PydanticValidationError, ValueError, KeyError)
 
+# Friendly labels for reference_type
+REFERENCE_LABELS = {
+    "INVOICE": "Invoice",
+    "PURCHASE_ORDER": "Purchase order",
+    "EXPENSE": "Expense",
+    "PROJECT": "Project",
+    "OTHER": "Other",
+}
+
 
 def _form_error(exc: Exception) -> str:
-    msg = getattr(exc, "message", None) or str(exc)
-    return msg.strip() or "Invalid input"
+    return (getattr(exc, "message", None) or str(exc) or "Invalid input").strip()
 
 
 # ════════════════════════════════════════════════════════════════
@@ -63,7 +71,8 @@ async def list_view(
 
     cids = {r.customer_id for r in rows if r.customer_id}
     sids = {r.supplier_id for r in rows if r.supplier_id}
-    customers, suppliers = {}, {}
+    customers: dict = {}
+    suppliers: dict = {}
     if cids:
         c_rows = await db.execute(
             select(Customer.id, Customer.name).where(Customer.id.in_(cids))
@@ -81,6 +90,13 @@ async def list_view(
         "supplier_name": suppliers.get(p.supplier_id),
     } for p in rows]
 
+    def qs(page: int | None = None, **overrides) -> str:
+        base = {"direction": direction or ""}
+        if page is not None:
+            base["page"] = str(page)
+        base.update({k: ("" if v is None else str(v)) for k, v in overrides.items()})
+        return "?" + urlencode({k: v for k, v in base.items() if v})
+
     return templates.render(
         request,
         "admin/payments/list.html",
@@ -91,6 +107,8 @@ async def list_view(
             "direction_filter": direction or "",
             "directions": PAYMENT_DIRECTIONS,
             "payment_method_labels": PAYMENT_METHOD_LABELS,
+            "reference_labels": REFERENCE_LABELS,
+            "qs": qs,
         },
     )
 
@@ -108,7 +126,7 @@ async def new_view(
     reference_type: str | None = Query(None),
     reference_id: UUID | None = Query(None),
     customer_id: UUID | None = Query(None),
-    _=write(PermissionCode.PAYMENT_WRITE),      # ← was read()
+    _=write(PermissionCode.PAYMENT_WRITE),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from app.modules.finance.constants import InvoiceStatus
@@ -141,7 +159,7 @@ async def new_view(
             )
         ).scalars().all()
 
-        # Batch paid lookup — 1 query for all 500 invoices.
+        # Batch paid lookup — 1 query for all invoices
         invoice_ids = [inv.id for inv in inv_rows]
         paid_map = await inv_repo.batch_paid_amount(invoice_ids)
 
@@ -182,7 +200,8 @@ async def new_view(
             "payment_methods": PAYMENT_METHODS,
             "payment_method_labels": PAYMENT_METHOD_LABELS,
             "reference_types": PAYMENT_REFERENCE_TYPES,
-            "today": today_local(),                 # ← was datetime.now(UTC).date()
+            "reference_labels": REFERENCE_LABELS,
+            "today": today_local(),
         },
     )
 
@@ -218,10 +237,18 @@ async def create_submit(
     except _FORM_ERRORS as exc:
         await db.rollback()
         msg = quote(_form_error(exc), safe="")
+
+        # FIX (B1): preserve reference/customer context on error re-render
+        preserved: dict[str, str] = {"direction": direction, "error": msg}
+        for key in ("reference_type", "reference_id", "customer_id"):
+            val = (form.get(key) or "").strip()
+            if val:
+                preserved[key] = val
         return RedirectResponse(
-            url=f"/admin/payments/new?direction={direction}&error={msg}",
+            url="/admin/payments/new?" + urlencode(preserved),
             status_code=303,
         )
+
     return RedirectResponse(url=f"/admin/payments/{payment.id}", status_code=303)
 
 
@@ -239,9 +266,9 @@ async def detail_view(
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     from app.modules.finance.models import Payment as PaymentModel
-    from app.modules.finance.repository import PaymentRepository as _PR
 
-    p = await PaymentRepository(db).get(payment_id)
+    repo = PaymentRepository(db)
+    p = await repo.get(payment_id)
     if not p:
         raise NotFoundError("Payment not found")
 
@@ -253,8 +280,8 @@ async def detail_view(
     if p.reference_type == "INVOICE" and p.reference_id:
         invoice = await InvoiceRepository(db).get(p.reference_id)
 
-    # FK-based reversal lookup (see finance follow-up).
-    reversal = await _PR(db).find_reversal_for(p.id)
+    # FK-based reversal lookup
+    reversal = await repo.find_reversal_for(p.id)
 
     is_reversal = p.reversal_of_id is not None
     original = None
@@ -276,6 +303,7 @@ async def detail_view(
             "original": original,
             "error": error,
             "payment_method_labels": PAYMENT_METHOD_LABELS,
+            "reference_labels": REFERENCE_LABELS,
         },
     )
 

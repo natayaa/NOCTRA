@@ -1,0 +1,40 @@
+{# Command palette — ⌘K / Ctrl+K #}
+<dialog class="cmd-dialog"
+        id="command-palette"
+        aria-label="Search pages and actions"
+        data-command-dialog>
+  <div class="cmd-panel">
+    <div class="cmd-search">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/>
+        <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+      </svg>
+      <input type="text"
+             id="command-palette-input"
+             data-command-input
+             placeholder="Search pages and actions…"
+             autocomplete="off"
+             spellcheck="false"
+             role="combobox"
+             aria-expanded="true"
+             aria-autocomplete="list"
+             aria-controls="command-palette-results"
+             aria-label="Search pages and actions" />
+      <kbd class="kbd" aria-hidden="true">Esc</kbd>
+    </div>
+
+    <div class="cmd-results"
+         id="command-palette-results"
+         role="listbox"
+         aria-label="Results"
+         data-command-results></div>
+
+    <div class="cmd-footer" aria-hidden="true">
+      <span class="cmd-footer-item"><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd> navigate</span>
+      <span class="cmd-footer-item"><kbd class="kbd">↵</kbd> open</span>
+      <span class="cmd-footer-item" style="margin-left:auto">
+        <kbd class="kbd" data-shortcut-hint>Ctrl K</kbd> to toggle
+      </span>
+    </div>
+  </div>
+</dialog>

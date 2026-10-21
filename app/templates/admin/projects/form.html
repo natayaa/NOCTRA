@@ -1,8 +1,12 @@
 {% extends "admin/base.html" %}
-
-{% block content %}
 {% set fv = form_values or {} %}
 
+{# Macro: preserves empty string (user clear) — key must exist in fv to override #}
+{% macro v(key, default='') -%}
+{{- fv[key] if key in fv else default -}}
+{%- endmacro %}
+
+{% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">{{ 'New Project' if mode == 'create' else 'Edit Project' }}</h1>
@@ -32,7 +36,7 @@
       data-guard
       data-shortcut-submit>
 
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
 
   {% if preselected_inquiry_id %}
   <input type="hidden" name="inquiry_id" value="{{ preselected_inquiry_id }}" />
@@ -45,7 +49,7 @@
       <span class="text-xs text-noctra-dim">Required</span>
     </div>
 
-    {# Customer picker #}
+    {# ── Customer picker ────────────────── #}
     <div class="form-row">
       {% if preselected_customer %}
       <label class="form-label">Customer</label>
@@ -57,7 +61,7 @@
       <label class="form-label" for="customer_search">Customer <span class="req">*</span></label>
 
       <input type="hidden" name="customer_id" id="customer_id_input"
-             value="{{ fv.get('customer_id') or '' }}" required />
+             value="{{ fv.get('customer_id', '') }}" required />
 
       <div id="customer_display" class="hidden panel !p-3 mb-2 flex items-center justify-between gap-3">
         <div class="min-w-0">
@@ -79,13 +83,13 @@
       {% endif %}
     </div>
 
-    {# Vehicle picker #}
+    {# ── Vehicle picker ────────────────── #}
     {% if not preselected_vehicle %}
     <div class="form-row mt-4">
       <label class="form-label" for="vehicle_search">Vehicle</label>
 
       <input type="hidden" name="vehicle_id" id="vehicle_id_input"
-             value="{{ fv.get('vehicle_id') or '' }}" />
+             value="{{ fv.get('vehicle_id', '') }}" />
 
       <div id="vehicle_display" class="hidden panel !p-3 mb-2 flex items-center justify-between gap-3">
         <div class="min-w-0">
@@ -126,14 +130,15 @@
     <div class="form-row">
       <label class="form-label" for="title">Title</label>
       <input class="input" id="title" name="title" maxlength="255"
+             {% if mode == 'create' and not preselected_customer %}autofocus{% endif %}
              placeholder="e.g. Full body repaint — Mio Sporty"
-             value="{{ fv.get('title') or (project.title if project else '') }}" />
+             value="{{ v('title', project.title if project else '') }}" />
     </div>
 
     <div class="form-row !mb-0">
       <label class="form-label" for="description">Description</label>
-      <textarea class="textarea" id="description" name="description"
-                rows="3">{{ fv.get('description') or (project.description if project else '') }}</textarea>
+      <textarea class="textarea" id="description" name="description" rows="3" maxlength="5000"
+                placeholder="What's the scope of work?">{{ v('description', project.description if project else '') }}</textarea>
     </div>
   </section>
 
@@ -144,13 +149,17 @@
     <div class="grid md:grid-cols-2 gap-5">
       <div class="form-row !mb-0">
         <label class="form-label" for="quoted_price">Quoted price (IDR)</label>
-        <input class="input" type="number" step="1000" id="quoted_price" name="quoted_price"
-               value="{{ fv.get('quoted_price') or (project.quoted_price if project else '') or '' }}" />
+        <input class="input" type="number" step="any" min="0" id="quoted_price" name="quoted_price"
+               value="{{ v('quoted_price',
+                 project.quoted_price if project and project.quoted_price is not none else ''
+               ) }}" />
       </div>
       <div class="form-row !mb-0">
         <label class="form-label" for="approved_price">Approved price (IDR)</label>
-        <input class="input" type="number" step="1000" id="approved_price" name="approved_price"
-               value="{{ fv.get('approved_price') or (project.approved_price if project else '') or '' }}" />
+        <input class="input" type="number" step="any" min="0" id="approved_price" name="approved_price"
+               value="{{ v('approved_price',
+                 project.approved_price if project and project.approved_price is not none else ''
+               ) }}" />
         <div class="form-hint">Set automatically when status moves to APPROVED.</div>
       </div>
     </div>
@@ -164,17 +173,22 @@
       <div class="form-row !mb-0">
         <label class="form-label" for="start_date">Start date</label>
         <input class="input" type="date" id="start_date" name="start_date"
-               value="{{ fv.get('start_date') or (project.start_date.strftime('%Y-%m-%d') if project and project.start_date else '') }}" />
+               value="{{ v('start_date',
+                 project.start_date.isoformat() if project and project.start_date else ''
+               ) }}" />
       </div>
       <div class="form-row !mb-0">
         <label class="form-label" for="target_end_date">Target end date</label>
         <input class="input" type="date" id="target_end_date" name="target_end_date"
-               value="{{ fv.get('target_end_date') or (project.target_end_date.strftime('%Y-%m-%d') if project and project.target_end_date else '') }}" />
+               value="{{ v('target_end_date',
+                 project.target_end_date.isoformat() if project and project.target_end_date else ''
+               ) }}" />
       </div>
       <div class="form-row !mb-0">
         <label class="form-label" for="priority">Priority</label>
         <input class="input" type="number" id="priority" name="priority" min="0" max="10"
-               value="{{ fv.get('priority') or (project.priority if project else 0) }}" />
+               value="{{ v('priority', project.priority if project else 0) }}" />
+        <div class="form-hint">Higher = more urgent (0–10).</div>
       </div>
     </div>
 
@@ -182,10 +196,12 @@
       <label class="form-label" for="assigned_lead_id">Workshop lead</label>
       <select class="select" id="assigned_lead_id" name="assigned_lead_id">
         <option value="">—</option>
+        {% set cur_lead = fv.get('assigned_lead_id',
+          project.assigned_lead_id|string if project and project.assigned_lead_id else ''
+        ) %}
         {% for u in assignees %}
         <option value="{{ u.id }}"
-          {% if (project and project.assigned_lead_id == u.id)
-                or fv.get('assigned_lead_id') == u.id | string %}selected{% endif %}>
+          {% if cur_lead|string == u.id|string %}selected{% endif %}>
           {{ u.full_name }}
         </option>
         {% endfor %}
@@ -201,7 +217,9 @@
     <div class="form-row !mb-0">
       <label class="form-label" for="actual_end_date">Actual end date</label>
       <input class="input" type="date" id="actual_end_date" name="actual_end_date"
-             value="{{ fv.get('actual_end_date') or (project.actual_end_date.strftime('%Y-%m-%d') if project and project.actual_end_date else '') }}" />
+             value="{{ v('actual_end_date',
+               project.actual_end_date.isoformat() if project and project.actual_end_date else ''
+             ) }}" />
       <div class="form-hint">Set automatically when project is DELIVERED.</div>
     </div>
   </section>
@@ -211,11 +229,12 @@
     <div class="panel-title mb-4">Notes</div>
     <div class="form-row !mb-0">
       <textarea class="textarea" id="internal_notes" name="internal_notes"
-                rows="3" placeholder="Internal notes…">{{ fv.get('internal_notes') or (project.internal_notes if project else '') }}</textarea>
+                rows="3" maxlength="5000"
+                placeholder="Internal notes…">{{ v('internal_notes', project.internal_notes if project else '') }}</textarea>
     </div>
   </section>
 
-  {# ── Sticky save bar ────────────────────────────── #}
+  {# ── Sticky save bar ────────────────── #}
   <div class="sticky bottom-3 z-20">
     <div class="panel !p-3 flex items-center gap-2 shadow-lg"
          style="background: linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(13,18,32,0.95) 100%);
@@ -237,7 +256,7 @@
 {% block extra_js %}
 <script>
 (() => {
-  /* ── ⌘/Ctrl + Enter ─────────────────────────────── */
+  /* ⌘/Ctrl + Enter to submit */
   const form = document.querySelector('form[data-shortcut-submit]');
   if (form) {
     form.addEventListener('keydown', (e) => {
@@ -248,10 +267,10 @@
     });
   }
 
-  /* ── Customer & Vehicle Pickers ─────────────────── */
+  /* ── HTMX Customer / Vehicle Pickers ──────────── */
   const idCust = document.getElementById('customer_id_input');
   const idVeh = document.getElementById('vehicle_id_input');
-  if (!idCust) return; // Edit mode, no pickers
+  if (!idCust) return;  // Edit mode — no pickers
 
   const dispCust = document.getElementById('customer_display');
   const dispVeh = document.getElementById('vehicle_display');
@@ -295,18 +314,21 @@
     if (searchVeh) searchVeh.value = '';
   }
 
-  // Event listeners
   const btnClearCust = document.querySelector('[data-clear-customer]');
   if (btnClearCust) btnClearCust.addEventListener('click', clearCustomer);
 
   const btnClearVeh = document.querySelector('[data-clear-vehicle]');
   if (btnClearVeh) btnClearVeh.addEventListener('click', clearVehicle);
 
-  // Delegation for HTMX results
+  /* Delegation for HTMX-injected option buttons */
   document.addEventListener('click', (e) => {
     const custOpt = e.target.closest('.js-customer-option');
     if (custOpt) {
-      selectCustomer(custOpt.dataset.customerId, custOpt.dataset.customerName, custOpt.dataset.customerCode);
+      selectCustomer(
+        custOpt.dataset.customerId,
+        custOpt.dataset.customerName,
+        custOpt.dataset.customerCode
+      );
       return;
     }
     const vehOpt = e.target.closest('.js-vehicle-option');
@@ -315,15 +337,17 @@
       return;
     }
     // Close on outside click
-    if (optCust && !optCust.classList.contains('hidden') && !optCust.contains(e.target) && e.target !== searchCust) {
+    if (optCust && !optCust.classList.contains('hidden')
+        && !optCust.contains(e.target) && e.target !== searchCust) {
       optCust.classList.add('hidden');
     }
-    if (optVeh && !optVeh.classList.contains('hidden') && !optVeh.contains(e.target) && e.target !== searchVeh) {
+    if (optVeh && !optVeh.classList.contains('hidden')
+        && !optVeh.contains(e.target) && e.target !== searchVeh) {
       optVeh.classList.add('hidden');
     }
   });
 
-  // Show options on HTMX swap
+  /* Show options after HTMX swap */
   document.body.addEventListener('htmx:afterSwap', (e) => {
     if (e.detail.target.id === 'customer_options') optCust.classList.remove('hidden');
     if (e.detail.target.id === 'vehicle_options') optVeh.classList.remove('hidden');

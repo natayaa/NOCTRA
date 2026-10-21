@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
+
+_APP_TZ = ZoneInfo(settings.APP_TIMEZONE)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -15,17 +17,20 @@ from app.core.config import settings
 
 def today_local() -> date:
     """Today's date in the app's configured timezone (not UTC)."""
-    return datetime.now(ZoneInfo(settings.APP_TIMEZONE)).date()
+    return datetime.now(_APP_TZ).date()
 
 
 def day_range_bounds(from_date: date, to_date: date) -> tuple[datetime, datetime]:
-    """
-    Half-open [start_of_first, start_of_next_after_last) in UTC.
-    Index-friendly alternative to `func.date(col) BETWEEN ...`.
+    """Half-open [start_of_first, start_of_next_after_last) in APP_TIMEZONE.
+
+    Boundaries are timezone-aware so comparisons against `timestamptz`
+    columns (e.g. `created_at`) match the "Jakarta day" that the caller
+    intended. Using UTC here would shift every transaction before 07:00 WIB
+    into the previous calendar day.
     """
     return (
-        datetime.combine(from_date, time.min, tzinfo=UTC),
-        datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=UTC),
+        datetime.combine(from_date, time.min, tzinfo=_APP_TZ),
+        datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=_APP_TZ),
     )
 
 

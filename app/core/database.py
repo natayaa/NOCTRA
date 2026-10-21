@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from datetime import datetime
 from uuid import UUID
 
+from fastapi import Request
 from sqlalchemy import DateTime, MetaData, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.asyncio import (
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
 from app.core.exceptions import AppError
@@ -72,15 +74,52 @@ SessionLocal = async_sessionmaker(
 )
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
+class DBSessionMiddleware(BaseHTTPMiddleware):
+    """One `AsyncSession` per request, committed *before* the response is sent.
+
+    FastAPI ≥ 0.106 runs the exit code of `yield`-dependencies *after* the
+    response has been delivered, so a failing `commit()` there cannot be
+    surfaced to the client. Doing it in middleware means the response
+    object is built but not yet flushed to the socket.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        async with SessionLocal() as session:
+            request.state.db = session
+            try:
+                response = await call_next(request)
+            except AppError:
+                # Domain errors (401/403/404/409) still need to persist
+                # side effects like failed-login counters and audit rows.
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                raise
+            except Exception:
+                await session.rollback()
+                raise
+            else:
+                await session.commit()
+                return response
+
+
+async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
+    """Request-scoped session.
+
+    In an HTTP request the session is created and committed by
+    `DBSessionMiddleware`. Outside of a request (background jobs, CLI,
+    tests) we fall back to a local `async with` block.
+    """
+    session = getattr(request.state, "db", None)
+    if session is not None:
+        yield session
+        return
+
     async with SessionLocal() as session:
         try:
             yield session
         except AppError:
-            # Domain errors (401, 403, 404, 409) still need to persist
-            # side effects like failed_login_attempts and audit logs.
-            # If that commit fails, roll back and re-raise the ORIGINAL
-            # AppError — never let an IntegrityError mask the domain error.
             try:
                 await session.commit()
             except Exception:

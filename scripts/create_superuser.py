@@ -17,17 +17,14 @@ import sys
 
 from sqlalchemy import select
 
-
-from app.modules.auth import models as _auth_models          # noqa: F401
-from app.modules.audit import models as _audit_models        # noqa: F401
-from app.modules.rbac import models as _rbac_models          # noqa: F401
-from app.modules.settings import models as _settings_models  # noqa: F401
-
 from app.core.constants import RoleName
 from app.core.database import SessionLocal
-from app.modules.auth.models import User
 from app.core.security import hash_password
+from app.modules.auth.models import User
 from app.modules.rbac.models import Role, UserRole
+
+# Register every model module before SQLAlchemy configures mappers.
+import app.core.models_registry  # noqa: F401
 
 USERNAME_RE = re.compile(r"^[a-z0-9_.]{3,50}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -79,18 +76,21 @@ async def main() -> int:
     # ── Persist ──────────────────────────────────────────
     async with SessionLocal() as db:
         try:
-            existing = (
-                await db.execute(
-                    select(User).where(
-                        (User.username == username) | (User.email == email)
-                    )
-                )
+            username_taken = (
+                await db.execute(select(User.id).where(User.username == username))
+            ).scalar_one_or_none()
+            email_taken = (
+                await db.execute(select(User.id).where(User.email == email))
             ).scalar_one_or_none()
 
-            if existing:
+            taken = [
+                label
+                for label, hit in (("username", username_taken), ("email", email_taken))
+                if hit is not None
+            ]
+            if taken:
                 print(
-                    f"  ! a user with this username or email already exists: "
-                    f"{existing.username} <{existing.email}>",
+                    f"  ! {' and '.join(taken)} already taken",
                     file=sys.stderr,
                 )
                 return 1

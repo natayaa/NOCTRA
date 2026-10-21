@@ -5,7 +5,14 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    EmailStr,
+    field_validator,
+    model_validator,
+)
 
 from app.modules.inventory.constants import (
     MANUAL_TRANSACTION_TYPES,
@@ -48,12 +55,13 @@ class SupplierCreate(BaseModel):
     def _clean_optional(cls, v):
         return _clean_optional(v)
 
-    @field_validator("name")
+    @field_validator("name", mode="before")
     @classmethod
     def _strip_name(cls, v):
-        v = v.strip() if isinstance(v, str) else v
-        if not v:
-            raise ValueError("name cannot be blank")
+        # Strip BEFORE min_length — otherwise "  A  " (5 chars) passes
+        # min_length=2 and is stored as "A" (1 char).
+        if isinstance(v, str):
+            return v.strip()
         return v
 
 
@@ -74,14 +82,18 @@ class SupplierUpdate(BaseModel):
     def _clean_optional(cls, v):
         return _clean_optional(v)
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, v):
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
     @field_validator("name")
     @classmethod
     def _non_nullable_name(cls, v):
         if v is None:
             raise ValueError("name cannot be null")
-        v = v.strip()
-        if not v:
-            raise ValueError("name cannot be blank")
         return v
 
 
@@ -128,6 +140,14 @@ class MaterialCreate(BaseModel):
     notes: str | None = Field(None, max_length=5000)
     location: str | None = Field(None, max_length=64)
 
+    @field_validator("code", "name", mode="before")
+    @classmethod
+    def _strip_required(cls, v):
+        # Strip BEFORE min_length — see SupplierCreate for rationale.
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
     @field_validator("category")
     @classmethod
     def _validate_category(cls, v):
@@ -158,6 +178,13 @@ class MaterialUpdate(BaseModel):
     location: str | None = None
     is_active: bool | None = None
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def _strip_name(cls, v):
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
     @field_validator("category")
     @classmethod
     def _validate_category(cls, v):
@@ -172,7 +199,6 @@ class MaterialUpdate(BaseModel):
             raise ValueError(f"unit must be one of {UNITS}")
         return v
 
-    # Non-nullable in DB — reject explicit null on these fields.
     @field_validator(
         "name", "category", "purchase_unit", "stock_unit",
         "stock_units_per_purchase", "reorder_point", "min_stock",
@@ -226,8 +252,6 @@ class MaterialUpdatePrice(BaseModel):
 
 class InventoryTransactionCreate(BaseModel):
     material_id: UUID
-    # Restricted to MANUAL_TRANSACTION_TYPES — PURCHASE and RETURN are
-    # exclusive to the PO workflow and must not be forged via this API.
     transaction_type: str
     quantity: float = Field(..., gt=0)
     unit_cost: float | None = Field(None, ge=0)
@@ -329,7 +353,6 @@ class PurchaseOrderListItem(BaseModel):
     expected_date: date | None
     total_amount: float
     created_at: datetime
-    # Enrichment — populated by API layer via batch join.
     supplier_name: str | None = None
 
 
@@ -346,9 +369,33 @@ class PurchaseOrderReceiveItem(BaseModel):
 
 
 class PurchaseOrderReceive(BaseModel):
-    """Receive a PO, optionally with per-item quantities."""
+    """Receive a PO.
+
+    Semantics:
+      - `received_items = []`  → receive ALL remaining quantity for every
+        item that still has room. This is the "receive everything" default.
+      - `received_items` non-empty → receive ONLY the listed items at the
+        given quantities. Items not mentioned are left untouched (0 this
+        call). This is the "partial receipt" mode.
+
+    The PO stays SENT until every item's `quantity_received` reaches its
+    ordered `quantity`; at that point it becomes RECEIVED automatically.
+    Call `POST /close` explicitly once the delivery is fully settled.
+    """
     received_items: list[PurchaseOrderReceiveItem] = Field(default_factory=list)
     note: str | None = Field(None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _no_duplicate_items(self):
+        seen: set[UUID] = set()
+        for ri in self.received_items:
+            if ri.item_id in seen:
+                raise ValueError(
+                    f"item_id {ri.item_id} appears more than once in "
+                    f"received_items; the last entry would silently win"
+                )
+            seen.add(ri.item_id)
+        return self
 
 
 # ════════════════════════════════════════════════════════════════

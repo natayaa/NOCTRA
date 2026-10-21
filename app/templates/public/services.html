@@ -7,28 +7,150 @@
   <p class="pub-page-sub">Harga transparan. Material nyata. Pekerjaan terdokumentasi.</p>
 </div>
 
-<div class="container-wide" style="padding-bottom: 96px;">
+{% set services = [
+  {
+    'code': 'REPAINT',
+    'anchor': 'repaint',
+    'value': 'REPAINT',
+    'name': 'Full Body Repaint',
+    'desc': 'Bongkar total, persiapan panel, primer, base coat, clear coat, dan perakitan ulang. Ganti warna atau kembalikan ke warna OEM.',
+    'price_from': 850000,
+    'icon': 'M12 3 3 8l9 5 9-5-9-5Zm-9 8 9 5 9-5'
+  },
+  {
+    'code': 'PANEL',
+    'anchor': 'panel',
+    'value': 'PANEL_REPAINT',
+    'name': 'Panel Repaint',
+    'desc': 'Pengecatan ulang satu panel — tangki, fender, fairing, atau cowl — dengan hasil akhir yang menyatu dengan panel lain.',
+    'price_from': 350000,
+    'icon': 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm-1 6h16'
+  },
+  {
+    'code': 'RESTORE',
+    'anchor': 'restore',
+    'value': 'RESTORATION',
+    'name': 'Restorasi Ringan',
+    'desc': 'Refinishing permukaan, detailing area mesin, dan poles krom — menjaga patina tanpa membongkar seluruh motor.',
+    'price_from': 1500000,
+    'icon': 'm12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z'
+  },
+  {
+    'code': 'FULL REST',
+    'anchor': 'full-rest',
+    'value': 'RESTORATION',
+    'name': 'Restorasi Total',
+    'desc': 'Restorasi menyeluruh dari rangka ke bodi, termasuk perbaikan mekanikal. Baut demi baut, terdokumentasi di setiap tahap.',
+    'price_from': 6000000,
+    'icon': 'M14.5 3a5.5 5.5 0 0 0-5.2 7.3L3 16.6V21h4.4l6.3-6.3A5.5 5.5 0 1 0 14.5 3Zm0 3a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z'
+  },
+  {
+    'code': 'CUSTOM',
+    'anchor': 'custom',
+    'value': 'CUSTOM_PAINT',
+    'name': 'Custom Paint',
+    'desc': 'Airbrush, grafis, pinstriping, dan skema warna satu-satunya. Dibuat bersama Anda dari referensi hingga sketsa.',
+    'price_from': 2000000,
+    'icon': 'M15 4l5 5-8.5 8.5H7v-4.5L15 4Zm-2 2 5 5'
+  },
+  {
+    'code': 'DETAIL',
+    'anchor': 'detail',
+    'value': 'DETAILING',
+    'name': 'Detailing & Poles',
+    'desc': 'Deep clean, compound, poles, dan perlindungan keramik untuk mengembalikan kilau cat yang sudah pudar.',
+    'price_from': 250000,
+    'icon': 'M12 3s6 6.2 6 10a6 6 0 0 1-12 0c0-3.8 6-10 6-10Zm0 6.5a3.5 3.5 0 0 0-3.5 3.5'
+  }
+] %}
 
-  <div class="mt-14 grid md:grid-cols-2 gap-6">
-    {% for s in [
-    {'name': 'Full Body Repaint', 'price_from': 850000, 'desc': 'Complete disassembly, panel prep, primer, base coat,
-    clear coat, and reassembly.'},
-    {'name': 'Panel Repaint', 'price_from': 350000, 'desc': 'Single panel refinishing — tank, fender, fairing, or
-    cowl.'},
-    {'name': 'Minor Restoration', 'price_from': 1500000, 'desc': 'Surface refinishing, engine bay detailing, chrome
-    polish.'},
-    {'name': 'Full Restoration', 'price_from': 6000000, 'desc': 'Ground-up restoration with mechanical refurbishment.'},
-    {'name': 'Custom Paint', 'price_from': 2000000, 'desc': 'Airbrush, graphics, and one-off paint schemes.'},
-    {'name': 'Detailing & Polish', 'price_from': 250000, 'desc': 'Deep clean, compound, polish, and ceramic
-    protection.'},
-    ] %}
-    <div class="panel">
-      <h2 class="text-xl font-semibold">{{ s.name }}</h2>
-      <p class="text-noctra-accent font-medium mt-1">From {{ s.price_from | rupiah }}</p>
-      <p class="text-neutral-400 text-sm mt-3">{{ s.desc }}</p>
-      <a href="/contact" class="btn btn-secondary btn-sm mt-5 inline-flex">Request a Quote</a>
-    </div>
+<div class="pub-page-body">
+
+  <div class="pub-services-grid">
+    {% for s in services %}
+    <article class="pub-card pub-service-card" id="{{ s.anchor }}">
+      <div class="pub-service-top">
+        <span class="pub-service-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
+               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{ s.icon }}"/>
+          </svg>
+        </span>
+        <span class="pub-service-code">{{ s.code }}</span>
+      </div>
+
+      <h2 class="pub-card-title">{{ s.name }}</h2>
+      <p class="pub-card-desc">{{ s.desc }}</p>
+
+      <div class="pub-service-price">
+        <span>Mulai dari</span>{{ s.price_from | rupiah }}
+      </div>
+
+      <a href="/contact?service={{ s.value }}" class="pub-card-link"
+         aria-label="Minta penawaran untuk {{ s.name }}">
+        <span>Minta penawaran</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M5 12h14m-6-6 6 6-6 6"/>
+        </svg>
+      </a>
+    </article>
     {% endfor %}
   </div>
+
+  <p class="pub-price-note">
+    Angka di atas adalah titik awal untuk motor standar. Harga akhir mengikuti kondisi
+    motor, material yang dipilih, dan tingkat kerumitan — selalu disepakati sebelum
+    pengerjaan dimulai.
+  </p>
+
+  <div class="pub-section-head pub-services-head">
+    <div class="pub-section-eyebrow">Cara kami menghitung</div>
+    <h2 class="pub-section-title">Harga yang bisa dipertanggungjawabkan.</h2>
+  </div>
+
+  <div class="pub-values">
+    <div class="pub-value-card">
+      <span class="pub-value-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/>
+        </svg>
+      </span>
+      <h3>Material nyata</h3>
+      <p>Setiap bahan dicatat dan ditagih sesuai pemakaian — bukan estimasi bulat.</p>
+    </div>
+    <div class="pub-value-card">
+      <span class="pub-value-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+        </svg>
+      </span>
+      <h3>Jam kerja terukur</h3>
+      <p>Tenaga kerja dihitung per tahap pengerjaan, bukan harga perasaan.</p>
+    </div>
+    <div class="pub-value-card">
+      <span class="pub-value-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 3h7l5 5v13H7V3Z"/><path d="M14 3v5h5M10 13h5M10 17h5"/>
+        </svg>
+      </span>
+      <h3>Estimasi tertulis</h3>
+      <p>Rincian biaya disepakati lebih dulu. Tidak ada tambahan di tengah jalan.</p>
+    </div>
+  </div>
+
+  <div class="pub-cta-banner pub-services-cta">
+    <h2>Belum yakin harus mulai dari mana?</h2>
+    <p>Kirimkan foto motor Anda. Kami bantu menentukan layanan yang paling masuk akal untuk kondisi dan tujuan Anda.</p>
+    <a href="/contact" class="pub-btn pub-btn-primary">
+      Konsultasi gratis
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16" aria-hidden="true">
+        <path d="M5 12h14m-6-6 6 6-6 6"/>
+      </svg>
+    </a>
+  </div>
+
 </div>
 {% endblock %}

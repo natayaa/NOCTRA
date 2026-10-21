@@ -4,11 +4,9 @@ from fastapi import APIRouter, Body, Depends, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.core.config import settings
-from app.core.constants import AuditAction
 from app.core.deps import DbSession
 from app.core.exceptions import UnauthorizedError
 from app.core.tokens import decode_access_token
-from app.modules.audit.service import AuditService
 from app.modules.auth.dependencies import (
     ACCESS_COOKIE_NAME,
     REFRESH_COOKIE_NAME,
@@ -27,6 +25,22 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _client_ip(request: Request) -> str | None:
+    """Resolve the real client IP for audit records.
+
+    Honours X-Forwarded-For / X-Real-IP only when TRUST_PROXY_HEADERS is
+    enabled — otherwise a client could spoof its own IP in audit logs.
+    Mirrors `RateLimitMiddleware._client_ip` so login attempts and rate
+    limits bucket the same way.
+    """
+    if settings.TRUST_PROXY_HEADERS:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            first = xff.split(",", 1)[0].strip()
+            if first:
+                return first
+        xreal = request.headers.get("x-real-ip")
+        if xreal:
+            return xreal.strip()
     return request.client.host if request.client else None
 
 

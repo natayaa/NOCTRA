@@ -38,7 +38,7 @@
   <link rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
 
-  <link rel="stylesheet" href="/static/css/main.css" />
+  <link rel="stylesheet" href="{{ asset_url('css/main.css') }}" />
   {% block shell_css %}{% endblock %}
   {% block extra_css %}{% endblock %}
 
@@ -56,6 +56,8 @@
             accent: { DEFAULT: '#0ea5e9', bright: '#38bdf8', deep: '#0284c7' },
 
             /* ── Dipakai oleh dashboard.html & login.html ── */
+            /* Keep `dim` / `faint` in sync with --text-dim / --text-faint
+               in static/css/main.css (WCAG AA on the dark surfaces). */
             noctra: {
               bg: '#070b16',
               surface: '#0d1220',
@@ -69,8 +71,8 @@
               info: '#0ea5e9',
               text: '#f1f5f9',
               muted: '#94a3b8',
-              dim: '#64748b',
-              faint: '#475569',
+              dim: '#828ea0',
+              faint: '#76808f',
             },
           },
           fontFamily: {
@@ -83,11 +85,11 @@
   </script>
 
   <script defer src="https://unpkg.com/htmx.org@2.0.3"></script>
-  <script defer src="/static/js/csrf.js"></script>
-  <script defer src="/static/js/flash.js"></script>
-  <script defer src="/static/js/main.js"></script>
-  <script defer src="/static/js/confirm.js"></script>
-  <script defer src="/static/js/htmx-config.js"></script>
+  <script defer src="{{ asset_url('js/csrf.js') }}"></script>
+  <script defer src="{{ asset_url('js/flash.js') }}"></script>
+  <script defer src="{{ asset_url('js/main.js') }}"></script>
+  <script defer src="{{ asset_url('js/confirm.js') }}"></script>
+  <script defer src="{{ asset_url('js/htmx-config.js') }}"></script>
 
   {% block extra_head %}{% endblock %}
 </head>

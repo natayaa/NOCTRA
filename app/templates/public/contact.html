@@ -5,223 +5,348 @@
   <div class="pub-section-eyebrow">Minta penawaran</div>
   <h1 class="pub-page-title">Ceritakan proyek Anda.</h1>
   <p class="pub-page-sub">
-    Isi sebanyak yang Anda bisa. Kami membalas dalam satu hari kerja
-    dengan penawaran yang jujur.
+    Isi sebanyak yang Anda bisa — kami membalas dalam satu hari kerja
+    dengan penawaran yang jujur, bukan tebakan.
   </p>
 </div>
 
-<div class="container-narrow" style="padding-bottom: 96px;"></div>
-
 {% set fv = form_values or {} %}
 
-{% if error %}
-<div class="panel mb-6" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">{{ error }}</div>
-</div>
-{% endif %}
+<div class="pub-contact-wrap">
+  <div class="pub-contact-layout">
 
-<form method="post" action="/contact" enctype="multipart/form-data" class="panel space-y-8" style="background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.08);" data-guard>
+    {# ══════════════════════════════════════════════
+       FORM
+       ══════════════════════════════════════════════ #}
+    <form method="post" action="/contact" enctype="multipart/form-data"
+          class="pub-contact-card" data-guard>
 
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+      <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
 
-  {# Honeypot — hidden from real users, tempting to bots #}
-  <div style="position:absolute;left:-9999px;" aria-hidden="true">
-    <label for="website">Do not fill this in</label>
-    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
-  </div>
-
-  {# ── Contact ───────────────────────────────────── #}
-  <section>
-    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Your details</h2>
-
-    <div class="grid md:grid-cols-2 gap-5">
-      <div class="form-row">
-        <label class="form-label" for="name">Full name <span class="req">*</span></label>
-        <input class="input" id="name" name="name" required maxlength="255" value="{{ fv.get('name') or '' }}" />
+      {# Honeypot — hidden from real users, tempting to bots #}
+      <div style="position:absolute;left:-9999px;" aria-hidden="true">
+        <label for="website">Do not fill this in</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
       </div>
-      <div class="form-row">
-        <label class="form-label" for="phone">Phone / WhatsApp <span class="req">*</span></label>
-        <input class="input" type="tel" id="phone" name="phone" required maxlength="32" placeholder="08xx xxxx xxxx"
-          value="{{ fv.get('phone') or '' }}" />
-      </div>
-    </div>
 
-    <div class="form-row">
-      <label class="form-label" for="email">Email</label>
-      <input class="input" type="email" id="email" name="email" maxlength="255" value="{{ fv.get('email') or '' }}" />
-    </div>
-  </section>
-
-  {# ── Vehicle ───────────────────────────────────── #}
-  <section>
-    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Your motorcycle</h2>
-
-    <div class="grid md:grid-cols-2 gap-5">
-      <div class="form-row">
-        <label class="form-label" for="vehicle_brand">Brand</label>
-        <input class="input" id="vehicle_brand" name="vehicle_brand" maxlength="100" placeholder="Yamaha, Honda, …"
-          value="{{ fv.get('vehicle_brand') or '' }}" />
-      </div>
-      <div class="form-row">
-        <label class="form-label" for="vehicle_model">Model</label>
-        <input class="input" id="vehicle_model" name="vehicle_model" maxlength="120" placeholder="Mio Sporty, Beat, …"
-          value="{{ fv.get('vehicle_model') or '' }}" />
-      </div>
-      <div class="form-row">
-        <label class="form-label" for="vehicle_year">Year</label>
-        <input class="input" type="number" id="vehicle_year" name="vehicle_year" min="1950" max="2100"
-          value="{{ fv.get('vehicle_year') or '' }}" />
-      </div>
-      <div class="form-row">
-        <label class="form-label" for="vehicle_plate">Plate number</label>
-        <input class="input mono" id="vehicle_plate" name="vehicle_plate" maxlength="20" placeholder="B 1234 XYZ"
-          value="{{ fv.get('vehicle_plate') or '' }}" />
-      </div>
-    </div>
-
-    <div class="form-row">
-      <label class="form-label" for="vehicle_category">Category</label>
-      <select class="select" id="vehicle_category" name="vehicle_category">
-        <option value="">—</option>
-        {% for c in vehicle_categories %}
-        <option value="{{ c }}" {% if fv.get('vehicle_category')==c %}selected{% endif %}>
-          {{ c.replace('_', ' ').title() }}
-        </option>
-        {% endfor %}
-      </select>
-    </div>
-  </section>
-
-  {# ── What you want ─────────────────────────────── #}
-  <section>
-    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">What you're after</h2>
-
-    <div class="form-row">
-      <label class="form-label" for="service_interest">Service <span class="req">*</span></label>
-      <select class="select" id="service_interest" name="service_interest" required>
-        <option value="">Choose…</option>
-        {% for s in services %}
-        <option value="{{ s }}" {% if fv.get('service_interest')==s %}selected{% endif %}>
-          {{ service_labels.get(s, s) }}
-        </option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="form-row">
-      <label class="form-label" for="description">Describe your project <span class="req">*</span></label>
-      <textarea class="textarea" id="description" name="description" required minlength="20" maxlength="5000" rows="4"
-        placeholder="What do you want done? Any specific ideas, references, or concerns?">{{ fv.get('description') or '' }}</textarea>
-      <div class="form-hint">Minimum 20 characters.</div>
-    </div>
-
-    <div class="grid md:grid-cols-3 gap-5">
-      <div class="form-row">
-        <label class="form-label" for="color_preference">Color (in your words)</label>
-        <input class="input" id="color_preference" name="color_preference" maxlength="64"
-          placeholder="matte black, pearl white…" value="{{ fv.get('color_preference') or '' }}" />
-      </div>
-      <div class="form-row">
-        <label class="form-label" for="color_family">Color family</label>
-        <select class="select" id="color_family" name="color_family">
-          <option value="">—</option>
-          {% for c in color_families %}
-          <option value="{{ c }}" {% if fv.get('color_family')==c %}selected{% endif %}>
-            {{ color_labels.get(c, c) }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-row">
-        <label class="form-label" for="finish_preference">Finish</label>
-        <select class="select" id="finish_preference" name="finish_preference">
-          <option value="">—</option>
-          {% for f in finishes %}
-          <option value="{{ f }}" {% if fv.get('finish_preference')==f %}selected{% endif %}>
-            {{ finish_labels.get(f, f) }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-    </div>
-
-    <label class="flex items-center gap-2 text-sm mt-2">
-      <input type="checkbox" name="has_custom_graphics" value="true" {% if fv.get('has_custom_graphics')=='true'
-        %}checked{% endif %} />
-      I want custom graphics (pinstripe, airbrush, decals, etc.)
-    </label>
-  </section>
-
-  {# ── Optional details ──────────────────────────── #}
-  <section>
-    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">A few more details (optional)
-    </h2>
-
-    <div class="grid md:grid-cols-2 gap-5">
-      <div class="form-row">
-        <label class="form-label" for="budget_range">Budget range</label>
-        <select class="select" id="budget_range" name="budget_range">
-          <option value="">—</option>
-          {% for b in budget_ranges %}
-          <option value="{{ b }}" {% if fv.get('budget_range')==b %}selected{% endif %}>
-            {{ budget_labels.get(b, b) }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-row">
-        <label class="form-label" for="desired_date">When do you need it?</label>
-        <input class="input" type="date" id="desired_date" name="desired_date"
-          value="{{ fv.get('desired_date') or '' }}" />
-      </div>
-    </div>
-
-    {# Preference extras from PREFERENCE_KEYS — the essentials only on public form #}
-    <div class="grid md:grid-cols-2 gap-5">
-      {% for pk in preference_keys[:4] %}
-      {% if pk.type == 'bool' %}
-      <label class="flex items-center gap-2 text-sm pt-6">
-        <input type="checkbox" name="pref_{{ pk.key }}" value="true" {% if fv.get('pref_' ~ pk.key)=='true' %}checked{%
-          endif %} />
-        {{ pk.label }}
-      </label>
-      {% else %}
-      <div class="form-row">
-        <label class="form-label" for="pref_{{ pk.key }}">{{ pk.label }}</label>
-        <input class="input" id="pref_{{ pk.key }}" name="pref_{{ pk.key }}"
-          value="{{ fv.get('pref_' ~ pk.key) or '' }}" />
+      {% if error %}
+      <div class="alert alert-danger pub-form-alert" role="alert">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/>
+        </svg>
+        <div>
+          <span class="alert-title">Permintaan belum terkirim</span>
+          {{ error }}
+        </div>
       </div>
       {% endif %}
-      {% endfor %}
-    </div>
-  </section>
 
-  {# ── Photos ────────────────────────────────────── #}
-  <section>
-    <h2 class="text-xs uppercase tracking-widest text-noctra-accent font-semibold mb-4">Photos (up to 5)</h2>
-    <p class="text-xs text-neutral-500 mb-3">
-      Current state of your bike, or reference photos of what you want.
-      JPG/PNG/WebP, 10 MB each max.
-    </p>
+      {# ── 01 · Contact ────────────────────────────── #}
+      <section class="pub-form-section">
+        <div class="pub-form-head">
+          <span class="pub-form-num" aria-hidden="true">01</span>
+          <h2 class="pub-form-title">Data kontak</h2>
+        </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-      {% for i in [1, 2, 3, 4, 5] %}
-      <div class="form-row !mb-0">
-        <label class="form-label" for="photo_{{ i }}">Photo {{ i }}</label>
-        <input class="input" type="file" id="photo_{{ i }}" name="photo_{{ i }}"
-          accept="image/jpeg,image/png,image/webp,image/gif" />
+        <div class="pub-form-grid">
+          <div class="form-row">
+            <label class="form-label" for="name">Nama lengkap <span class="req">*</span></label>
+            <input class="input" id="name" name="name" required maxlength="255"
+                   autocomplete="name" value="{{ fv.get('name') or '' }}" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="phone">Telepon / WhatsApp <span class="req">*</span></label>
+            <input class="input" type="tel" id="phone" name="phone" required maxlength="32"
+                   autocomplete="tel" inputmode="tel" placeholder="08xx xxxx xxxx"
+                   value="{{ fv.get('phone') or '' }}" />
+          </div>
+          <div class="form-row pub-span-2">
+            <label class="form-label" for="email">Email <span class="pub-optional">opsional</span></label>
+            <input class="input" type="email" id="email" name="email" maxlength="255"
+                   autocomplete="email" placeholder="nama@email.com"
+                   value="{{ fv.get('email') or '' }}" />
+          </div>
+        </div>
+      </section>
+
+      {# ── 02 · Vehicle ───────────────────────────── #}
+      <section class="pub-form-section">
+        <div class="pub-form-head">
+          <span class="pub-form-num" aria-hidden="true">02</span>
+          <h2 class="pub-form-title">Motor Anda</h2>
+        </div>
+
+        <div class="pub-form-grid">
+          <div class="form-row">
+            <label class="form-label" for="vehicle_brand">Merek</label>
+            <input class="input" id="vehicle_brand" name="vehicle_brand" maxlength="100"
+                   placeholder="Yamaha, Honda, …" value="{{ fv.get('vehicle_brand') or '' }}" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="vehicle_model">Model</label>
+            <input class="input" id="vehicle_model" name="vehicle_model" maxlength="120"
+                   placeholder="Mio Sporty, Beat, …" value="{{ fv.get('vehicle_model') or '' }}" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="vehicle_year">Tahun</label>
+            <input class="input" type="number" id="vehicle_year" name="vehicle_year"
+                   min="1950" max="2100" inputmode="numeric" placeholder="2018"
+                   value="{{ fv.get('vehicle_year') or '' }}" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="vehicle_plate">Nomor polisi</label>
+            <input class="input mono" id="vehicle_plate" name="vehicle_plate" maxlength="20"
+                   placeholder="B 1234 XYZ" value="{{ fv.get('vehicle_plate') or '' }}" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="vehicle_category">Kategori</label>
+            <select class="select" id="vehicle_category" name="vehicle_category">
+              <option value="">—</option>
+              {% for c in vehicle_categories %}
+              <option value="{{ c }}" {% if fv.get('vehicle_category')==c %}selected{% endif %}>
+                {{ c.replace('_', ' ').title() }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {# ── 03 · Project ───────────────────────────── #}
+      <section class="pub-form-section">
+        <div class="pub-form-head">
+          <span class="pub-form-num" aria-hidden="true">03</span>
+          <h2 class="pub-form-title">Yang Anda inginkan</h2>
+        </div>
+
+        <div class="pub-form-grid">
+          <div class="form-row pub-span-2">
+            <label class="form-label" for="service_interest">Layanan <span class="req">*</span></label>
+            <select class="select" id="service_interest" name="service_interest" required>
+              <option value="">Pilih layanan…</option>
+              {% for s in services %}
+              <option value="{{ s }}" {% if fv.get('service_interest')==s %}selected{% endif %}>
+                {{ service_labels.get(s, s) }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-row pub-span-2">
+            <label class="form-label" for="description">Deskripsi proyek <span class="req">*</span></label>
+            <textarea class="textarea" id="description" name="description" required
+                      minlength="20" maxlength="5000" rows="5"
+                      placeholder="Apa yang ingin dikerjakan? Ada ide, referensi, atau kekhawatiran tertentu?">{{ fv.get('description') or '' }}</textarea>
+            <div class="form-hint">Minimal 20 karakter — makin detail, makin akurat penawarannya.</div>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label" for="color_preference">Warna (dalam kata Anda)</label>
+            <input class="input" id="color_preference" name="color_preference" maxlength="64"
+                   placeholder="hitam doff, putih mutiara…"
+                   value="{{ fv.get('color_preference') or '' }}" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="color_family">Kelompok warna</label>
+            <select class="select" id="color_family" name="color_family">
+              <option value="">—</option>
+              {% for c in color_families %}
+              <option value="{{ c }}" {% if fv.get('color_family')==c %}selected{% endif %}>
+                {{ color_labels.get(c, c) }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-row pub-span-2">
+            <label class="form-label" for="finish_preference">Jenis akhir</label>
+            <select class="select" id="finish_preference" name="finish_preference">
+              <option value="">—</option>
+              {% for f in finishes %}
+              <option value="{{ f }}" {% if fv.get('finish_preference')==f %}selected{% endif %}>
+                {{ finish_labels.get(f, f) }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-row pub-span-2">
+            <label class="pub-check">
+              <input type="checkbox" name="has_custom_graphics" value="true"
+                     {% if fv.get('has_custom_graphics')=='true' %}checked{% endif %} />
+              <span>Saya ingin grafis kustom — pinstripe, airbrush, decal, dan sejenisnya.</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      {# ── 04 · Optional details ──────────────────── #}
+      <section class="pub-form-section">
+        <div class="pub-form-head">
+          <span class="pub-form-num" aria-hidden="true">04</span>
+          <h2 class="pub-form-title">Detail tambahan</h2>
+          <span class="pub-optional">opsional</span>
+        </div>
+
+        <div class="pub-form-grid">
+          <div class="form-row">
+            <label class="form-label" for="budget_range">Perkiraan anggaran</label>
+            <select class="select" id="budget_range" name="budget_range">
+              <option value="">—</option>
+              {% for b in budget_ranges %}
+              <option value="{{ b }}" {% if fv.get('budget_range')==b %}selected{% endif %}>
+                {{ budget_labels.get(b, b) }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="desired_date">Kapan dibutuhkan?</label>
+            <input class="input" type="date" id="desired_date" name="desired_date"
+                   value="{{ fv.get('desired_date') or '' }}" />
+          </div>
+
+          {% for pk in preference_keys[:4] %}
+          {% if pk.type == 'bool' %}
+          <div class="form-row">
+            <label class="pub-check">
+              <input type="checkbox" name="pref_{{ pk.key }}" value="true"
+                     {% if fv.get('pref_' ~ pk.key)=='true' %}checked{% endif %} />
+              <span>{{ pk.label }}</span>
+            </label>
+          </div>
+          {% else %}
+          <div class="form-row">
+            <label class="form-label" for="pref_{{ pk.key }}">{{ pk.label }}</label>
+            <input class="input" id="pref_{{ pk.key }}" name="pref_{{ pk.key }}"
+                   value="{{ fv.get('pref_' ~ pk.key) or '' }}" />
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </section>
+
+      {# ── 05 · Photos ────────────────────────────── #}
+      <section class="pub-form-section">
+        <div class="pub-form-head">
+          <span class="pub-form-num" aria-hidden="true">05</span>
+          <h2 class="pub-form-title">Foto</h2>
+          <span class="pub-optional">opsional · maks. 5</span>
+        </div>
+
+        <p class="pub-form-note">
+          Foto kondisi motor sekarang, atau referensi tampilan yang Anda inginkan.
+          JPG, PNG, atau WebP — maksimal 10 MB per foto.
+        </p>
+
+        <div class="pub-file-grid">
+          {% for i in range(1, 6) %}
+          <label class="pub-file-tile" for="photo_{{ i }}">
+            <input class="pub-file-input" type="file" id="photo_{{ i }}" name="photo_{{ i }}"
+                   accept="image/jpeg,image/png,image/webp,image/gif" data-file-input />
+            <span class="pub-file-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </span>
+            <span class="pub-file-label">Foto {{ i }}</span>
+            <span class="pub-file-name" data-file-name>Pilih</span>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
+
+      <div class="pub-contact-actions">
+        <button type="submit" class="pub-btn pub-btn-primary">
+          Kirim permintaan
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16" aria-hidden="true">
+            <path d="M5 12h14m-6-6 6 6-6 6"/>
+          </svg>
+        </button>
+        <p>
+          Dengan mengirim, Anda setuju kami menghubungi Anda soal permintaan ini.
+          Data Anda tidak pernah dibagikan.
+        </p>
       </div>
-      {% endfor %}
-    </div>
-  </section>
+    </form>
 
-  <div class="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-noctra-border">
-    <button type="submit" class="btn btn-primary btn-lg">Send inquiry</button>
-    <p class="text-xs text-neutral-500 sm:ml-3">
-      By submitting you agree we may contact you about your inquiry. We never share your details.
-    </p>
+    {# ══════════════════════════════════════════════
+       ASIDE
+       ══════════════════════════════════════════════ #}
+    <aside class="pub-contact-aside" aria-label="Informasi kontak">
+
+      <section class="pub-side-card">
+        <h3>Butuh bantuan?</h3>
+        <ul class="pub-side-list">
+          <li>
+            <span class="side-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20l1.2-5.2A8.5 8.5 0 1 1 21 11.5Z"/>
+              </svg>
+            </span>
+            <div>
+              <a href="https://wa.me/6281234567890" target="_blank" rel="noopener">+62 812 3456 7890</a>
+              <span class="side-meta">WhatsApp · respons tercepat</span>
+            </div>
+          </li>
+          <li>
+            <span class="side-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>
+              </svg>
+            </span>
+            <div>
+              <a href="mailto:hello@noctra.local">hello@noctra.local</a>
+              <span class="side-meta">Untuk dokumen &amp; referensi</span>
+            </div>
+          </li>
+          <li>
+            <span class="side-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/>
+              </svg>
+            </span>
+            <div>
+              Jl. Contoh No. 123, Jakarta
+              <span class="side-meta">Senin–Sabtu · 09.00–18.00</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="pub-side-card pub-side-card--steps">
+        <h3>Setelah Anda kirim</h3>
+        <ol class="pub-steps">
+          <li>
+            <span class="pub-step-num" aria-hidden="true">1</span>
+            <div><strong>Kami tinjau</strong>Foto dan kebutuhan Anda dicek oleh tim workshop.</div>
+          </li>
+          <li>
+            <span class="pub-step-num" aria-hidden="true">2</span>
+            <div><strong>Penawaran rinci</strong>Rincian material, tenaga kerja, dan durasi — dalam 1 hari kerja.</div>
+          </li>
+          <li>
+            <span class="pub-step-num" aria-hidden="true">3</span>
+            <div><strong>Jadwal pengerjaan</strong>Setelah sepakat, kami kunci slot dan mulai bekerja.</div>
+          </li>
+        </ol>
+      </section>
+
+    </aside>
   </div>
-</form>
-
 </div>
+
+<script>
+  (function () {
+    document.querySelectorAll('[data-file-input]').forEach(function (input) {
+      input.addEventListener('change', function () {
+        var tile = input.closest('.pub-file-tile');
+        var nameEl = tile && tile.querySelector('[data-file-name]');
+        if (!nameEl) return;
+        nameEl.textContent = input.files && input.files.length
+          ? input.files[0].name
+          : 'Pilih';
+      });
+    });
+  })();
+</script>
 {% endblock %}

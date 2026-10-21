@@ -1,7 +1,8 @@
 """
 Seed starter pricing rules.
 
-Idempotent — matches on (name) to avoid duplicates.
+Idempotent — matches on (service_interest, vehicle_category), so a
+renamed or deactivated rule is not duplicated on re-run.
 
 Run: python -m scripts.seed_pricing_rules
 """
@@ -102,6 +103,11 @@ RULES: list[dict] = [
 ]
 
 
+def _criteria_match(field, value: str | None):
+    """Exact match that treats None as SQL NULL (not `= NULL`)."""
+    return field.is_(None) if value is None else field == value
+
+
 async def main() -> int:
     print("Seeding pricing rules...")
     created = 0
@@ -112,9 +118,20 @@ async def main() -> int:
             for item in RULES:
                 existing = (
                     await db.execute(
-                        select(PricingRule).where(PricingRule.name == item["name"])
+                        select(PricingRule)
+                        .where(
+                            _criteria_match(
+                                PricingRule.service_interest,
+                                item["service_interest"],
+                            ),
+                            _criteria_match(
+                                PricingRule.vehicle_category,
+                                item["vehicle_category"],
+                            ),
+                        )
+                        .limit(1)
                     )
-                ).scalar_one_or_none()
+                ).scalars().first()
                 if existing is not None:
                     skipped += 1
                     continue

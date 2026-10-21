@@ -1,43 +1,37 @@
 {% extends "public/base.html" %}
 
 {% block content %}
-<div class="container-narrow" style="padding: 120px 32px 140px; text-align: center;">
-
-  <div style="width: 64px; height: 64px; margin: 0 auto 32px; border-radius: 50%;
-              background: radial-gradient(closest-side, rgba(14,165,233,0.18), transparent 70%),
-                          rgba(14,165,233,0.1);
-              border: 1px solid rgba(14,165,233,0.3);
-              display: grid; place-items: center;
-              box-shadow: 0 0 40px -10px rgba(14,165,233,0.5);">
-    <svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"
-         stroke-linecap="round" stroke-linejoin="round" width="28" height="28">
+<div class="pub-success">
+  <div class="pub-success-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
       <path d="m5 13 4 4L19 7"/>
     </svg>
   </div>
 
+  <div class="pub-section-eyebrow">Permintaan terkirim</div>
   <h1 class="pub-page-title">Terima kasih.</h1>
   <p class="pub-page-sub">
-    Kami telah menerima inquiry Anda dan mengirim konfirmasi ke email.
-    Tim kami akan menghubungi Anda dalam satu hari kerja.
+    Kami telah menerima permintaan Anda. Tim kami akan menghubungi Anda
+    dalam satu hari kerja dengan penawaran yang jujur.
   </p>
 
   {% if reference %}
-  <div class="panel" style="max-width: 440px; margin: 48px auto 0; text-align: left;">
-    <div style="font-size:11px; font-weight:600; letter-spacing:0.16em;
-                text-transform:uppercase; color:var(--pub-dim); margin-bottom:8px;">
-      Nomor referensi Anda
-    </div>
-    <div class="mono" style="font-size:20px; color:var(--pub-text);">{{ reference }}</div>
-    <p style="font-size:12.5px; color:var(--pub-dim); margin-top:12px;">
-      Simpan nomor ini — sebutkan jika Anda menghubungi kami.
-    </p>
+  <div class="pub-success-ref">
+    <div class="label">Nomor referensi Anda</div>
+    <div class="value mono">{{ reference }}</div>
+    <p>Simpan nomor ini — sebutkan jika Anda menghubungi kami.</p>
   </div>
   {% endif %}
 
-  <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:48px;">
+  <div class="pub-success-actions">
     <a href="/" class="pub-btn pub-btn-secondary">Kembali ke beranda</a>
     <a href="/services" class="pub-btn pub-btn-primary">Lihat layanan</a>
   </div>
 
+  <p class="pub-success-note">
+    Butuh respons lebih cepat?
+    <a href="https://wa.me/6281234567890" target="_blank" rel="noopener">Chat kami di WhatsApp</a>.
+  </p>
 </div>
 {% endblock %}

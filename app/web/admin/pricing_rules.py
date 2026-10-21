@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -19,10 +19,14 @@ from app.modules.inquiries.constants import (
     SERVICE_INTERESTS,
 )
 from app.modules.pricing.constants import rule_specificity
+from app.modules.pricing.models import PricingRule
 from app.modules.pricing.repository import PricingRuleRepository
 from app.modules.pricing.schemas import PricingRuleCreate, PricingRuleUpdate
 from app.modules.pricing.service import PricingService
-from app.modules.vehicles.constants import VEHICLE_CATEGORIES
+from app.modules.vehicles.constants import (
+    VEHICLE_CATEGORIES,
+    VEHICLE_CATEGORY_LABELS,
+)
 from app.web.admin._perms import read, write
 from app.web.templates_env import templates
 
@@ -30,12 +34,16 @@ router = APIRouter(prefix="/admin/pricing-rules", tags=["admin-pricing-rules"])
 
 _FORM_ERRORS = (AppError, PydanticValidationError, ValueError, KeyError)
 
+# Example HPP used on the detail page — fixed for a stable reference.
+EXAMPLE_HPP = 500_000
+
 
 def _catalog() -> dict:
     return {
         "services": SERVICE_INTERESTS,
         "service_labels": SERVICE_INTEREST_LABELS,
         "vehicle_categories": VEHICLE_CATEGORIES,
+        "vehicle_category_labels": VEHICLE_CATEGORY_LABELS,
     }
 
 
@@ -65,6 +73,44 @@ def _safe_float(raw) -> float | None:
         return None
 
 
+def _compute_example(rule: PricingRule) -> dict:
+    """
+    Compute a reference-pricing example in Python so the template never
+    does Decimal math or division. Handles:
+      - min_price_floor override
+      - target/min margin >= 100 (legacy bad data → fallback to HPP)
+    """
+    cf = float(rule.complexity_factor or 1)
+    target = float(rule.target_margin_pct)
+    min_margin = float(rule.min_margin_pct)
+    floor = float(rule.min_price_floor) if rule.min_price_floor is not None else None
+
+    adjusted_hpp = EXAMPLE_HPP * cf
+
+    def _price_for_margin(margin_pct: float) -> float:
+        if margin_pct >= 100:
+            # Would divide by zero — treat as "no markup" fallback
+            return adjusted_hpp
+        return adjusted_hpp / (1 - margin_pct / 100.0)
+
+    recommended = _price_for_margin(target)
+    minimum = _price_for_margin(min_margin)
+
+    if floor is not None and floor > 0:
+        if minimum < floor:
+            minimum = floor
+        if recommended < floor:
+            recommended = floor
+
+    return {
+        "hpp": EXAMPLE_HPP,
+        "adjusted_hpp": round(adjusted_hpp, 2),
+        "minimum_price": round(minimum, 2),
+        "recommended_price": round(recommended, 2),
+        "floor_applied": floor is not None and floor > 0 and minimum >= floor,
+    }
+
+
 # ════════════════════════════════════════════════════════════════
 # LIST
 # ════════════════════════════════════════════════════════════════
@@ -75,19 +121,41 @@ async def list_view(
     db: DbSession,
     params: PageParams = Depends(page_params),
     q: str | None = Query(None, max_length=200),
+    is_active: bool | None = Query(None),
     _=read(PermissionCode.PRICING_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
-    stmt = PricingRuleRepository(db).query(q=q)
+    repo = PricingRuleRepository(db)
+    stmt = repo.query(q=q, is_active=is_active)
     rows, meta = await paginate(db, stmt, params)
+
+    # Precompute specificity for each row — template can display it.
+    specificity_map = {
+        r.id: rule_specificity(r.service_interest, r.vehicle_category)
+        for r in rows
+    }
+
+    def qs(page: int | None = None, **overrides) -> str:
+        base = {
+            "q": q or "",
+            "is_active": "" if is_active is None else ("true" if is_active else "false"),
+        }
+        if page is not None:
+            base["page"] = str(page)
+        base.update({k: ("" if v is None else str(v)) for k, v in overrides.items()})
+        return "?" + urlencode({k: v for k, v in base.items() if v})
+
     return templates.render(
         request,
         "admin/pricing_rules/list.html",
         {
             "title": "Pricing Rules",
             "rules": rows,
+            "specificity_map": specificity_map,
             "page_meta": meta,
             "q": q or "",
+            "is_active_filter": is_active,
+            "qs": qs,
             **_catalog(),
         },
     )
@@ -149,9 +217,7 @@ async def create_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return _render_error(
-            _form_error(exc), getattr(exc, "status_code", 400)
-        )
+        return _render_error(_form_error(exc), getattr(exc, "status_code", 400))
 
     return RedirectResponse(url=f"/admin/pricing-rules/{rule.id}", status_code=303)
 
@@ -174,6 +240,7 @@ async def detail_view(
         raise NotFoundError("Pricing rule not found")
 
     spec = rule_specificity(rule.service_interest, rule.vehicle_category)
+    example = _compute_example(rule)
 
     return templates.render(
         request,
@@ -182,6 +249,7 @@ async def detail_view(
             "title": rule.name,
             "rule": rule,
             "specificity": spec,
+            "example": example,
             "error": error,
             **_catalog(),
         },
@@ -189,7 +257,7 @@ async def detail_view(
 
 
 # ════════════════════════════════════════════════════════════════
-# EDIT
+# EDIT / UPDATE
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/{rule_id}/edit", response_class=HTMLResponse)
@@ -197,6 +265,7 @@ async def edit_view(
     rule_id: UUID,
     request: Request,
     db: DbSession,
+    error: str | None = Query(None),
     _=write(PermissionCode.PRICING_WRITE),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
@@ -210,6 +279,7 @@ async def edit_view(
             "title": f"Edit {rule.name}",
             "mode": "edit",
             "rule": rule,
+            "error": error,
             **_catalog(),
         },
     )
@@ -235,7 +305,11 @@ async def update_submit(
             min_margin_pct=_safe_float(form.get("min_margin_pct")),
             complexity_factor=_safe_float(form.get("complexity_factor")),
             min_price_floor=_safe_float(form.get("min_price_floor")),
-            is_active=("is_active" in form and form.get("is_active") == "true"),
+            is_active=(
+                form.get("is_active") == "true"
+                if form.get("_has_is_active") == "1"
+                else None
+            ),
         )
         await PricingService(db).update_rule(rule_id, payload, actor=current)
         await db.commit()

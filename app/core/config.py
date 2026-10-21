@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
-from urllib.parse import quote_plus
+from urllib.parse import quote
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -34,7 +34,6 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
-    # No hardcoded default password — MUST come from .env.
     POSTGRES_PASSWORD: str = Field(..., min_length=1)
     POSTGRES_DB: str = "NOCTRADB"
     DB_POOL_SIZE: int = 10
@@ -44,7 +43,8 @@ class Settings(BaseSettings):
     # ── Auth ────────────────────────────────────────────
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 8
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
-    JWT_ALGORITHM: str = "HS256"
+    # Restrict to HMAC algorithms — blocks `alg=none` and RSA-confusion.
+    JWT_ALGORITHM: Literal["HS256", "HS384", "HS512"] = "HS256"
     JWT_ISSUER: str = "noctra-autoworks"
     BCRYPT_ROUNDS: int = 12
 
@@ -74,9 +74,7 @@ class Settings(BaseSettings):
         "localhost", "127.0.0.1", "*.noctra.local",
     ]
 
-    MEDIA_ROOT: str = "media"
-
-        # ── Email ───────────────────────────────────────────
+    # ── Email ───────────────────────────────────────────
     EMAIL_ENABLED: bool = False
     EMAIL_FROM_NAME: str = "NOCTRA Autoworks"
     EMAIL_FROM_ADDRESS: str = "hello@noctra.local"
@@ -94,15 +92,14 @@ class Settings(BaseSettings):
     # Total attempts = 1 initial + SMTP_MAX_RETRIES retries.
     # Backoff: min(base × 2^attempt, max_delay) + up to 30% jitter.
     SMTP_MAX_RETRIES: int = 3
-    SMTP_RETRY_BASE_DELAY: float = 1.0     # seconds
-    SMTP_RETRY_MAX_DELAY: float = 30.0     # cap per attempt
-    
+    SMTP_RETRY_BASE_DELAY: float = 1.0
+    SMTP_RETRY_MAX_DELAY: float = 30.0
+
     # ── Public contact info ─────────────────────────────
     PUBLIC_PHONE: str = "+62 812 3456 7890"
     PUBLIC_EMAIL: str = "hello@noctra.local"
     PUBLIC_ADDRESS: str = "Jl. Contoh No. 123, Jakarta"
     PUBLIC_WHATSAPP: str | None = None
-
 
     # ── Media / Uploads ─────────────────────────────────
     MEDIA_ROOT: str = "media"
@@ -117,16 +114,16 @@ class Settings(BaseSettings):
     MEDIA_ALLOWED_HOSTS: Annotated[list[str], NoDecode] = []
 
     # ── Inquiry workflow ────────────────────────────────
-    # When True, transitioning to any "contact happened" status
-    # (CONTACTED/QUOTED/NEGOTIATING/APPROVED) refreshes `last_contacted_at`.
-    # When False, only NEW → CONTACTED does (legacy behaviour).
     INQUIRY_TRACK_CONTACT_ON_TRANSITION: bool = True
 
     # ── Derived ─────────────────────────────────────────
     @property
     def database_url(self) -> str:
-        user = quote_plus(self.POSTGRES_USER)
-        pwd = quote_plus(self.POSTGRES_PASSWORD)
+        # `quote_plus` would turn spaces into `+`, which SQLAlchemy's
+        # URL parser treats as a literal `+` in userinfo — auth then fails
+        # for any password containing a space. `quote` is correct here.
+        user = quote(self.POSTGRES_USER, safe="")
+        pwd = quote(self.POSTGRES_PASSWORD, safe="")
         return (
             f"postgresql+asyncpg://{user}:{pwd}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -134,8 +131,8 @@ class Settings(BaseSettings):
 
     @property
     def sync_database_url(self) -> str:
-        user = quote_plus(self.POSTGRES_USER)
-        pwd = quote_plus(self.POSTGRES_PASSWORD)
+        user = quote(self.POSTGRES_USER, safe="")
+        pwd = quote(self.POSTGRES_PASSWORD, safe="")
         return (
             f"postgresql://{user}:{pwd}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
@@ -177,7 +174,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _enforce_invariants(self) -> "Settings":
-        # Browsers refuse SameSite=None without Secure.
         if self.SESSION_COOKIE_SAMESITE == "none" and not self.SESSION_COOKIE_SECURE:
             raise ValueError(
                 "SESSION_COOKIE_SAMESITE='none' requires SESSION_COOKIE_SECURE=True"
@@ -188,8 +184,6 @@ class Settings(BaseSettings):
             if not self.SESSION_COOKIE_SECURE:
                 raise ValueError("SESSION_COOKIE_SECURE must be True in production")
         return self
-
-    
 
 
 @lru_cache

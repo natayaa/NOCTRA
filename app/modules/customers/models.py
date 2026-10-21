@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,11 +15,24 @@ class Customer(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (
         Index("ix_customers_status_created", "status", "created_at"),
         Index("ix_customers_name", "name"),
-        # Functional index lets the case-insensitive email lookup in
-        # `find_by_email` use the index instead of a sequential scan.
-        # Add via migration:
-        #   CREATE INDEX CONCURRENTLY ix_customers_email_lower
-        #   ON customers (lower(email));
+        # Case-insensitive uniqueness on email, enforced by the DB so
+        # concurrent inserts cannot both pass the application-level
+        # pre-check in `create()` / `find_or_create()`. Service catches
+        # IntegrityError and re-raises as ConflictError.
+        Index(
+            "uq_customers_email_lower",
+            text("lower(email)"),
+            unique=True,
+            postgresql_where=text("email IS NOT NULL"),
+        ),
+        # Partial unique on phone — non-null phones must be unique, but
+        # multiple customers without a phone are allowed.
+        Index(
+            "uq_customers_phone",
+            "phone",
+            unique=True,
+            postgresql_where=text("phone IS NOT NULL"),
+        ),
     )
 
     # Human-readable: NOCTRA-C-2026-000123
@@ -29,8 +42,10 @@ class Customer(Base, UUIDMixin, TimestampMixin):
 
     # Primary contact
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str | None] = mapped_column(String(255), index=True)
-    phone: Mapped[str | None] = mapped_column(String(32), index=True)
+    # `email`/`phone` are covered by uq_customers_email_lower /
+    # uq_customers_phone — no standalone index needed.
+    email: Mapped[str | None] = mapped_column(String(255))
+    phone: Mapped[str | None] = mapped_column(String(32))
     alt_phone: Mapped[str | None] = mapped_column(String(32))
 
     # Address
@@ -49,7 +64,7 @@ class Customer(Base, UUIDMixin, TimestampMixin):
         default=CustomerStatus.LEAD.value,
         server_default=CustomerStatus.LEAD.value,
         nullable=False,
-        index=True,
+        # Covered by ix_customers_status_created (leftmost prefix).
     )
     tax_id: Mapped[str | None] = mapped_column(String(64))       # NPWP
     notes: Mapped[str | None] = mapped_column(Text)

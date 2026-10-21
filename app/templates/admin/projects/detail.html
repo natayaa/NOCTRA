@@ -1,5 +1,7 @@
 {% extends "admin/base.html" %}
 
+{% set TERMINAL = ('DELIVERED', 'CANCELLED') %}
+
 {% block content %}
 <div class="page-header">
   <div>
@@ -11,7 +13,7 @@
       {% if project.title %}<span class="ml-2">· {{ project.title }}</span>{% endif %}
     </p>
   </div>
-  <div class="page-actions flex gap-2">
+  <div class="page-actions flex gap-2 flex-wrap">
     {% if customer %}
     <a href="/admin/customers/{{ customer.id }}" class="btn btn-secondary btn-sm">Customer</a>
     {% endif %}
@@ -21,32 +23,43 @@
     <a href="/admin/projects/{{ project.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
     {% if project.status in ('APPROVED', 'IN_PROGRESS', 'PAINTING', 'ASSEMBLY', 'QC', 'COMPLETED', 'DELIVERED') %}
     <a href="/admin/invoices/new?customer_id={{ project.customer_id }}&project_id={{ project.id }}"
-      class="btn btn-secondary btn-sm">Create Invoice</a>
+       class="btn btn-secondary btn-sm">Create Invoice</a>
     {% endif %}
   </div>
 </div>
 
 {% if error %}
-<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4);">
-  <div class="form-error">{{ error }}</div>
-</div>
-{% endif %}
-
-{% set _est_hpp = project.estimated_hpp | float %}
-{% set _act_hpp = project.actual_hpp | float %}
-{% if _est_hpp > 0
-and _act_hpp > _est_hpp * 1.1
-and project.status not in ('DELIVERED', 'CANCELLED') %}
-<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05);">
-  <div class="text-sm text-red-300">
-    ⚠ <strong>Cost overrun</strong> — Actual HPP is
-    {{ ((_act_hpp / _est_hpp - 1) * 100) | round(1) }}%
-    above estimate ({{ (_act_hpp - _est_hpp) | rupiah }}).
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div class="text-sm text-red-200">{{ error }}</div>
   </div>
 </div>
 {% endif %}
 
-{# ── Costing dashboard stats ────────────────────────── #}
+{# ── Cost overrun warning ──────────────────────────── #}
+{% set _est_hpp = project.estimated_hpp | float %}
+{% set _act_hpp = project.actual_hpp | float %}
+{% if _est_hpp > 0 and _act_hpp > _est_hpp * 1.1 and project.status not in TERMINAL %}
+<div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05);">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="text-sm text-red-200">
+      <strong>Cost overrun</strong> —
+      Actual HPP is {{ ((_act_hpp / _est_hpp - 1) * 100) | round(1) }}%
+      above estimate ({{ (_act_hpp - _est_hpp) | rupiah }}).
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Stats ──────────────────────────────────────── #}
 <div class="stat-grid">
   <div class="stat">
     <div class="stat-label">Selling price</div>
@@ -57,7 +70,7 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
   </div>
   <div class="stat">
     <div class="stat-label">Estimated HPP</div>
-    <div class="stat-value text-neutral-300">{{ project.estimated_hpp | rupiah }}</div>
+    <div class="stat-value text-noctra-muted">{{ project.estimated_hpp | rupiah }}</div>
   </div>
   <div class="stat">
     <div class="stat-label">Actual HPP</div>
@@ -75,7 +88,7 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
       {% if project.actual_gross_margin_pct >= 50 %}text-noctra-success
       {% elif project.actual_gross_margin_pct >= 30 %}text-noctra-warning
       {% else %}text-noctra-danger{% endif %}">
-      {{ '%.1f'|format(project.actual_gross_margin_pct) }}%
+      {{ project.actual_gross_margin_pct | pct }}
     </div>
     <div class="stat-delta">
       {{ project.actual_gross_profit | rupiah }} profit
@@ -83,32 +96,32 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
   </div>
 </div>
 
-{# ── Payments ──────────────────────────────────────── #}
+{# ── Payments ──────────────────────────────────── #}
 <div class="panel">
-  <div class="flex items-center justify-between">
-    <div class="panel-title">Payments received</div>
-    <div class="text-xs text-neutral-500">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div class="panel-title !mb-0">Payments received</div>
+    <div class="text-xs text-noctra-dim">
       Total: <span class="font-mono text-noctra-success">{{ total_received | rupiah }}</span>
     </div>
   </div>
 
   {% if payments %}
   <div class="table-wrap mt-3">
-    <table class="table">
+    <table class="table w-full">
       <thead>
         <tr>
-          <th>Date</th>
-          <th>Method</th>
-          <th>Reference</th>
+          <th class="text-left">Date</th>
+          <th class="text-left">Method</th>
+          <th class="text-left">Reference</th>
           <th class="text-right">Amount</th>
         </tr>
       </thead>
       <tbody>
         {% for p in payments %}
         <tr>
-          <td class="text-xs">{{ p.payment_date.strftime('%d %b %Y') }}</td>
-          <td class="text-sm">{{ p.method }}</td>
-          <td class="text-xs text-neutral-500">
+          <td class="text-xs whitespace-nowrap">{{ p.payment_date | date_id }}</td>
+          <td class="text-sm">{{ payment_method_labels.get(p.method, p.method) if payment_method_labels else p.method }}</td>
+          <td class="text-xs text-noctra-dim">
             {% if p.reference_type == 'INVOICE' %}
             <a href="/admin/invoices/{{ p.reference_id }}" class="hover:underline">
               {{ p.reference_number or 'applied to invoice' }}
@@ -117,7 +130,7 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
             {{ p.reference_number or 'DP' }}
             {% endif %}
           </td>
-          <td class="text-right font-mono text-sm text-noctra-success">
+          <td class="text-right font-mono text-sm text-noctra-success whitespace-nowrap">
             {{ p.amount | rupiah }}
           </td>
         </tr>
@@ -126,13 +139,13 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
     </table>
   </div>
   {% else %}
-  <p class="text-neutral-500 text-sm mt-2">No payments yet.</p>
+  <p class="text-noctra-dim text-sm mt-2">No payments yet.</p>
   {% endif %}
 
-  {% if project.status not in ('CANCELLED', 'DELIVERED') %}
-  <div class="mt-4 flex gap-2">
+  {% if project.status not in TERMINAL %}
+  <div class="mt-4 flex gap-2 flex-wrap">
     <a href="/admin/payments/new?direction=IN&reference_type=PROJECT&reference_id={{ project.id }}&customer_id={{ project.customer_id }}"
-      class="btn btn-secondary btn-sm">
+       class="btn btn-secondary btn-sm">
       + Record DP
     </a>
     <a href="/admin/invoices/new?project_id={{ project.id }}" class="btn btn-primary btn-sm">
@@ -148,12 +161,12 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
   <div class="flex items-start justify-between gap-6 flex-wrap">
     <div>
       <div class="panel-title">Pricing recommendation</div>
-      <p class="text-xs text-neutral-500 mt-1">
+      <p class="text-xs text-noctra-dim mt-1">
         Based on {{ 'actual' if project.actual_hpp and project.actual_hpp > 0 else 'estimated' }} HPP
-        of <strong>{{ pricing_recommendation.hpp | rupiah }}</strong>
+        of <strong class="text-noctra-text">{{ pricing_recommendation.hpp | rupiah }}</strong>
         {% if pricing_recommendation.complexity_factor != 1.0 %}
-        × {{ pricing_recommendation.complexity_factor }}× complexity
-        = <strong>{{ pricing_recommendation.adjusted_hpp | rupiah }}</strong> adjusted
+        × {{ pricing_recommendation.complexity_factor | qty(decimals=2) }}× complexity
+        = <strong class="text-noctra-text">{{ pricing_recommendation.adjusted_hpp | rupiah }}</strong> adjusted
         {% endif %}
         {% if pricing_recommendation.rule_name %}
         · Rule: <em>{{ pricing_recommendation.rule_name }}</em>
@@ -166,33 +179,39 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
 
   <div class="grid md:grid-cols-4 gap-4 mt-4">
     <div>
-      <div class="text-xs text-neutral-500 uppercase tracking-wider">Target margin</div>
-      <div class="text-lg font-semibold text-noctra-accent">{{ pricing_recommendation.target_margin_pct }}%</div>
+      <div class="text-xs text-noctra-dim uppercase tracking-wider">Target margin</div>
+      <div class="text-lg font-semibold text-noctra-accent">
+        {{ pricing_recommendation.target_margin_pct | pct }}
+      </div>
     </div>
     <div>
-      <div class="text-xs text-neutral-500 uppercase tracking-wider">Minimum margin</div>
-      <div class="text-lg font-semibold text-neutral-400">{{ pricing_recommendation.min_margin_pct }}%</div>
+      <div class="text-xs text-noctra-dim uppercase tracking-wider">Minimum margin</div>
+      <div class="text-lg font-semibold text-noctra-muted">
+        {{ pricing_recommendation.min_margin_pct | pct }}
+      </div>
     </div>
     <div>
-      <div class="text-xs text-neutral-500 uppercase tracking-wider">Minimum price</div>
-      <div class="text-lg font-mono text-neutral-300">{{ pricing_recommendation.minimum_price | rupiah }}</div>
+      <div class="text-xs text-noctra-dim uppercase tracking-wider">Minimum price</div>
+      <div class="text-lg font-mono text-noctra-muted">
+        {{ pricing_recommendation.minimum_price | rupiah }}
+      </div>
     </div>
     <div>
-      <div class="text-xs text-neutral-500 uppercase tracking-wider">Recommended price</div>
+      <div class="text-xs text-noctra-dim uppercase tracking-wider">Recommended price</div>
       <div class="text-2xl font-mono font-semibold text-noctra-success">
         {{ pricing_recommendation.recommended_price | rupiah }}
       </div>
-      <div class="text-xs text-neutral-500 mt-1">
-        Implies {{ pricing_recommendation.recommended_markup_pct }}% markup
+      <div class="text-xs text-noctra-dim mt-1">
+        Implies {{ pricing_recommendation.recommended_markup_pct | pct }} markup
       </div>
     </div>
   </div>
 
   {% if pricing_evaluation %}
   <div class="mt-5 pt-5 border-t border-noctra-border">
-    <div class="text-xs text-neutral-500 uppercase tracking-wider mb-2">Evaluation of current quote</div>
+    <div class="text-xs text-noctra-dim uppercase tracking-wider mb-2">Evaluation of current quote</div>
     <div class="flex items-center gap-4 flex-wrap">
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 flex-wrap">
         <span class="badge
           {% if pricing_evaluation.health == 'excellent' %}badge-success
           {% elif pricing_evaluation.health == 'good' %}badge-success
@@ -207,11 +226,11 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
         </span>
         <span class="text-sm">
           At <strong class="font-mono">{{ pricing_evaluation.selling_price | rupiah }}</strong>,
-          margin is <strong class="font-mono">{{ pricing_evaluation.margin_pct }}%</strong>
+          margin is <strong class="font-mono">{{ pricing_evaluation.margin_pct | pct }}</strong>
           ({{ pricing_evaluation.gross_profit | rupiah }} profit)
         </span>
       </div>
-      <div class="ml-auto text-xs text-neutral-500">
+      <div class="ml-auto text-xs text-noctra-dim">
         {% if pricing_evaluation.meets_target %}
         ✓ Above target price
         {% elif pricing_evaluation.meets_minimum %}
@@ -227,7 +246,7 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
     </div>
   </div>
   {% else %}
-  <div class="mt-5 pt-5 border-t border-noctra-border text-xs text-neutral-500">
+  <div class="mt-5 pt-5 border-t border-noctra-border text-xs text-noctra-dim">
     No quote set yet. Set a quoted price on the edit page to see how it stacks up.
   </div>
   {% endif %}
@@ -238,16 +257,16 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
 
   <div class="lg:col-span-2 space-y-6">
 
-    {# ── Cost breakdown table ──────────────────────── #}
+    {# ── Cost breakdown ───────────────────────────── #}
     <div class="panel">
       <div class="panel-title">Cost breakdown by category</div>
-      <p class="text-xs text-neutral-500 mt-1">Estimated plan vs actual expenditure</p>
+      <p class="text-xs text-noctra-dim mt-1">Estimated plan vs actual expenditure</p>
 
       <div class="table-wrap mt-4">
-        <table class="table">
+        <table class="table w-full">
           <thead>
             <tr>
-              <th>Category</th>
+              <th class="text-left">Category</th>
               <th class="text-right">Estimated</th>
               <th class="text-right">Actual</th>
               <th class="text-right">Variance</th>
@@ -255,23 +274,23 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
           </thead>
           <tbody>
             {% set cats = [
-            ('materials', 'Materials', project.estimated_materials, project.actual_materials),
-            ('parts', 'Parts', project.estimated_parts, project.actual_parts),
-            ('labor', 'Labor', project.estimated_labor, project.actual_labor),
-            ('outsource', 'Outsourcing', project.estimated_outsource, project.actual_outsource),
-            ('overhead', 'Overhead', project.estimated_overhead, project.actual_overhead),
-            ('misc', 'Miscellaneous', project.estimated_misc, project.actual_misc),
+              ('materials', 'Materials', project.estimated_materials, project.actual_materials),
+              ('parts', 'Parts', project.estimated_parts, project.actual_parts),
+              ('labor', 'Labor', project.estimated_labor, project.actual_labor),
+              ('outsource', 'Outsourcing', project.estimated_outsource, project.actual_outsource),
+              ('overhead', 'Overhead', project.estimated_overhead, project.actual_overhead),
+              ('misc', 'Miscellaneous', project.estimated_misc, project.actual_misc),
             ] %}
             {% for key, label, est, act in cats %}
             <tr>
-              <td class="font-medium">{{ label }}</td>
-              <td class="text-right font-mono text-sm text-neutral-500">{{ est | rupiah }}</td>
+              <td class="font-medium text-left">{{ label }}</td>
+              <td class="text-right font-mono text-sm text-noctra-muted">{{ est | rupiah }}</td>
               <td class="text-right font-mono text-sm">{{ act | rupiah }}</td>
               {% set v = est - act %}
-              <td class="text-right font-mono text-xs
+              <td class="text-right font-mono text-xs whitespace-nowrap
                 {% if v > 0 %}text-noctra-success
                 {% elif v < 0 %}text-noctra-danger
-                {% else %}text-neutral-500{% endif %}">
+                {% else %}text-noctra-dim{% endif %}">
                 {% if v != 0 %}{{ '+' if v > 0 else '' }}{{ v | rupiah }}{% else %}—{% endif %}
               </td>
             </tr>
@@ -279,11 +298,11 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
           </tbody>
           <tfoot>
             <tr style="border-top: 2px solid var(--noctra-border);">
-              <td class="font-semibold">Total HPP</td>
+              <td class="font-semibold text-left">Total HPP</td>
               <td class="text-right font-mono font-semibold">{{ project.estimated_hpp | rupiah }}</td>
               <td class="text-right font-mono font-semibold">{{ project.actual_hpp | rupiah }}</td>
               {% set v = project.estimated_hpp - project.actual_hpp %}
-              <td class="text-right font-mono text-xs
+              <td class="text-right font-mono text-xs whitespace-nowrap
                 {% if v > 0 %}text-noctra-success
                 {% elif v < 0 %}text-noctra-danger{% endif %}">
                 {% if v != 0 %}{{ '+' if v > 0 else '' }}{{ v | rupiah }}{% else %}—{% endif %}
@@ -294,7 +313,7 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
       </div>
     </div>
 
-    {# ── Item list grouped by category ─────────────── #}
+    {# ── Cost items ────────────────────────────────── #}
     <div class="panel">
       <div class="panel-title">Cost items</div>
 
@@ -303,25 +322,25 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
       {% set cat_items = items_by_category.get(cat, []) %}
       {% if cat_items %}
       <div class="mt-4">
-        <div class="text-xs uppercase tracking-wider text-neutral-500 font-semibold mb-2">
+        <div class="text-xs uppercase tracking-wider text-noctra-dim font-semibold mb-2">
           {{ cost_category_labels.get(cat, cat) }}
         </div>
         <div class="table-wrap">
-          <table class="table">
+          <table class="table w-full">
             <thead>
-              <tr>            
-                <th>Description</th>
+              <tr>
+                <th class="text-left">Description</th>
                 <th class="text-right">Est. qty</th>
                 <th class="text-right">Est. cost</th>
                 <th class="text-right">Act. qty</th>
                 <th class="text-right">Act. cost</th>
-                <th></th>
+                <th class="text-right w-16"></th>
               </tr>
             </thead>
             <tbody>
               {% for item in cat_items %}
               <tr>
-                <td class="text-sm">
+                <td class="text-sm text-left">
                   {{ item.description }}
                   {% if item.status and item.status != 'PLANNED' %}
                   <span class="badge {{ item_status_tone.get(item.status, 'badge-neutral') }} ml-1 text-[10px]">
@@ -329,39 +348,43 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
                   </span>
                   {% endif %}
                 </td>
-                <td class="text-right font-mono text-xs text-neutral-500">
+                <td class="text-right font-mono text-xs text-noctra-muted whitespace-nowrap">
                   {% if item.estimated_quantity %}
-                  {{ '%.3f'|format(item.estimated_quantity) }} {{ item.unit or '' }}
+                  {{ item.estimated_quantity | qty(decimals=3) }} {{ item.unit or '' }}
                   {% else %}—{% endif %}
                 </td>
-                <td class="text-right font-mono text-xs text-neutral-500">{{ item.estimated_cost | rupiah }}</td>
-                <td class="text-right font-mono text-xs">
+                <td class="text-right font-mono text-xs text-noctra-muted whitespace-nowrap">
+                  {{ item.estimated_cost | rupiah }}
+                </td>
+                <td class="text-right font-mono text-xs whitespace-nowrap">
                   {% if item.actual_quantity %}
-                  {{ '%.3f'|format(item.actual_quantity) }} {{ item.unit or '' }}
+                  {{ item.actual_quantity | qty(decimals=3) }} {{ item.unit or '' }}
                   {% else %}—{% endif %}
                 </td>
-                <td class="text-right font-mono text-xs">{{ item.actual_cost | rupiah }}</td>
+                <td class="text-right font-mono text-xs whitespace-nowrap">
+                  {{ item.actual_cost | rupiah }}
+                </td>
                 <td class="text-right">
                   <details>
-                    <summary class="text-xs text-neutral-500 cursor-pointer hover:text-noctra-accent">edit</summary>
+                    <summary class="text-xs text-noctra-dim cursor-pointer hover:text-noctra-accent">edit</summary>
                     <form method="post" action="/admin/projects/{{ project.id }}/items/{{ item.id }}"
-                      class="mt-2 grid grid-cols-2 gap-2 min-w-[400px]" data-guard>
-                      <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+                          class="mt-2 grid grid-cols-2 gap-2 min-w-[400px]" data-guard>
+                      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
                       <div class="col-span-2">
                         <input class="input" name="description" value="{{ item.description }}" />
                       </div>
-                      <input class="input" type="number" step="0.001" name="estimated_quantity" placeholder="Est. qty"
-                        value="{{ item.estimated_quantity or '' }}" />
-                      <input class="input" type="number" step="0.01" name="estimated_unit_cost"
-                        placeholder="Est. unit cost" value="{{ item.estimated_unit_cost or '' }}" />
-                      <input class="input" type="number" step="0.001" name="actual_quantity" placeholder="Act. qty"
-                        value="{{ item.actual_quantity or '' }}" />
-                      <input class="input" type="number" step="0.01" name="actual_unit_cost"
-                        placeholder="Act. unit cost" value="{{ item.actual_unit_cost or '' }}" />
+                      <input class="input" type="number" step="any" name="estimated_quantity"
+                             placeholder="Est. qty" value="{{ item.estimated_quantity or '' }}" />
+                      <input class="input" type="number" step="any" name="estimated_unit_cost"
+                             placeholder="Est. unit cost" value="{{ item.estimated_unit_cost or '' }}" />
+                      <input class="input" type="number" step="any" name="actual_quantity"
+                             placeholder="Act. qty" value="{{ item.actual_quantity or '' }}" />
+                      <input class="input" type="number" step="any" name="actual_unit_cost"
+                             placeholder="Act. unit cost" value="{{ item.actual_unit_cost or '' }}" />
                       <select class="select col-span-2" name="status">
                         <option value="">— keep status —</option>
                         {% for s in ['PLANNED', 'IN_PROGRESS', 'COMPLETED'] %}
-                        <option value="{{ s }}" {% if item.status==s %}selected{% endif %}>
+                        <option value="{{ s }}" {% if item.status == s %}selected{% endif %}>
                           {{ item_status_labels.get(s, s) }}
                         </option>
                         {% endfor %}
@@ -369,8 +392,8 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
                       <button class="btn btn-primary btn-sm col-span-2">Save</button>
                     </form>
                     <form method="post" action="/admin/projects/{{ project.id }}/items/{{ item.id }}/delete"
-                      class="mt-1" data-confirm="Delete this cost item?">
-                      <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+                          class="mt-1" data-confirm="Delete this cost item?">
+                      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
                       <button class="btn btn-ghost btn-sm text-noctra-danger">Delete</button>
                     </form>
                   </details>
@@ -384,18 +407,18 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
       {% endif %}
       {% endfor %}
       {% else %}
-      <p class="text-neutral-500 text-sm mt-2">No cost items yet. Add the first one below.</p>
+      <p class="text-noctra-dim text-sm mt-2">No cost items yet. Add the first one below.</p>
       {% endif %}
     </div>
 
-    {# ── Add item form ─────────────────────────────── #}
-    {% if project.status not in ('DELIVERED', 'CANCELLED') %}
+    {# ── Add item form ────────────────────────────── #}
+    {% if project.status not in TERMINAL %}
     <div class="panel">
       <div class="panel-title">Add cost item</div>
 
-      <form method="post" action="/admin/projects/{{ project.id }}/items" class="mt-3 space-y-4" data-guard
-        id="add-item-form">
-        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+      <form method="post" action="/admin/projects/{{ project.id }}/items"
+            class="mt-3 space-y-4" data-guard id="add-item-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
 
         <div class="grid md:grid-cols-3 gap-4">
           <div class="form-row">
@@ -409,7 +432,7 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
           <div class="form-row md:col-span-2">
             <label class="form-label" for="add_description">Description</label>
             <input class="input" id="add_description" name="description" required maxlength="500"
-              placeholder="e.g. Belkote 2100 clear coat" />
+                   placeholder="e.g. Belkote 2100 clear coat" />
           </div>
         </div>
 
@@ -419,7 +442,7 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
             <option value="">—</option>
             {% for m in materials %}
             <option value="{{ m.id }}">
-              {{ m.name }} ({{ m.stock_unit }} @ {{ m.cost_per_stock_unit | rupiah }})
+              {{ m.name }} ({{ m.stock_unit }} @ {{ m.cost_per_stock_unit | rupiah(decimals=2) }})
             </option>
             {% endfor %}
           </select>
@@ -444,20 +467,20 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
           </div>
           <div class="form-row">
             <label class="form-label" for="add_est_qty">Est. quantity</label>
-            <input class="input" type="number" step="0.001" id="add_est_qty" name="estimated_quantity" />
+            <input class="input" type="number" step="any" id="add_est_qty" name="estimated_quantity" />
           </div>
           <div class="form-row">
             <label class="form-label" for="add_est_cost">Est. unit cost</label>
-            <input class="input" type="number" step="0.01" id="add_est_cost" name="estimated_unit_cost"
-              placeholder="auto from material/employee" />
+            <input class="input" type="number" step="any" id="add_est_cost" name="estimated_unit_cost"
+                   placeholder="auto from material/employee" />
           </div>
           <div class="form-row">
             <label class="form-label" for="add_act_qty">Actual quantity</label>
-            <input class="input" type="number" step="0.001" id="add_act_qty" name="actual_quantity" />
+            <input class="input" type="number" step="any" id="add_act_qty" name="actual_quantity" />
           </div>
         </div>
 
-        <div class="text-xs text-neutral-500">
+        <div class="text-xs text-noctra-dim">
           Overhead rate: {{ overhead_rate_per_hour | rupiah }}/hour. Enter labor hours as the quantity
           to allocate overhead proportionally.
         </div>
@@ -469,7 +492,7 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
 
   </div>
 
-  {# ── Sidebar ────────────────────────────────────── #}
+  {# ── Sidebar ─────────────────────────────────── #}
   <aside class="space-y-6 lg:sticky lg:top-4 lg:self-start">
 
     <div class="panel">
@@ -479,51 +502,55 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
         <a href="/admin/customers/{{ customer.id }}" class="font-medium hover:text-noctra-accent">
           {{ customer.name }}
         </a>
-        <div class="mono text-xs text-neutral-500 mt-1">{{ customer.code }}</div>
+        <div class="mono text-xs text-noctra-dim mt-1">{{ customer.code }}</div>
         {% if customer.phone %}
-        <div class="text-xs text-neutral-500 mt-2">{{ customer.phone }}</div>
+        <div class="text-xs text-noctra-muted mt-2">{{ customer.phone }}</div>
         {% endif %}
       </div>
       {% else %}
-      <p class="text-neutral-500 text-sm mt-2">No customer.</p>
+      <p class="text-noctra-dim text-sm mt-2">No customer.</p>
       {% endif %}
       {% if vehicle %}
-      <hr class="hr" />
-      <a href="/admin/vehicles/{{ vehicle.id }}" class="font-medium hover:text-noctra-accent">
-        {{ vehicle.brand }} {{ vehicle.model }}
-      </a>
-      {% if vehicle.plate_number %}
-      <div class="mono text-xs text-neutral-500 mt-1">{{ vehicle.plate_number }}</div>
-      {% endif %}
+      <div class="mt-4 pt-4 border-t border-noctra-border">
+        <a href="/admin/vehicles/{{ vehicle.id }}" class="font-medium hover:text-noctra-accent">
+          {{ vehicle.brand }} {{ vehicle.model }}
+        </a>
+        {% if vehicle.plate_number %}
+        <div class="mono text-xs text-noctra-dim mt-1">{{ vehicle.plate_number }}</div>
+        {% endif %}
+      </div>
       {% endif %}
     </div>
 
-    {# ── Source inquiry ────────────────────────────── #}
+    {# ── Source inquiry ───────────────────────────── #}
     {% if source_inquiry %}
     <div class="panel">
       <div class="panel-title">Source inquiry</div>
       <a href="/admin/inquiries/{{ source_inquiry.id }}" class="block mt-3 font-medium hover:text-noctra-accent">
         {{ source_inquiry.code }}
       </a>
-      <div class="text-xs text-neutral-500 mt-1">{{ source_inquiry.status }}</div>
+      <div class="text-xs text-noctra-muted mt-1">
+        {{ inquiry_status_labels.get(source_inquiry.status, source_inquiry.status) if inquiry_status_labels else source_inquiry.status }}
+      </div>
     </div>
     {% endif %}
 
-    {# ── Status workflow ───────────────────────────── #}
+    {# ── Status workflow ──────────────────────────── #}
     {% if next_statuses %}
     <div class="panel">
       <div class="panel-title">Advance workflow</div>
-      <p class="text-xs text-neutral-500 mt-1">
-        From <strong>{{ status_labels.get(project.status, project.status) }}</strong>:
+      <p class="text-xs text-noctra-dim mt-1">
+        From <strong class="text-noctra-text">{{ status_labels.get(project.status, project.status) }}</strong>:
       </p>
-      <form method="post" action="/admin/projects/{{ project.id }}/status" class="mt-3 space-y-3" data-guard>
-        <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+      <form method="post" action="/admin/projects/{{ project.id }}/status"
+            class="mt-3 space-y-3" data-guard>
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
         <select class="select" name="status" required>
           {% for s in next_statuses %}
           <option value="{{ s }}">{{ status_labels.get(s, s) }}</option>
           {% endfor %}
         </select>
-        <textarea class="textarea" name="note" rows="2" placeholder="Note (optional)"></textarea>
+        <textarea class="textarea" name="note" rows="2" placeholder="Note (optional)" maxlength="2000"></textarea>
         <button class="btn btn-primary btn-sm btn-block">Apply</button>
       </form>
     </div>
@@ -531,17 +558,17 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
 
     <div class="panel">
       <div class="panel-title">Timeline</div>
-      <dl class="mt-3 text-xs text-neutral-500 space-y-1">
+      <dl class="mt-3 text-xs text-noctra-dim space-y-1">
         <div>Created {{ project.created_at | dt_id }}</div>
         {% if project.start_date %}
-        <div>Start {{ project.start_date.strftime('%d %b %Y') }}</div>
+        <div>Start {{ project.start_date | date_id }}</div>
         {% endif %}
         {% if project.target_end_date %}
-        <div>Target {{ project.target_end_date.strftime('%d %b %Y') }}</div>
+        <div>Target {{ project.target_end_date | date_id }}</div>
         {% endif %}
         {% if project.actual_end_date %}
         <div class="text-noctra-success">
-          Delivered {{ project.actual_end_date.strftime('%d %b %Y') }}
+          Delivered {{ project.actual_end_date | date_id }}
         </div>
         {% endif %}
       </dl>
@@ -550,24 +577,21 @@ and project.status not in ('DELIVERED', 'CANCELLED') %}
     {% if project.internal_notes %}
     <div class="panel">
       <div class="panel-title">Notes</div>
-      <p class="text-neutral-300 mt-2 whitespace-pre-line text-sm">{{ project.internal_notes }}</p>
+      <p class="text-noctra-muted mt-2 whitespace-pre-line text-sm">{{ project.internal_notes }}</p>
     </div>
     {% endif %}
 
     {% if project.closing_note %}
     <div class="panel">
       <div class="panel-title">Status log</div>
-      <pre class="text-xs text-neutral-400 mt-2 whitespace-pre-wrap font-mono">{{ project.closing_note }}</pre>
+      <pre class="text-xs text-noctra-muted mt-2 whitespace-pre-wrap font-mono">{{ project.closing_note }}</pre>
     </div>
     {% endif %}
 
   </aside>
 </div>
-
 {% endblock %}
 
-
-{# 🐛 FIX: Pindahkan script ke extra_js dan bungkus dengan IIFE #}
 {% block extra_js %}
 <script>
 (() => {

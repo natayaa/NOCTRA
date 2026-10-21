@@ -2,7 +2,7 @@
   <button type="button"
           class="admin-icon-btn"
           data-sidebar-toggle
-          aria-label="Toggle navigation"
+          aria-label="Open navigation"
           aria-expanded="false"
           aria-controls="admin-sidebar">
     <svg viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
@@ -13,34 +13,32 @@
 
   <div class="admin-header-spacer"></div>
 
-  {# Search #}
-  <div class="admin-header-search">
+  {# Command palette trigger #}
+  <button type="button"
+          class="topbar-search"
+          data-command-open
+          aria-haspopup="dialog"
+          aria-label="Search or jump to a page">
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/>
       <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
     </svg>
-    <input type="search"
-           placeholder="Search anything…"
-           autocomplete="off"
-           data-search-input
-           aria-label="Search" />
-    <kbd class="admin-header-search-kbd" aria-hidden="true">⌘K</kbd>
-  </div>
-
-  {# Notifications #}
-  <button type="button" class="admin-icon-btn" aria-label="Notifications">
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" stroke="currentColor"
-            stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" stroke="currentColor"
-            stroke-width="1.75" stroke-linecap="round"/>
-    </svg>
-    <span class="dot" aria-hidden="true"></span>
+    <span class="topbar-search-label">Search or jump to…</span>
+    <kbd class="kbd" data-shortcut-hint aria-hidden="true">Ctrl K</kbd>
   </button>
+
+  {# Activity log replaces the old always-on notification dot #}
+  <a href="/admin/audit" class="admin-icon-btn" aria-label="Activity log" title="Activity log">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor"
+            stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </a>
 
   {# User menu — native <details> disclosure #}
   {% if current_user %}
   {% set display_name = current_user.full_name or current_user.username or '?' %}
+  {% set role_label = 'Superadmin' if current_user.is_superuser else (current_user.roles[0].name if current_user.roles else '') %}
   <details class="user-menu">
     <summary class="user-menu-trigger" aria-label="Account menu: {{ display_name }}">
       <div class="avatar" aria-hidden="true">{{ display_name[:1] | upper }}</div>
@@ -58,8 +56,11 @@
     <div class="user-menu-panel">
       <div class="user-menu-meta">
         <div class="name truncate">{{ display_name }}</div>
-        {% if current_user.role %}
-          <div class="role">{{ current_user.role }}</div>
+        {% if current_user.email %}
+          <div class="email truncate">{{ current_user.email }}</div>
+        {% endif %}
+        {% if role_label %}
+          <div class="role">{{ role_label }}</div>
         {% endif %}
       </div>
 

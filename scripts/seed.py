@@ -18,12 +18,10 @@ from app.core.database import SessionLocal
 from app.modules.rbac.constants import DEFAULT_ROLE_PERMISSIONS
 from app.modules.rbac.models import Permission, Role, RolePermission
 
-# ── Register every model module before SQLAlchemy configures mappers.
-# Without these, string relationship targets (e.g. `"User"` inside
+# Register every model module before SQLAlchemy configures mappers.
+# Without this, string relationship targets (e.g. `"User"` inside
 # Role.users) fail to resolve.
-from app.modules.auth import models as _auth_models          # noqa: F401
-from app.modules.audit import models as _audit_models        # noqa: F401
-from app.modules.settings import models as _settings_models  # noqa: F401
+import app.core.models_registry  # noqa: F401
 
 
 async def seed_permissions(db) -> dict[str, Permission]:

@@ -5,15 +5,16 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import ValidationError as PydanticValidationError
 
+from app.core.constants import PermissionCode
 from app.core.deps import DbSession
-from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
 from app.modules.auth.dependencies import get_current_user
 from app.modules.inventory.constants import (
@@ -27,7 +28,6 @@ from app.modules.inventory.constants import (
     TRANSACTION_TYPES,
     UNITS,
     ReferenceType,
-    TransactionType,
 )
 from app.modules.inventory.repository import (
     InventoryTransactionRepository,
@@ -38,19 +38,15 @@ from app.modules.inventory.schemas import (
     InventoryTransactionCreate,
     MaterialCreate,
     MaterialUpdate,
-    MaterialUpdatePrice,
 )
 from app.modules.inventory.service import InventoryService, MaterialService
+from app.web.admin._perms import read, write
 from app.web.templates_env import templates
 
 router = APIRouter(prefix="/admin/materials", tags=["admin-materials"])
 
 _FORM_ERRORS = (AppError, PydanticValidationError, ValueError, KeyError)
 
-
-# ════════════════════════════════════════════════════════════════
-# HELPERS
-# ════════════════════════════════════════════════════════════════
 
 def _catalog_context() -> dict:
     return {
@@ -67,19 +63,18 @@ def _catalog_context() -> dict:
 
 
 def _form_error(exc: Exception) -> str:
-    msg = getattr(exc, "message", None) or str(exc)
-    return (msg or "Invalid input").strip()
+    return (getattr(exc, "message", None) or str(exc) or "Invalid input").strip()
 
 
 def _redirect_with_error(material_id: UUID, exc: Exception) -> RedirectResponse:
     return RedirectResponse(
-        url=f"/admin/materials/{material_id}?error={quote(_form_error(exc), safe='')}",
+        url=f"/admin/materials/{material_id}?error="
+            f"{quote(_form_error(exc), safe='')}",
         status_code=303,
     )
 
 
 def _safe_float(raw) -> float | None:
-    """Safely parse float; return None if empty or invalid (Pydantic will handle)."""
     if raw is None:
         return None
     s = str(raw).strip()
@@ -89,18 +84,6 @@ def _safe_float(raw) -> float | None:
         return float(s)
     except (ValueError, TypeError):
         return None
-
-
-def _safe_int(raw, default: int = 0) -> int:
-    if raw is None:
-        return default
-    s = str(raw).strip()
-    if not s:
-        return default
-    try:
-        return int(s)
-    except (ValueError, TypeError):
-        return default
 
 
 def _safe_uuid(raw) -> UUID | None:
@@ -117,7 +100,9 @@ def _safe_uuid(raw) -> UUID | None:
 
 async def _load_suppliers(db):
     return list(
-        (await db.execute(SupplierRepository(db).query(is_active=True))).scalars().all()
+        (await db.execute(
+            SupplierRepository(db).query(is_active=True)
+        )).scalars().all()
     )
 
 
@@ -134,6 +119,7 @@ async def list_view(
     category: str | None = Query(None),
     is_active: bool | None = Query(True),
     sort: str = Query("category_name"),
+    _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     repo = MaterialRepository(db)
@@ -143,24 +129,24 @@ async def list_view(
     )
     rows, meta = await paginate(db, stmt, params)
 
-    # Batch-load stock for visible materials
     material_ids = [m.id for m in rows]
     stock_map: dict = {}
     if material_ids:
-        stock_map = await InventoryTransactionRepository(db).stock_for_materials(material_ids)
+        stock_map = await InventoryTransactionRepository(db).stock_for_materials(
+            material_ids
+        )
 
-    # Stats (across all active)
     stats = await repo.stats()
-    all_categories = MATERIAL_CATEGORIES
 
-    def _qs(**overrides) -> str:
-        from urllib.parse import urlencode
+    def qs(page: int | None = None, **overrides) -> str:
         base = {
             "q": q or "",
             "category": category or "",
             "is_active": "" if is_active is None else ("true" if is_active else "false"),
             "sort": sort,
         }
+        if page is not None:
+            base["page"] = str(page)
         base.update({k: ("" if v is None else v) for k, v in overrides.items()})
         return "?" + urlencode({k: v for k, v in base.items() if v})
 
@@ -177,15 +163,15 @@ async def list_view(
             "category_filter": category or "",
             "is_active_filter": is_active,
             "sort": sort,
-            "all_categories": all_categories,
-            "qs": _qs,
+            "all_categories": MATERIAL_CATEGORIES,
+            "qs": qs,
             **_catalog_context(),
         },
     )
 
 
 # ════════════════════════════════════════════════════════════════
-# EXPORT CSV
+# EXPORT
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/export.csv")
@@ -194,15 +180,20 @@ async def export_csv(
     q: str | None = Query(None),
     category: str | None = Query(None),
     is_active: bool | None = Query(True),
+    _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ):
-    stmt = MaterialRepository(db).query(q=q, category=category, is_active=is_active)
+    stmt = MaterialRepository(db).query(
+        q=q, category=category, is_active=is_active,
+    )
     rows = (await db.execute(stmt)).scalars().all()
 
     material_ids = [m.id for m in rows]
     stock_map: dict = {}
     if material_ids:
-        stock_map = await InventoryTransactionRepository(db).stock_for_materials(material_ids)
+        stock_map = await InventoryTransactionRepository(db).stock_for_materials(
+            material_ids
+        )
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -235,12 +226,15 @@ async def export_csv(
 
 
 # ════════════════════════════════════════════════════════════════
-# CREATE
+# NEW / CREATE
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/new", response_class=HTMLResponse)
 async def new_view(
-    request: Request, db: DbSession, current=Depends(get_current_user)
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.INVENTORY_WRITE),
+    current=Depends(get_current_user),
 ) -> HTMLResponse:
     return templates.render(
         request,
@@ -257,7 +251,10 @@ async def new_view(
 
 @router.post("")
 async def create_submit(
-    request: Request, db: DbSession, current=Depends(get_current_user)
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.INVENTORY_WRITE),
+    current=Depends(get_current_user),
 ):
     form = await request.form()
 
@@ -286,8 +283,12 @@ async def create_submit(
             category=(form.get("category") or "").strip(),
             purchase_unit=(form.get("purchase_unit") or "").strip(),
             stock_unit=(form.get("stock_unit") or "").strip(),
-            stock_units_per_purchase=_safe_float(form.get("stock_units_per_purchase")) or 0,
-            current_purchase_price=_safe_float(form.get("current_purchase_price")) or 0,
+            stock_units_per_purchase=_safe_float(
+                form.get("stock_units_per_purchase")
+            ) or 0,
+            current_purchase_price=_safe_float(
+                form.get("current_purchase_price")
+            ) or 0,
             reorder_point=_safe_float(form.get("reorder_point")) or 0,
             min_stock=_safe_float(form.get("min_stock")) or 0,
             preferred_supplier_id=_safe_uuid(form.get("preferred_supplier_id")),
@@ -295,11 +296,13 @@ async def create_submit(
             notes=(form.get("notes") or "").strip() or None,
         )
         material = await MaterialService(db).create(payload, actor=current)
+        await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return await _render_error(_form_error(exc), getattr(exc, "status_code", 400))
+        return await _render_error(
+            _form_error(exc), getattr(exc, "status_code", 400)
+        )
 
-    await db.commit()
     return RedirectResponse(url=f"/admin/materials/{material.id}", status_code=303)
 
 
@@ -315,6 +318,7 @@ async def detail_view(
     params: PageParams = Depends(page_params),
     error: str | None = Query(None),
     tx_type: str | None = Query(None),
+    _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
     repo = MaterialRepository(db)
@@ -354,12 +358,17 @@ async def detail_view(
 
 
 # ════════════════════════════════════════════════════════════════
-# EDIT
+# EDIT / UPDATE
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/{material_id}/edit", response_class=HTMLResponse)
 async def edit_view(
-    material_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    material_id: UUID,
+    request: Request,
+    db: DbSession,
+    error: str | None = Query(None),
+    _=write(PermissionCode.INVENTORY_WRITE),
+    current=Depends(get_current_user),
 ) -> HTMLResponse:
     material = await MaterialRepository(db).get(material_id)
     if not material:
@@ -372,6 +381,7 @@ async def edit_view(
             "mode": "edit",
             "material": material,
             "suppliers": await _load_suppliers(db),
+            "error": error,
             **_catalog_context(),
         },
     )
@@ -379,12 +389,18 @@ async def edit_view(
 
 @router.post("/{material_id}")
 async def update_submit(
-    material_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    material_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.INVENTORY_WRITE),
+    current=Depends(get_current_user),
 ):
     form = await request.form()
 
     async def _render_error(msg: str, status_code: int = 400):
         material = await MaterialRepository(db).get(material_id)
+        fv = dict(form)
+        fv["_has_is_active"] = "1"
         return templates.render(
             request,
             "admin/materials/form.html",
@@ -394,7 +410,7 @@ async def update_submit(
                 "material": material,
                 "suppliers": await _load_suppliers(db),
                 "error": msg,
-                "form_values": dict(form),
+                "form_values": fv,
                 **_catalog_context(),
             },
             status_code=status_code,
@@ -408,33 +424,44 @@ async def update_submit(
             category=(form.get("category") or "").strip() or None,
             purchase_unit=(form.get("purchase_unit") or "").strip() or None,
             stock_unit=(form.get("stock_unit") or "").strip() or None,
-            stock_units_per_purchase=_safe_float(form.get("stock_units_per_purchase")),
+            stock_units_per_purchase=_safe_float(
+                form.get("stock_units_per_purchase")
+            ),
             reorder_point=_safe_float(form.get("reorder_point")),
             min_stock=_safe_float(form.get("min_stock")),
             preferred_supplier_id=_safe_uuid(form.get("preferred_supplier_id")),
             location=(form.get("location") or "").strip() or None,
             notes=(form.get("notes") or "").strip() or None,
-            is_active=form.get("is_active") == "true",
+            is_active=(
+                form.get("is_active") == "true"
+                if form.get("_has_is_active") == "1"
+                else None
+            ),
         )
         await MaterialService(db).update(material_id, payload, actor=current)
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return await _render_error(_form_error(exc), getattr(exc, "status_code", 400))
+        return await _render_error(
+            _form_error(exc), getattr(exc, "status_code", 400)
+        )
 
     return RedirectResponse(url=f"/admin/materials/{material_id}", status_code=303)
 
 
 # ════════════════════════════════════════════════════════════════
-# PRICE CHANGE
+# PRICE / TRANSACTION / ACTIVATE
 # ════════════════════════════════════════════════════════════════
 
 @router.post("/{material_id}/price")
 async def price_submit(
-    material_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    material_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.INVENTORY_WRITE),
+    current=Depends(get_current_user),
 ):
     form = await request.form()
-
     new_price = _safe_float(form.get("new_purchase_price"))
     if new_price is None or new_price < 0:
         return _redirect_with_error(
@@ -455,15 +482,14 @@ async def price_submit(
     return RedirectResponse(url=f"/admin/materials/{material_id}", status_code=303)
 
 
-# ════════════════════════════════════════════════════════════════
-# QUICK TRANSACTION
-# ════════════════════════════════════════════════════════════════
-
 @router.post("/{material_id}/transaction")
 async def transaction_submit(
-    material_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    material_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.INVENTORY_TRANSACT),
+    current=Depends(get_current_user),
 ):
-    """Quick-record a stock movement from the material detail page."""
     form = await request.form()
 
     quantity = _safe_float(form.get("quantity"))
@@ -491,13 +517,13 @@ async def transaction_submit(
     return RedirectResponse(url=f"/admin/materials/{material_id}", status_code=303)
 
 
-# ════════════════════════════════════════════════════════════════
-# ACTIVATE / DEACTIVATE
-# ════════════════════════════════════════════════════════════════
-
 @router.post("/{material_id}/deactivate")
 async def deactivate_submit(
-    material_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    material_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.INVENTORY_WRITE),
+    current=Depends(get_current_user),
 ):
     try:
         await MaterialService(db).update(
@@ -512,7 +538,11 @@ async def deactivate_submit(
 
 @router.post("/{material_id}/reactivate")
 async def reactivate_submit(
-    material_id: UUID, request: Request, db: DbSession, current=Depends(get_current_user)
+    material_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.INVENTORY_WRITE),
+    current=Depends(get_current_user),
 ):
     try:
         await MaterialService(db).update(

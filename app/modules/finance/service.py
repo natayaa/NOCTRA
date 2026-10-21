@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from uuid import UUID
 
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import AuditAction
@@ -64,8 +65,6 @@ class InvoiceService:
         if not await CustomerRepository(self.db).get(payload.customer_id):
             raise NotFoundError("Customer not found")
 
-        # Guard project + prevent duplicate-invoice race by acquiring the
-        # project-scoped advisory lock BEFORE the existence check.
         if payload.project_id:
             await self.repo.lock_project(payload.project_id)
 
@@ -106,7 +105,6 @@ class InvoiceService:
             status=InvoiceStatus.DRAFT.value,
             created_by_id=actor.id,
         )
-        await self.repo.add(invoice)
 
         for item_in in payload.items:
             invoice.items.append(
@@ -117,8 +115,8 @@ class InvoiceService:
                     amount=item_in.quantity * item_in.unit_price,
                 )
             )
-        await self.db.flush()
 
+        await self.repo.add(invoice)
         await self._recalc_totals(invoice)
 
         if invoice.project_id:
@@ -139,6 +137,7 @@ class InvoiceService:
                 "total": float(invoice.total),
             },
         )
+        await self.db.refresh(invoice, ["items"])
         return invoice
 
     async def create_from_project(
@@ -146,8 +145,6 @@ class InvoiceService:
     ) -> Invoice:
         from app.modules.projects.repository import ProjectRepository
 
-        # Lock BEFORE the project read so two requests can't both pass
-        # the existence check that follows.
         await self.repo.lock_project(payload.project_id)
 
         project = await ProjectRepository(self.db).get(payload.project_id)
@@ -185,7 +182,6 @@ class InvoiceService:
             notes=f"Auto-generated from project {project.code}.",
             created_by_id=actor.id,
         )
-        await self.repo.add(invoice)
 
         invoice.items.append(
             InvoiceItem(
@@ -195,8 +191,8 @@ class InvoiceService:
                 amount=price,
             )
         )
-        await self.db.flush()
 
+        await self.repo.add(invoice)
         await self._recalc_totals(invoice)
 
         await PaymentService(self.db).link_project_payments_to_invoice(
@@ -216,17 +212,66 @@ class InvoiceService:
                 "total": float(invoice.total),
             },
         )
+        await self.db.refresh(invoice, ["items"])
         return invoice
 
+    # ── UPDATE — now supports item replacement + serializes with payments
     async def update(
         self, iid: UUID, payload: InvoiceUpdate, *, actor: User
     ) -> Invoice:
-        invoice = await self._get_or_404(iid)
+        # Serialize with record()/reverse()/change_status() so that the
+        # recalc + apply_payment_status sequence is not interleaved with a
+        # concurrent payment or status change. A plain `SELECT ... FOR UPDATE`
+        # on the invoice row would not help — payments don't touch that row.
+        await self.repo.lock_for_payment(iid)
+
+        invoice = await self.repo.get(iid)
+        if not invoice:
+            raise NotFoundError("Invoice not found")
+
+        # Reload after acquiring the lock. If we waited on a concurrent
+        # payment that committed while we blocked, our identity map still
+        # holds the pre-payment snapshot.
+        await self.db.refresh(invoice)
+
         if invoice.status in TERMINAL_INVOICE_STATUSES:
             raise ConflictError(f"Cannot edit a {invoice.status} invoice")
 
+        # items=null is rejected by the schema; reaching here with a
+        # non-None value means the caller really wants to replace the list.
+        items_supplied = "items" in payload.model_fields_set
+
+        if items_supplied:
+            paid = await self.repo.paid_amount(iid)
+            if paid > 0.01:
+                raise ConflictError(
+                    f"Cannot modify invoice items — {paid:,.0f} already paid. "
+                    f"Reverse the payments first."
+                )
+
+        # Apply scalar field changes. `items` is handled separately so we
+        # don't try `setattr(invoice, "items", [InvoiceItemIn, ...])` which
+        # would confuse the ORM relationship.
         for field in payload.model_fields_set:
+            if field == "items":
+                continue
             setattr(invoice, field, getattr(payload, field))
+
+        if items_supplied and payload.items is not None:
+            # `clear()` triggers cascade="all, delete-orphan" — old items are
+            # deleted on flush. Append new items, then flush once so both the
+            # DELETEs and INSERTs are batched.
+            invoice.items.clear()
+            for item_in in payload.items:
+                invoice.items.append(
+                    InvoiceItem(
+                        description=item_in.description,
+                        quantity=item_in.quantity,
+                        unit_price=item_in.unit_price,
+                        amount=item_in.quantity * item_in.unit_price,
+                    )
+                )
+            await self.db.flush()
 
         await self._recalc_totals(invoice)
         await self.apply_payment_status(iid)
@@ -236,17 +281,29 @@ class InvoiceService:
             table_name="invoices",
             record_id=invoice.id,
             user_id=actor.id,
-            new_data={"code": invoice.code},
+            new_data={
+                "code": invoice.code,
+                "items_replaced": items_supplied,
+            },
         )
         return invoice
 
+    # ── CHANGE STATUS — now serializes with payments too
     async def change_status(
         self, iid: UUID, new_status: str, *, actor: User
     ) -> Invoice:
         if new_status not in INVOICE_STATUSES:
             raise ValidationError(f"status must be one of {INVOICE_STATUSES}")
 
-        invoice = await self._get_or_404(iid)
+        # Serialize with record()/reverse()/update() so status flips can't
+        # race a concurrent payment and lose the PAID→OVERDUE downgrade.
+        await self.repo.lock_for_payment(iid)
+
+        invoice = await self.repo.get(iid)
+        if not invoice:
+            raise NotFoundError("Invoice not found")
+        await self.db.refresh(invoice)
+
         current = invoice.status
 
         if current == InvoiceStatus.CANCELLED.value:
@@ -254,7 +311,6 @@ class InvoiceService:
         if current == InvoiceStatus.PAID.value and new_status != InvoiceStatus.PAID.value:
             raise ConflictError("Paid invoices cannot be un-paid via status change")
 
-        # Guard: can't cancel an invoice that has net payments — would orphan them.
         if new_status == InvoiceStatus.CANCELLED.value:
             paid = await self.repo.paid_amount(iid)
             if paid > 0.01:
@@ -290,11 +346,6 @@ class InvoiceService:
         return invoice
 
     async def apply_payment_status(self, iid: UUID) -> Invoice:
-        """Recompute the invoice status based on its net payments.
-
-        Only CANCELLED is truly terminal — PAID must be allowed to downgrade
-        if a payment is reversed or the invoice total is increased.
-        """
         invoice = await self._get_or_404(iid)
         if invoice.status == InvoiceStatus.CANCELLED.value:
             return invoice
@@ -373,6 +424,7 @@ class PaymentService:
             if not payload.supplier_id and not payload.reference_id:
                 raise ValidationError("Direction OUT requires a supplier or a reference")
 
+        # ── Project-referenced payment ─────────────────────────────────
         if (
             payload.reference_type == PaymentReferenceType.PROJECT.value
             and payload.reference_id
@@ -393,15 +445,52 @@ class PaymentService:
                     update={"customer_id": project.customer_id}
                 )
 
+            # If the project already has an active invoice, redirect the
+            # payment to that invoice. Otherwise it would be a phantom:
+            # recorded against the project but never seen by any invoice's
+            # balance. The invoice is the only place `paid_amount` is
+            # computed, so leaving it as PROJECT silently drops the payment
+            # from receivables and the invoice's status never updates.
+            existing_invoice = (await self.db.execute(
+                select(Invoice)
+                .where(Invoice.project_id == project.id)
+                .where(Invoice.status != InvoiceStatus.CANCELLED.value)
+                .limit(1)
+            )).scalar_one_or_none()
+            if existing_invoice:
+                payload = payload.model_copy(update={
+                    "reference_type": PaymentReferenceType.INVOICE.value,
+                    "reference_id": existing_invoice.id,
+                })
+
+        # ── Invoice-referenced payment ────────────────────────────────
         if (
             payload.reference_type == PaymentReferenceType.INVOICE.value
             and payload.reference_id
         ):
+            # Serialize concurrent payments against the same invoice — a
+            # plain `SELECT ... FOR UPDATE` on `invoices` is useless here
+            # because payment inserts don't touch that row. Two parallel
+            # IN payments would otherwise both read the same "remaining"
+            # balance and overpay the invoice.
+            await self.invoices.lock_for_payment(payload.reference_id)
+
             inv = await self.invoices.get(payload.reference_id)
             if not inv:
                 raise NotFoundError("Referenced invoice not found")
             if inv.status == InvoiceStatus.CANCELLED.value:
                 raise ConflictError("Cannot apply a payment to a cancelled invoice")
+
+            # Inherit customer from the invoice for both IN and OUT so that
+            # refunds also appear in per-customer reports.
+            if not payload.customer_id:
+                payload = payload.model_copy(
+                    update={"customer_id": inv.customer_id}
+                )
+            elif payload.customer_id != inv.customer_id:
+                raise ConflictError(
+                    "Payment customer does not match the invoice's customer."
+                )
 
             already_paid = await self.invoices.paid_amount(payload.reference_id)
 
@@ -419,11 +508,6 @@ class PaymentService:
                         f"Refund of {payload.amount:,.0f} exceeds the amount already "
                         f"paid ({already_paid:,.0f})."
                     )
-
-            if payload.customer_id and payload.customer_id != inv.customer_id:
-                raise ConflictError(
-                    "Payment customer does not match the invoice's customer."
-                )
 
         payment = Payment(
             code=await self.repo.next_code(),
@@ -474,19 +558,31 @@ class PaymentService:
         if not original:
             raise NotFoundError("Payment not found")
 
-        # FK-based: cannot reverse a reversal.
         if original.reversal_of_id is not None:
             raise ConflictError("Cannot reverse a reversal entry")
 
-        # FK + unique constraint: at most one reversal per payment.
         if await self.repo.find_reversal_for(payment_id):
             raise ConflictError(f"Payment {original.code} has already been reversed")
+
+        if (
+            original.reference_type == PaymentReferenceType.INVOICE.value
+            and original.reference_id
+        ):
+            await self.invoices.lock_for_payment(original.reference_id)
 
         opposite = (
             PaymentDirection.OUT.value
             if original.direction == PaymentDirection.IN.value
             else PaymentDirection.IN.value
         )
+
+        # Snapshot attributes BEFORE the insert — a rollback would expire
+        # `original` and any lazy access afterwards could fail or return
+        # stale data.
+        original_code = original.code
+        original_amount = float(original.amount)
+        original_reference_id = original.reference_id
+        original_reference_type = original.reference_type
 
         reversal = Payment(
             code=await self.repo.next_code(),
@@ -497,27 +593,37 @@ class PaymentService:
             customer_id=original.customer_id,
             supplier_id=original.supplier_id,
             account_id=original.account_id,
-            reference_type=original.reference_type,
-            reference_id=original.reference_id,
+            reference_type=original_reference_type,
+            reference_id=original_reference_id,
             reference_number=original.reference_number,
-            reversal_of_id=original.id,          # ← structured link
-            notes=f"Reversal of {original.code} — {reason}",  # kept for human readability
+            reversal_of_id=original.id,
+            notes=f"Reversal of {original_code} — {reason}",
             created_by_id=actor.id,
         )
-        await self.repo.add(reversal)
+
+        try:
+            await self.repo.add(reversal)
+        except IntegrityError as exc:
+            # Two concurrent `reverse(payment_id)` calls both passed the
+            # `find_reversal_for` check — the unique index on
+            # `reversal_of_id` rejected the loser. Surface as 409, not 500.
+            await self.db.rollback()
+            raise ConflictError(
+                f"Payment {original_code} has already been reversed"
+            ) from exc
 
         if (
-            original.reference_type == PaymentReferenceType.INVOICE.value
-            and original.reference_id
+            original_reference_type == PaymentReferenceType.INVOICE.value
+            and original_reference_id
         ):
-            await InvoiceService(self.db).apply_payment_status(original.reference_id)
+            await InvoiceService(self.db).apply_payment_status(original_reference_id)
 
         await self.audit.log(
             action=AuditAction.DELETE,
             table_name="payments",
             record_id=original.id,
             user_id=actor.id,
-            old_data={"code": original.code, "amount": float(original.amount)},
+            old_data={"code": original_code, "amount": original_amount},
             new_data={
                 "reversal_code": reversal.code,
                 "reversal_id": str(reversal.id),
@@ -530,11 +636,6 @@ class PaymentService:
     async def link_project_payments_to_invoice(
         self, *, project_id: UUID, invoice_id: UUID, actor: User
     ) -> int:
-        """
-        Re-point payments made against a project to its newly created invoice.
-        Both IN (collected) and OUT (refund) are relinked so the invoice's
-        net paid amount stays accurate after prior refunds.
-        """
         stmt = (
             select(Payment)
             .where(Payment.reference_type == PaymentReferenceType.PROJECT.value)
@@ -568,7 +669,7 @@ class PaymentService:
 
 
 # ════════════════════════════════════════════════════════════════
-# EXPENSE SERVICE
+# EXPENSE SERVICE (unchanged)
 # ════════════════════════════════════════════════════════════════
 
 class ExpenseService:
@@ -607,11 +708,17 @@ class ExpenseService:
             raise NotFoundError("Expense not found")
 
         if exp.payment_id:
-            locked = {"amount", "expense_date"}.intersection(payload.model_fields_set)
-            if locked:
+            changed: list[str] = []
+            if "amount" in payload.model_fields_set:
+                if abs(float(payload.amount) - float(exp.amount)) > 0.001:
+                    changed.append("amount")
+            if "expense_date" in payload.model_fields_set:
+                if payload.expense_date != exp.expense_date:
+                    changed.append("expense_date")
+            if changed:
                 raise ConflictError(
-                    "Cannot modify amount or date of an expense that is "
-                    "linked to a payment. Reverse the payment first."
+                    f"Cannot modify {', '.join(changed)} of an expense that is "
+                    f"linked to a payment. Reverse the payment first."
                 )
 
         for field in payload.model_fields_set:
@@ -643,7 +750,7 @@ class ExpenseService:
 
 
 # ════════════════════════════════════════════════════════════════
-# REPORTS
+# REPORTS (unchanged)
 # ════════════════════════════════════════════════════════════════
 
 class FinanceReportService:
@@ -653,7 +760,6 @@ class FinanceReportService:
     async def pnl(self, *, from_date: date, to_date: date) -> PnLReport:
         start, end_exclusive = day_range_bounds(from_date, to_date)
 
-        # Revenue = net cash received against invoices (reversals subtract).
         amount_expr = case(
             (Payment.direction == PaymentDirection.IN.value, Payment.amount),
             else_=-Payment.amount,
@@ -670,7 +776,6 @@ class FinanceReportService:
             PnLLine(label="Customer payments received", amount=total_revenue)
         ]
 
-        # COGS — materials consumed (minus project-linked ADJUSTMENT_IN).
         from app.modules.inventory.models import InventoryTransaction
         from app.modules.inventory.constants import TransactionType, ReferenceType
 
@@ -699,7 +804,6 @@ class FinanceReportService:
             (await self.db.execute(reversal_stmt)).scalar_one() or 0
         )
 
-        # COGS — labor + outsource, grouped by category in ONE query.
         from app.modules.projects.models import ProjectItem
         from app.modules.projects.constants import CostCategory
 
@@ -733,7 +837,6 @@ class FinanceReportService:
             (gross_profit / total_revenue) * 100 if total_revenue > 0 else 0.0
         )
 
-        # OpEx.
         opex_stmt = (
             select(
                 Expense.category,
@@ -802,8 +905,6 @@ class FinanceReportService:
         )
 
     async def receivables(self) -> ReceivablesSummary:
-        """Single-query aggregate — no N+1."""
-        # Net paid per invoice (IN − OUT against INVOICE).
         paid_subq = (
             select(
                 Payment.reference_id.label("invoice_id"),
@@ -818,7 +919,7 @@ class FinanceReportService:
         )
 
         balance = func.greatest(
-            Invoice.total - func.coalesce(paid_subq.c.paid, 0),
+            func.coalesce(Invoice.total, 0) - func.coalesce(paid_subq.c.paid, 0),
             0,
         )
         today = today_local()
@@ -852,11 +953,9 @@ class FinanceReportService:
         )
 
     async def payables(self) -> PayablesSummary:
-        """Single-query aggregate — no N+1."""
         from app.modules.inventory.constants import PurchaseOrderStatus
         from app.modules.inventory.models import PurchaseOrder
 
-        # Net paid per PO (OUT − IN against PURCHASE_ORDER).
         paid_subq = (
             select(
                 Payment.reference_id.label("po_id"),
@@ -871,7 +970,8 @@ class FinanceReportService:
         )
 
         balance = func.greatest(
-            PurchaseOrder.total_amount - func.coalesce(paid_subq.c.paid, 0),
+            func.coalesce(PurchaseOrder.total_amount, 0)
+            - func.coalesce(paid_subq.c.paid, 0),
             0,
         )
 

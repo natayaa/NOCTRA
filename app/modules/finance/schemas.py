@@ -5,7 +5,13 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.modules.finance.constants import (
     EXPENSE_CATEGORIES,
@@ -79,7 +85,10 @@ class InvoiceCreate(BaseModel):
 
     notes: str | None = None
     terms: str | None = None
-    items: list[InvoiceItemIn] = Field(default_factory=list)
+
+    # Require at least one line item — there is no endpoint for adding items
+    # after creation, so an empty invoice would be dead data.
+    items: list[InvoiceItemIn] = Field(..., min_length=1)
 
 
 class InvoiceFromProject(BaseModel):
@@ -97,12 +106,29 @@ class InvoiceUpdate(BaseModel):
     notes: str | None = None
     terms: str | None = None
 
+    # Full replacement of line items. Omit the field to leave items alone.
+    # `[]` is rejected by min_length=1 — an invoice must have >=1 item.
+    # Replacing items is only permitted while the invoice has no payments
+    # (enforced in the service layer).
+    items: list[InvoiceItemIn] | None = Field(None, min_length=1)
+
     # issue_date / discount_amount / tax_rate_pct are NON-nullable in the DB.
     # Reject explicit null so it becomes 422, not a 500 constraint error.
     @field_validator("issue_date", "discount_amount", "tax_rate_pct")
     @classmethod
     def _non_nullable(cls, v):
         return _reject_null(v)
+
+    @model_validator(mode="after")
+    def _items_not_explicit_null(self):
+        # `items: null` is ambiguous — it could mean "clear" (which we
+        # forbid) or "no change" (which the field's absence conveys).
+        # Reject it so callers get an explicit 422.
+        if "items" in self.model_fields_set and self.items is None:
+            raise ValueError(
+                "items cannot be null; omit the field to leave items unchanged"
+            )
+        return self
 
 
 class InvoiceListItem(BaseModel):
@@ -182,8 +208,20 @@ class PaymentCreate(BaseModel):
     def _validate_reference(cls, v):
         v = _clean_optional(v)
         if v is not None and v not in PAYMENT_REFERENCE_TYPES:
-            raise ValueError(f"reference_type must be one of {PAYMENT_REFERENCE_TYPES}")
+            raise ValueError(
+                f"reference_type must be one of {PAYMENT_REFERENCE_TYPES}"
+            )
         return v
+
+    @model_validator(mode="after")
+    def _check_reference_consistency(self):
+        has_type = self.reference_type is not None
+        has_id = self.reference_id is not None
+        if has_type != has_id:
+            raise ValueError(
+                "reference_type and reference_id must be provided together"
+            )
+        return self
 
 
 class PaymentListItem(BaseModel):
@@ -243,7 +281,6 @@ class ExpenseUpdate(BaseModel):
     reference_number: str | None = None
     notes: str | None = None
 
-    # Non-nullable in DB — reject explicit null with 422.
     @field_validator("category", "description", "amount", "expense_date")
     @classmethod
     def _non_nullable(cls, v):

@@ -11,7 +11,14 @@
     <p class="page-subtitle">
       {{ page_meta.total }} total
       {% if stats.get('open') %}· <span class="text-noctra-muted">{{ stats.get('open') }} open</span>{% endif %}
-      {% if stats.get('approved_price_total') %}· <span class="text-noctra-muted">Rp {{ (stats.get('approved_price_total') / 1000000) | round(1) }}M booked</span>{% endif %}
+      {% if stats.get('approved_price_total') %}
+        · <span class="text-noctra-muted">
+          {{ (stats.get('approved_price_total') / 1000000) | round(1) }}M booked
+        </span>
+      {% endif %}
+      {% if has_filters %}
+        · <a class="text-accent" href="/admin/projects">Clear filters</a>
+      {% endif %}
     </p>
   </div>
   <div class="page-actions flex gap-2">
@@ -20,7 +27,7 @@
   </div>
 </div>
 
-{# ── Status chips ───────────────────────────────────── #}
+{# ── Status chips ──────────────────────────── #}
 <div class="mb-4 overflow-x-auto pb-1">
   <div class="flex gap-2 items-center w-max">
     <a href="/admin/projects{{ qs(status='', only_open='') }}"
@@ -41,8 +48,8 @@
   </div>
 </div>
 
-{# ── Filter form ────────────────────────────────────── #}
-<form method="get" class="panel mb-4">
+{# ── Filter form ────────────────────────────── #}
+<form method="get" action="/admin/projects" class="panel mb-4">
   {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
   {% if only_open %}<input type="hidden" name="only_open" value="true" />{% endif %}
   <input type="hidden" name="per_page" value="{{ current_per_page }}" />
@@ -59,7 +66,8 @@
       <select class="select" id="assigned_lead_id" name="assigned_lead_id">
         <option value="">Anyone</option>
         {% for u in assignees %}
-          <option value="{{ u.id }}" {% if assigned_filter == u.id %}selected{% endif %}>
+          <option value="{{ u.id }}"
+                  {% if assigned_filter and assigned_filter|string == u.id|string %}selected{% endif %}>
             {{ u.full_name }}
           </option>
         {% endfor %}
@@ -82,7 +90,7 @@
   </div>
 </form>
 
-{# ── Toolbar ──────────────────────────────────────── #}
+{# ── Toolbar ──────────────────────────────── #}
 {% if projects %}
 <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
   <div class="text-xs text-noctra-dim">
@@ -112,13 +120,13 @@
 
 {% if projects %}
 
-{# ── Desktop table ──────────────────────────────────── #}
+{# ── Desktop table ──────────────────────────── #}
 <div class="hidden md:block">
   <div class="table-wrap table-wrap--sticky">
     <table class="table w-full">
       <thead>
         <tr>
-          <th class="text-left w-24">Code</th>
+          <th class="text-left w-28">Code</th>
           <th class="text-left">Customer / Title</th>
           <th class="text-left w-32">Status</th>
           <th class="text-right w-32">Selling price</th>
@@ -132,7 +140,7 @@
         {% for p in projects %}
         {% set c = customers_by_id.get(p.customer_id) %}
         <tr>
-          <td class="mono text-xs text-left">{{ p.code }}</td>
+          <td class="mono text-xs text-left whitespace-nowrap">{{ p.code }}</td>
           <td class="text-left">
             {% if c %}
               <div class="font-medium">{{ c.name }}</div>
@@ -142,19 +150,25 @@
             {% if p.title %}<div class="text-xs text-noctra-dim">{{ p.title[:60] }}</div>{% endif %}
           </td>
           <td class="text-left">
-            <span class="badge {{ status_tone.get(p.status, 'badge-neutral') }}">
+            <span class="badge {{ status_tone.get(p.status, 'badge-neutral') }} whitespace-nowrap">
               <span class="badge-dot"></span>
               {{ status_labels.get(p.status, p.status) }}
             </span>
           </td>
-          <td class="text-right font-mono text-sm">{{ (p.approved_price or p.quoted_price or 0) | rupiah }}</td>
-          <td class="text-right font-mono text-xs text-noctra-muted">{{ p.estimated_hpp | rupiah }}</td>
-          <td class="text-right font-mono text-xs">{{ p.actual_hpp | rupiah }}</td>
-          <td class="text-right font-mono text-sm
+          <td class="text-right font-mono text-sm whitespace-nowrap">
+            {{ (p.approved_price or p.quoted_price or 0) | rupiah }}
+          </td>
+          <td class="text-right font-mono text-xs text-noctra-muted whitespace-nowrap">
+            {{ p.estimated_hpp | rupiah }}
+          </td>
+          <td class="text-right font-mono text-xs whitespace-nowrap">
+            {{ p.actual_hpp | rupiah }}
+          </td>
+          <td class="text-right font-mono text-sm whitespace-nowrap
             {% if p.actual_gross_margin_pct >= 50 %}text-noctra-success
             {% elif p.actual_gross_margin_pct >= 30 %}text-noctra-warning
             {% else %}text-noctra-danger{% endif %}">
-            {{ '%.1f'|format(p.actual_gross_margin_pct) }}%
+            {{ p.actual_gross_margin_pct | pct }}
           </td>
           <td class="text-right whitespace-nowrap">
             <a href="/admin/projects/{{ p.id }}" class="btn btn-ghost btn-sm">Open</a>
@@ -166,11 +180,12 @@
   </div>
 </div>
 
-{# ── Mobile cards ───────────────────────────────────── #}
+{# ── Mobile cards ────────────────────────────── #}
 <div class="md:hidden space-y-3">
   {% for p in projects %}
   {% set c = customers_by_id.get(p.customer_id) %}
-  <a href="/admin/projects/{{ p.id }}" class="block panel !p-4 active:scale-[0.995] transition">
+  <a href="/admin/projects/{{ p.id }}"
+     class="block panel !p-4 active:scale-[0.995] transition">
     <div class="flex items-start justify-between gap-2 mb-1">
       <span class="mono text-xs text-noctra-dim">{{ p.code }}</span>
       <span class="badge {{ status_tone.get(p.status, 'badge-neutral') }} shrink-0">
@@ -196,7 +211,7 @@
           {% if p.actual_gross_margin_pct >= 50 %}text-noctra-success
           {% elif p.actual_gross_margin_pct >= 30 %}text-noctra-warning
           {% else %}text-noctra-danger{% endif %}">
-          {{ '%.1f'|format(p.actual_gross_margin_pct) }}%
+          {{ p.actual_gross_margin_pct | pct }}
         </div>
       </div>
     </div>

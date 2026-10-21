@@ -19,6 +19,7 @@ from app.modules.inquiries.constants import (
     SERVICE_INTEREST_LABELS,
 )
 from app.modules.inquiries.models import Inquiry
+from app.modules.settings.constants import KEY_NOTIFICATIONS_SALES_EMAIL
 
 
 async def notify_inquiry_received(
@@ -84,7 +85,7 @@ async def notify_inquiry_received(
     # ── 2. Sales notification ──
     from app.modules.settings.service import SettingsService
     sales_email = await SettingsService(db).get_value(
-        "notifications.sales_email", settings.PUBLIC_EMAIL,
+        KEY_NOTIFICATIONS_SALES_EMAIL, settings.PUBLIC_EMAIL,
     )
 
     if sales_email:

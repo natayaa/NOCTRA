@@ -41,8 +41,6 @@ class InquiryRepository:
         only_open: bool = False,
         sort: str = "created_desc",
     ) -> Select:
-        # `noload` prevents the selectin eager loader for photos from
-        # firing on list queries — photos are only needed in detail views.
         stmt = select(Inquiry).options(noload(Inquiry.photos))
         conds = []
 
@@ -68,15 +66,11 @@ class InquiryRepository:
         if finish_preference:
             conds.append(Inquiry.finish_preference == finish_preference)
         if only_open:
-            # Consistent with stats: everything except CONVERTED / LOST
-            # (i.e. includes APPROVED, which still needs action).
             conds.append(Inquiry.status.in_(NON_TERMINAL_STATUSES))
 
         if conds:
             stmt = stmt.where(and_(*conds))
 
-        # Stable secondary sort on id prevents pagination drift when
-        # created_at timestamps collide (e.g. bulk imports).
         if sort == "created_asc":
             stmt = stmt.order_by(Inquiry.created_at.asc(), Inquiry.id.asc())
         elif sort == "updated_desc":
@@ -113,7 +107,6 @@ class InquiryRepository:
         return int((await self.db.execute(stmt)).scalar_one() or 0)
 
     async def stats(self, *, assigned_to_id: UUID | None = None) -> dict[str, int]:
-        """Return counts per status + overdue follow-ups."""
         base = select(Inquiry.status, func.count(Inquiry.id)).group_by(Inquiry.status)
         if assigned_to_id is not None:
             base = base.where(Inquiry.assigned_to_id == assigned_to_id)
@@ -131,20 +124,13 @@ class InquiryRepository:
 
         return {
             "total": sum(by_status.values()),
-            # `open` matches the `only_open=true` filter exactly.
             "open": sum(by_status.get(s, 0) for s in NON_TERMINAL_STATUSES),
             "overdue": overdue,
-            # Pre-approval subset for KPI widgets.
             "pre_approval": sum(by_status.get(s, 0) for s in OPEN_STATUSES),
             **{f"status_{k}": v for k, v in by_status.items()},
         }
 
     async def next_code(self) -> str:
-        """
-        Generate NOCTRA-I-YYYY-NNNNNN under an advisory lock.
-        Annual reset; the lock key includes the year to avoid serialising
-        across the year boundary.
-        """
         year = datetime.now(UTC).year
         prefix = f"NOCTRA-I-{year}-"
 
@@ -162,6 +148,31 @@ class InquiryRepository:
         last = (await self.db.execute(stmt)).scalar_one_or_none()
         next_n = 1 if last is None else int(last.rsplit("-", 1)[-1]) + 1
         return f"{prefix}{next_n:06d}"
+
+    # ── Advisory locks ────────────────────────────────
+    async def lock_for_mutation(self, inquiry_id: UUID) -> None:
+        """Serialize workflow mutations (assign, status change, convert).
+
+        A single key is used for all workflow mutations so that a concurrent
+        `assign` and `change_status(LOST)` cannot both pass their
+        `TERMINAL_STATUSES` check — without this lock, an inquiry could end
+        up terminal *and* still carry an assignee.
+        """
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": f"inquiry-mutate:{inquiry_id}"},
+        )
+
+    async def lock_for_photo(self, inquiry_id: UUID) -> None:
+        """Serialize photo uploads so the MAX_PHOTOS check is atomic.
+
+        Separate key from `lock_for_mutation` — photo uploads should not be
+        blocked by (or block) workflow transitions.
+        """
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+            {"k": f"inquiry-photo:{inquiry_id}"},
+        )
 
     # ── Writes ────────────────────────────────────────
     async def add(self, inquiry: Inquiry) -> Inquiry:

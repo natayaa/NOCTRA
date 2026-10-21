@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -22,6 +23,29 @@ def _payload(code: str, message: str, *, details=None) -> dict:
     return body
 
 
+def _safe_errors(errors: list[dict], *, include_ctx: bool) -> list[dict]:
+    """Strip non-serialisable / secret-bearing fields from Pydantic errors.
+
+    `ctx` may hold the raw `ValueError`/`TypeError` instance raised by a
+    custom validator — a plain `JSONResponse` would choke on it. `input`
+    echoes request data back to the caller and can leak passwords/tokens.
+    """
+    out = []
+    for err in errors:
+        item = {k: v for k, v in err.items() if k != "input"}
+        if "url" in item:
+            item["url"] = str(item["url"])
+        if include_ctx and "ctx" in item and isinstance(item["ctx"], dict):
+            item["ctx"] = {
+                k: (str(v) if isinstance(v, BaseException) else v)
+                for k, v in item["ctx"].items()
+            }
+        else:
+            item.pop("ctx", None)
+        out.append(item)
+    return out
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
@@ -41,17 +65,14 @@ def register_error_handlers(app: FastAPI) -> None:
     async def _validation_error(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        errors = exc.errors()
-        if settings.is_production:
-            # `input` and `ctx` may contain secrets (passwords, tokens).
-            # Strip them outside development/test.
-            errors = [
-                {k: v for k, v in e.items() if k not in ("input", "ctx")}
-                for e in errors
-            ]
+        safe = _safe_errors(exc.errors(), include_ctx=settings.APP_DEBUG)
         return JSONResponse(
             status_code=422,
-            content=_payload("validation_error", "Invalid input", details=errors),
+            content=_payload(
+                "validation_error",
+                "Invalid input",
+                details=jsonable_encoder(safe),
+            ),
         )
 
     @app.exception_handler(StarletteHTTPException)
@@ -74,7 +95,6 @@ def register_error_handlers(app: FastAPI) -> None:
             error_message=str(exc),
         )
         if settings.APP_DEBUG:
-            # Re-raise so the debug traceback shows up in the response.
             raise exc
         return JSONResponse(
             status_code=500,

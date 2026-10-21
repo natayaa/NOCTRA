@@ -9,15 +9,21 @@ Time-basis conventions:
               in the period.
   - OpEx    → from `expenses` where `expense_date` is in the period.
   - Revenue/Cost by customer → from `projects.approved_price` (or quoted).
+
+All date filters assume the app's configured timezone (APP_TIMEZONE), not
+UTC. That keeps `resolve_period()`'s Jakarta-relative dates consistent
+with the `timestamptz` filters below.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.modules.analytics.constants import pick_interval
 from app.modules.analytics.schemas import (
     ActivityEntry,
@@ -57,6 +63,8 @@ from app.modules.projects.constants import (
 )
 from app.modules.projects.models import Project, ProjectItem
 
+_APP_TZ = ZoneInfo(settings.APP_TIMEZONE)
+
 
 # ── Date-range helpers ────────────────────────────────────────
 # All `*.created_at` columns are timestamptz. Wrapping them in
@@ -64,13 +72,17 @@ from app.modules.projects.models import Project, ProjectItem
 # a half-open datetime range [start_of_day, start_of_next_day).
 # Both boundaries are inclusive/exclusive correctly, even with
 # rows that fall exactly at midnight.
+#
+# The boundaries are expressed in APP_TIMEZONE, matching the
+# `resolve_period()` presets ("today", "last 7 days") which are
+# computed in the same timezone.
 
 def _day_start(d: date) -> datetime:
-    return datetime.combine(d, time.min, tzinfo=UTC)
+    return datetime.combine(d, time.min, tzinfo=_APP_TZ)
 
 
 def _day_end_exclusive(d: date) -> datetime:
-    return datetime.combine(d + timedelta(days=1), time.min, tzinfo=UTC)
+    return datetime.combine(d + timedelta(days=1), time.min, tzinfo=_APP_TZ)
 
 
 # ── Formatting ────────────────────────────────────────────────
@@ -177,7 +189,8 @@ class AnalyticsService:
             )
 
             outstanding = func.greatest(
-                Invoice.total - func.coalesce(paid_subq.c.paid, 0),
+                func.coalesce(Invoice.total, 0)
+                - func.coalesce(paid_subq.c.paid, 0),
                 0,
             )
 
@@ -380,7 +393,11 @@ class AnalyticsService:
         self, from_date: date, to_date: date, interval: str | None = None
     ) -> list[CashFlowPoint]:
         interval = interval or pick_interval(from_date, to_date)
-        bucket = func.date_trunc(interval, Payment.payment_date).label("period")
+
+        if interval == "day":
+            bucket = Payment.payment_date.label("period")
+        else:
+            bucket = func.date_trunc(interval, Payment.payment_date).label("period")
 
         stmt = (
             select(
@@ -422,7 +439,15 @@ class AnalyticsService:
 
         rev = await self.revenue_series(from_date, to_date, interval)
 
-        cogs_bucket = func.date_trunc(interval, ProjectItem.created_at).label("period")
+        # COGS is derived from `project_items.created_at` (timestamptz).
+        # `date_trunc` on a timestamptz truncates in the *session* timezone,
+        # which defaults to UTC — that would misbucket a project created at
+        # 01:00 Jakarta into the previous UTC day. Convert to local time
+        # first so bucketing matches `payments.payment_date` (a plain DATE).
+        cogs_bucket = func.date_trunc(
+            interval,
+            func.timezone(settings.APP_TIMEZONE, ProjectItem.created_at),
+        ).label("period")
         cogs_stmt = (
             select(
                 cogs_bucket,
@@ -442,12 +467,18 @@ class AnalyticsService:
             for r in cogs_rows
         }
 
+        # Union of periods — a COGS-only period (revenue recognised later)
+        # must still appear on the chart, showing as a loss. Iterating only
+        # over `rev.points` would silently drop those periods.
+        revenue_by_period: dict[date, float] = {p.period: p.value for p in rev.points}
+        all_periods = sorted(set(revenue_by_period) | set(cogs_by_period))
         points = [
             SeriesPoint(
-                period=p.period,
-                value=p.value - cogs_by_period.get(p.period, 0.0),
+                period=period,
+                value=revenue_by_period.get(period, 0.0)
+                - cogs_by_period.get(period, 0.0),
             )
-            for p in rev.points
+            for period in all_periods
         ]
         return SeriesSet(label="Gross profit", interval=interval, points=points)
 
@@ -461,20 +492,24 @@ class AnalyticsService:
         revenue_expr = func.coalesce(
             Project.approved_price, Project.quoted_price, 0
         )
+        # COALESCE here is important for ORDER BY too: PostgreSQL sorts
+        # DESC with NULLS FIRST by default, so a raw `sum(actual_hpp)`
+        # would rank projects with no cost data above everything else.
+        cogs_expr = func.coalesce(func.sum(Project.actual_hpp), 0)
 
         stmt = (
             select(
                 Inquiry.service_interest,
                 func.count(Project.id).label("project_count"),
                 func.coalesce(func.sum(revenue_expr), 0).label("revenue"),
-                func.coalesce(func.sum(Project.actual_hpp), 0).label("cogs"),
+                cogs_expr.label("cogs"),
             )
             .select_from(Project)
             .outerjoin(Inquiry, Inquiry.id == Project.inquiry_id)
             .where(Project.created_at >= _day_start(from_date))
             .where(Project.created_at < _day_end_exclusive(to_date))
             .group_by(Inquiry.service_interest)
-            .order_by(func.sum(Project.actual_hpp).desc())
+            .order_by(cogs_expr.desc())
         )
         rows = (await self.db.execute(stmt)).all()
 
@@ -509,20 +544,21 @@ class AnalyticsService:
         revenue_expr = func.coalesce(
             Project.approved_price, Project.quoted_price, 0
         )
+        cogs_expr = func.coalesce(func.sum(Project.actual_hpp), 0)
 
         stmt = (
             select(
                 Vehicle.category,
                 func.count(Project.id).label("project_count"),
                 func.coalesce(func.sum(revenue_expr), 0).label("revenue"),
-                func.coalesce(func.sum(Project.actual_hpp), 0).label("cogs"),
+                cogs_expr.label("cogs"),
             )
             .select_from(Project)
             .outerjoin(Vehicle, Vehicle.id == Project.vehicle_id)
             .where(Project.created_at >= _day_start(from_date))
             .where(Project.created_at < _day_end_exclusive(to_date))
             .group_by(Vehicle.category)
-            .order_by(func.sum(Project.actual_hpp).desc())
+            .order_by(cogs_expr.desc())
         )
         rows = (await self.db.execute(stmt)).all()
 

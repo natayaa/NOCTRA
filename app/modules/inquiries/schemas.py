@@ -1,11 +1,18 @@
 """Pydantic schemas for the inquiries module."""
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from urllib.parse import unquote, urlparse
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.core.config import settings
 from app.modules.inquiries.constants import (
@@ -17,6 +24,11 @@ from app.modules.inquiries.constants import (
     SERVICE_INTERESTS,
     today_local,
 )
+
+# Guard against oversized JSONB payloads. `preferences` is user-supplied
+# and never needed for pricing/queries, so a generous upper bound is fine.
+_MAX_PREFERENCES_KEYS = 50
+_MAX_PREFERENCES_BYTES = 10_000
 
 
 # ════════════════════════════════════════════════════════════════
@@ -34,14 +46,12 @@ class InquiryPhotoIn(BaseModel):
     def _validate_url(cls, v: str) -> str:
         v = v.strip()
 
-        # ── Internal (path-based): must match a configured prefix ──
         if v.startswith("/"):
             if not any(v.startswith(p) for p in settings.MEDIA_URL_PREFIXES):
                 raise ValueError(
                     f"Internal media path must start with one of: "
                     f"{', '.join(settings.MEDIA_URL_PREFIXES)}"
                 )
-            # Reject path traversal, including encoded variants.
             decoded = unquote(v)
             if ".." in decoded.split("/"):
                 raise ValueError("Path traversal is not allowed")
@@ -49,7 +59,6 @@ class InquiryPhotoIn(BaseModel):
                 raise ValueError("Null byte in path")
             return v
 
-        # ── External (URL-based): http(s) AND host in allowlist ──
         if v.startswith(("http://", "https://")):
             parsed = urlparse(v)
             if not parsed.hostname:
@@ -64,8 +73,6 @@ class InquiryPhotoIn(BaseModel):
             host = parsed.hostname.lower()
             for allowed in settings.MEDIA_ALLOWED_HOSTS:
                 allowed = allowed.lower()
-                # Wildcard: "*.example.com" matches "a.example.com"
-                # (not bare "example.com"; that needs its own entry).
                 if allowed.startswith("*.") and host.endswith(allowed[1:]):
                     return v
                 if host == allowed:
@@ -118,11 +125,29 @@ class CustomerRequestMixin(BaseModel):
     @field_validator("has_custom_graphics")
     @classmethod
     def _non_nullable_bool(cls, v):
-        # Runs only when the field is explicitly provided. The model column
-        # is NOT NULL; a PATCH with `"has_custom_graphics": null` must be
-        # 422, not a downstream DB constraint error.
         if v is None:
             raise ValueError("has_custom_graphics cannot be null")
+        return v
+
+    @field_validator("preferences")
+    @classmethod
+    def _check_preferences_size(cls, v):
+        if v is None:
+            return v
+        if len(v) > _MAX_PREFERENCES_KEYS:
+            raise ValueError(
+                f"preferences cannot have more than {_MAX_PREFERENCES_KEYS} keys"
+            )
+        try:
+            serialized = json.dumps(v)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"preferences must be JSON-serializable: {exc}"
+            ) from exc
+        if len(serialized) > _MAX_PREFERENCES_BYTES:
+            raise ValueError(
+                f"preferences exceeds {_MAX_PREFERENCES_BYTES} bytes when serialized"
+            )
         return v
 
 
@@ -142,6 +167,15 @@ class InquiryCreate(CustomerRequestMixin):
     desired_date: date | None = None
     follow_up_date: date | None = None
     notes: str | None = Field(None, max_length=5000)
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_description(cls, v):
+        # Strip BEFORE length validation — otherwise a 20-space payload
+        # passes `min_length=20` and is stored as an empty string.
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
     @field_validator("service_interest")
     @classmethod
@@ -192,6 +226,15 @@ class InquiryUpdate(CustomerRequestMixin):
     follow_up_date: date | None = None
     notes: str | None = Field(None, max_length=5000)
 
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_description(cls, v):
+        # Same reasoning as InquiryCreate — strip before length check.
+        # `None` is allowed (field not being updated).
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
     @field_validator("service_interest")
     @classmethod
     def _validate_service(cls, v):
@@ -205,6 +248,12 @@ class InquiryUpdate(CustomerRequestMixin):
         if v is not None and v not in BUDGET_RANGES:
             raise ValueError(f"budget_range must be one of {BUDGET_RANGES}")
         return v
+
+    # Cross-field date ordering is checked in the service layer AFTER
+    # merging with the current state — a PATCH may supply only one date,
+    # and we still want to catch `follow_up_date > desired_date` against
+    # the existing counterpart. Doing it in the schema would only catch
+    # the case where both fields are in the payload.
 
 
 class InquiryAssign(BaseModel):

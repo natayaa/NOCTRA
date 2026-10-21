@@ -282,10 +282,8 @@ async def convert_to_project(
         actor=actor,
         quoted_price=payload.quoted_price,
         approved_price=payload.approved_price,
+        closing_note=payload.closing_note,
     )
-    if payload.closing_note:
-        inquiry.closing_note = payload.closing_note
-        await db.flush()
     return _detail(inquiry)
 
 

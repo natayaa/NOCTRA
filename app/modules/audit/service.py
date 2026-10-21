@@ -26,6 +26,7 @@ _SENSITIVE_SUFFIXES: tuple[str, ...] = (
     "_password", "_token", "_secret", "_api_key", "_csrf_token",
 )
 _MAX_REDACT_DEPTH = 5
+_REDACTED = "***"
 
 
 def _is_sensitive_key(k: str) -> bool:
@@ -34,16 +35,28 @@ def _is_sensitive_key(k: str) -> bool:
 
 
 def _redact(obj: Any, depth: int = 0) -> Any:
-    """Recursively replace sensitive values with '***'."""
+    """Recursively replace sensitive values with '***'.
+
+    Beyond `_MAX_REDACT_DEPTH` the subtree is replaced wholesale with
+    '***' rather than passed through, so a secret buried at depth 7+
+    cannot leak into the append-only audit log.
+    """
     if depth > _MAX_REDACT_DEPTH:
-        return obj
+        return _REDACTED
+
     if isinstance(obj, dict):
         return {
-            k: ("***" if _is_sensitive_key(k) else _redact(v, depth + 1))
+            k: (_REDACTED if _is_sensitive_key(k) else _redact(v, depth + 1))
             for k, v in obj.items()
         }
-    if isinstance(obj, (list, tuple)):
-        return type(obj)(_redact(v, depth + 1) for v in obj)
+
+    # Branch explicitly — `type(obj)(generator)` breaks on tuple/NamedTuple
+    # sub-classes. We normalise sub-classes to plain list/tuple.
+    if isinstance(obj, list):
+        return [_redact(v, depth + 1) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(_redact(v, depth + 1) for v in obj)
+
     return obj
 
 

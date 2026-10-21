@@ -188,13 +188,13 @@ class MaterialRepository:
 
     async def has_transactions(self, material_id: UUID) -> bool:
         """True if the material has at least one inventory transaction."""
-        stmt = (
-            select(func.count(InventoryTransaction.id))
+        stmt = select(
+            select(InventoryTransaction.id)
             .where(InventoryTransaction.material_id == material_id)
             .limit(1)
+            .exists()
         )
         return bool((await self.db.execute(stmt)).scalar_one())
-
     async def distinct_categories(self) -> list[str]:
         stmt = (
             select(Material.category)

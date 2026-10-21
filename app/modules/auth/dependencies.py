@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -21,6 +21,11 @@ oauth2_scheme = OAuth2PasswordBearer(
 ACCESS_COOKIE_NAME = "noctra_access_token"
 REFRESH_COOKIE_NAME = "noctra_refresh_token"
 
+# Allow tokens issued up to 1s before a password change to remain valid.
+# Protects against NTP skew between app servers that issue tokens and the
+# server that wrote `password_changed_at`.
+_CLOCK_SKEW = timedelta(seconds=1)
+
 
 async def get_current_user(
     request: Request,
@@ -29,38 +34,6 @@ async def get_current_user(
     token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE_NAME)] = None,
 ) -> User:
     """Authenticate from either a Bearer header or the access cookie."""
-
-    token = token_header or token_cookie
-    if not token:
-        raise UnauthorizedError("Missing authentication")
-
-    try:
-        payload = decode_access_token(token)
-    except ValueError as exc:
-        raise UnauthorizedError(str(exc)) from exc
-
-    user = await UserRepository(db).get(UUID(payload.sub))
-    if not user or not user.is_active:
-        raise UnauthorizedError("User not found or inactive")
-
-    # Make the authenticated user available to downstream middleware
-    # (logout, template context, request logging, etc.)
-    request.state.user = user
-    return user
-
-
-async def get_current_permissions(
-    user: Annotated[User, Depends(get_current_user)],
-    db: DbSession,
-) -> set[str]:
-    return await permissions_for_user(db, user.id)
-
-async def get_current_user(
-    request: Request,
-    token_header: Annotated[str | None, Depends(oauth2_scheme)],
-    db: DbSession,
-    token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE_NAME)] = None,
-) -> User:
     token = token_header or token_cookie
     if not token:
         raise UnauthorizedError("Missing authentication")
@@ -80,14 +53,22 @@ async def get_current_user(
     # until natural token expiry (up to 8 hours).
     if user.password_changed_at is not None:
         token_iat = datetime.fromtimestamp(payload.iat, tz=UTC)
-        # +1s tolerance for clock skew between token-issue and password-change.
-        if token_iat < user.password_changed_at:
+        if token_iat < user.password_changed_at - _CLOCK_SKEW:
             raise UnauthorizedError(
                 "Session expired — password was changed. Please log in again."
             )
 
+    # Make the authenticated user available to downstream middleware
+    # (logout, template context, request logging, etc.)
     request.state.user = user
     return user
+
+
+async def get_current_permissions(
+    user: Annotated[User, Depends(get_current_user)],
+    db: DbSession,
+) -> set[str]:
+    return await permissions_for_user(db, user.id)
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

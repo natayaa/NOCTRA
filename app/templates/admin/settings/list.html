@@ -1,36 +1,280 @@
 {% extends "admin/base.html" %}
+
 {% block content %}
+{% set category_meta = {
+  'business': {
+    'title': 'Business profile',
+    'desc': 'Identity, contact details, and locale used across documents and the public site.',
+    'icon': 'M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01'
+  },
+  'costing': {
+    'title': 'Costing & pricing',
+    'desc': 'Baseline assumptions used by the pricing engine and project estimates.',
+    'icon': 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'
+  },
+  'crm': {
+    'title': 'CRM & inquiries',
+    'desc': 'Lead routing, follow-up windows, and defaults for new customer records.',
+    'icon': 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'
+  },
+  'email': {
+    'title': 'Email / SMTP',
+    'desc': 'Outbound mail server and sender identity used for notifications and auto-responses.',
+    'icon': 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6'
+  },
+  'finance': {
+    'title': 'Finance',
+    'desc': 'Invoice numbering, payment terms, and tax defaults.',
+    'icon': 'M21 4H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM1 10h22'
+  },
+  'inventory': {
+    'title': 'Inventory',
+    'desc': 'Stock alerts and material waste tolerances for the workshop.',
+    'icon': 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.27 6.96 12 12.01l8.73-5.05M12 22.08V12'
+  },
+  'notifications': {
+    'title': 'Notifications',
+    'desc': 'Inbox destinations for new inquiries and project status changes.',
+    'icon': 'M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0'
+  },
+  'public': {
+    'title': 'Public site & intake',
+    'desc': 'Contact details shown on the website plus controls for the inquiry form and automatic replies.',
+    'icon': 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'
+  }
+} %}
+
+{% set field_meta = {
+  'business.address': {'label': 'Workshop address', 'type': 'textarea', 'wide': true, 'attrs': 'rows="3" placeholder="Street, city, province"'},
+  'business.currency': {'label': 'Currency code', 'type': 'text', 'attrs': 'maxlength="3" placeholder="IDR" spellcheck="false"'},
+  'business.email': {'label': 'Business email', 'type': 'email', 'attrs': 'placeholder="hello@noctra.id" autocomplete="off"'},
+  'business.name': {'label': 'Business name', 'type': 'text', 'attrs': 'placeholder="NOCTRA Autoworks"'},
+  'business.phone': {'label': 'Business phone', 'type': 'tel', 'attrs': 'placeholder="+62 812 0000 0000"'},
+  'business.tagline': {'label': 'Tagline', 'type': 'text', 'attrs': 'placeholder="A short line shown on invoices"'},
+  'business.tax_id': {'label': 'Tax ID (NPWP)', 'type': 'text', 'attrs': 'placeholder="00.000.000.0-000.000"'},
+  'business.timezone': {'label': 'Timezone', 'type': 'text', 'attrs': 'placeholder="Asia/Jakarta" spellcheck="false"'},
+
+  'costing.default_markup_pct': {'label': 'Default markup', 'type': 'number', 'attrs': 'min="0" step="0.01" placeholder="0.00"', 'suffix': '%'},
+  'costing.default_target_margin_pct': {'label': 'Default target margin', 'type': 'number', 'attrs': 'min="0" max="99.99" step="0.01" placeholder="0.00"', 'suffix': '%'},
+  'costing.minimum_margin_pct': {'label': 'Minimum margin', 'type': 'number', 'attrs': 'min="0" max="99.99" step="0.01" placeholder="0.00"', 'suffix': '%'},
+  'costing.monthly_labor_hours': {'label': 'Monthly labor hours', 'type': 'number', 'attrs': 'min="0" step="1" placeholder="0"', 'suffix': 'hours'},
+  'costing.overhead_monthly': {'label': 'Monthly overhead', 'type': 'number', 'attrs': 'min="0" step="1000" placeholder="0"', 'suffix': 'IDR'},
+
+  'crm.inquiry_auto_assign': {'label': 'Auto-assign new inquiries', 'type': 'boolean'},
+  'crm.inquiry_followup_hours': {'label': 'Follow-up window', 'type': 'number', 'attrs': 'min="1" step="1" placeholder="24"', 'suffix': 'hours'},
+  'crm.lead_auto_status': {'label': 'New customer status', 'type': 'select', 'options': [('LEAD', 'Lead'), ('ACTIVE', 'Active'), ('INACTIVE', 'Inactive'), ('BLOCKED', 'Blocked')]},
+
+  'email.from_address': {'label': 'From address', 'type': 'email', 'attrs': 'placeholder="hello@noctra.id" autocomplete="off"'},
+  'email.smtp_host': {'label': 'SMTP host', 'type': 'text', 'attrs': 'placeholder="smtp.example.com" spellcheck="false" autocomplete="off"'},
+  'email.smtp_port': {'label': 'SMTP port', 'type': 'number', 'attrs': 'min="1" max="65535" step="1" placeholder="587"'},
+  'email.smtp_username': {'label': 'SMTP username', 'type': 'text', 'attrs': 'placeholder="apikey" spellcheck="false" autocomplete="off"'},
+
+  'finance.invoice_prefix': {'label': 'Invoice prefix', 'type': 'text', 'attrs': 'maxlength="12" placeholder="INV" spellcheck="false"'},
+  'finance.payment_terms_days': {'label': 'Payment terms', 'type': 'number', 'attrs': 'min="0" step="1" placeholder="14"', 'suffix': 'days'},
+  'finance.tax_rate_pct': {'label': 'Tax rate', 'type': 'number', 'attrs': 'min="0" max="100" step="0.01" placeholder="11"', 'suffix': '%'},
+
+  'inventory.low_stock_threshold_pct': {'label': 'Low-stock threshold', 'type': 'number', 'attrs': 'min="0" step="0.1" placeholder="20"', 'suffix': '%'},
+  'inventory.waste_tolerance_pct': {'label': 'Waste tolerance', 'type': 'number', 'attrs': 'min="0" step="0.1" placeholder="5"', 'suffix': '%'},
+
+  'notifications.sales_email': {'label': 'Sales inbox', 'type': 'email', 'attrs': 'placeholder="sales@noctra.id" autocomplete="off"'},
+  'notifications.workshop_email': {'label': 'Workshop inbox', 'type': 'email', 'attrs': 'placeholder="workshop@noctra.id" autocomplete="off"'},
+
+  'public.address': {'label': 'Public address', 'type': 'textarea', 'wide': true, 'attrs': 'rows="3" placeholder="Street, city, province"'},
+  'public.auto_response_enabled': {'label': 'Auto-response email', 'type': 'boolean'},
+  'public.auto_response_subject': {'label': 'Auto-response subject', 'type': 'text', 'attrs': 'placeholder="Terima kasih atas inquiry Anda"'},
+  'public.email': {'label': 'Public email', 'type': 'email', 'attrs': 'placeholder="hello@noctra.id" autocomplete="off"'},
+  'public.inquiry_enabled': {'label': 'Accept public inquiries', 'type': 'boolean'},
+  'public.inquiry_rate_limit_per_hour': {'label': 'Rate limit', 'type': 'number', 'attrs': 'min="1" step="1" placeholder="5"', 'suffix': '/ hour'},
+  'public.phone': {'label': 'Public phone', 'type': 'tel', 'attrs': 'placeholder="+62 812 0000 0000"'},
+  'public.whatsapp': {'label': 'WhatsApp number', 'type': 'tel', 'attrs': 'placeholder="+62 812 0000 0000"'}
+} %}
+
+{% set ns = namespace(has_secret=false) %}
+{% for _category, _items in settings_groups.items() %}
+  {% for _s in _items %}
+    {% if _s.is_secret %}{% set ns.has_secret = true %}{% endif %}
+  {% endfor %}
+{% endfor %}
+
 <div class="page-header">
   <div>
+    <p class="page-eyebrow">System</p>
     <h1 class="page-title">Settings</h1>
-    <p class="page-subtitle">{{ total }} keys</p>
+    <p class="page-subtitle">
+      {{ total }} configured key{% if total != 1 %}s{% endif %} · changes apply immediately after saving.
+    </p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/audit?table_name=settings" class="btn btn-secondary">
+      <svg viewBox="0 0 24 24" fill="none" width="15" height="15" aria-hidden="true">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="1.75"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Audit trail
+    </a>
   </div>
 </div>
 
-<form method="post" action="/admin/settings" class="space-y-6" data-guard>
+{% if error %}
+<div class="alert alert-danger mb-5" role="alert">
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+    <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+  </svg>
+  <div>
+    <span class="alert-title">Couldn’t save settings</span>
+    {{ error }}
+  </div>
+</div>
+{% elif saved %}
+<div class="alert alert-success mb-5" role="alert">
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+    <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div>
+    <span class="alert-title">Settings saved</span>
+    The new values apply to subsequent actions immediately.
+  </div>
+</div>
+{% endif %}
+
+{% if settings_groups %}
+<form method="post" action="/admin/settings" class="settings-layout" data-guard>
   <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
 
   {% for category, items in settings_groups.items() | sort %}
-  <div class="panel">
-    <div class="panel-title">{{ category.replace('_', ' ').title() }}</div>
-    <div class="mt-4 space-y-4">
+  {% set meta = category_meta.get(category, {}) %}
+  <section class="panel settings-section" aria-labelledby="settings-{{ category }}">
+    <div class="panel-head">
+      <div class="settings-section-heading">
+        <span class="settings-section-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="{{ meta.icon or 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z' }}"
+                  stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div>
+          <h2 class="panel-title" id="settings-{{ category }}">
+            {{ meta.title or category | replace('_', ' ') | title }}
+          </h2>
+          <p class="panel-subtitle">
+            {{ meta.desc or 'Values stored under the ' ~ category ~ ' category.' }}
+          </p>
+        </div>
+      </div>
+      <span class="badge badge-neutral settings-count">{{ items | length }} field{% if items | length != 1 %}s{% endif %}</span>
+    </div>
+
+    <div class="settings-fields">
       {% for s in items %}
-      <div class="form-row !mb-0">
+      {% set fm = field_meta.get(s.key, {}) %}
+      {% set spec = known_settings.get(s.key) %}
+      {% set desc = spec.description if spec else s.description %}
+      {% set field_type = fm.type or ('password' if s.is_secret else 'text') %}
+      {% set is_secret_set = s.is_secret and s.value == '***' %}
+      {% set fallback_label = s.key.split('.')[-1] | replace('_', ' ') | title %}
+      {% set current_value = (s.value or 'false') if field_type == 'boolean' else (s.value or '') %}
+
+      <div class="settings-field{% if fm.wide or field_type == 'textarea' %} is-wide{% endif %}">
         <label class="form-label" for="setting-{{ s.key }}">
-          <span class="mono text-xs">{{ s.key }}</span>
-          {% if s.description %}<span class="text-neutral-500 ml-2">{{ s.description }}</span>{% endif %}
+          <span>{{ fm.label or fallback_label }}</span>
+          {% if s.is_secret %}
+            <span class="badge {% if is_secret_set %}badge-success{% else %}badge-warning{% endif %} settings-secret-badge">
+              {{ 'Configured' if is_secret_set else 'Not set' }}
+            </span>
+          {% endif %}
+          <code class="settings-key">{{ s.key }}</code>
         </label>
-        <input class="input" id="setting-{{ s.key }}" name="{{ s.key }}"
-               value="{{ s.value or '' }}"
-               {% if s.is_secret %}type="password"{% endif %} />
+
+        {% if field_type == 'textarea' %}
+          <textarea class="textarea settings-input"
+                    id="setting-{{ s.key }}"
+                    name="{{ s.key }}"
+                    {{ (fm.attrs or '') | safe }}>{{ '' if s.is_secret else (s.value or '') }}</textarea>
+        {% elif field_type == 'select' or field_type == 'boolean' %}
+          <select class="select settings-input"
+                  id="setting-{{ s.key }}"
+                  name="{{ s.key }}">
+            {% if field_type == 'boolean' %}
+              <option value="true" {% if current_value == 'true' %}selected{% endif %}>Enabled</option>
+              <option value="false" {% if current_value != 'true' %}selected{% endif %}>Disabled</option>
+            {% else %}
+              {% for value, label in fm.options %}
+                <option value="{{ value }}" {% if current_value == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+        {% elif s.is_secret %}
+          <div class="input-wrap">
+            <input class="input settings-input"
+                   id="setting-{{ s.key }}"
+                   name="{{ s.key }}"
+                   type="password"
+                   value=""
+                   placeholder="{{ 'Leave blank to keep the current secret' if is_secret_set else 'Enter a value' }}"
+                   {{ (fm.attrs or '') | safe }} />
+            <button type="button"
+                    class="password-toggle"
+                    data-password-toggle
+                    aria-label="Show password"
+                    aria-pressed="false">
+              <svg class="eye-on" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.75"/>
+              </svg>
+              <svg class="eye-off" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"
+                      stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        {% else %}
+          <div class="input-wrap{% if fm.suffix %} has-suffix{% endif %}">
+            <input class="input settings-input"
+                   id="setting-{{ s.key }}"
+                   name="{{ s.key }}"
+                   type="{{ field_type }}"
+                   value="{{ s.value or '' }}"
+                   {{ (fm.attrs or '') | safe }} />
+            {% if fm.suffix %}
+              <span class="input-suffix" aria-hidden="true">{{ fm.suffix }}</span>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        {% if desc and desc | lower != (fm.label or fallback_label) | lower %}
+          <p class="settings-hint">{{ desc }}</p>
+        {% endif %}
+        {% if s.is_secret %}
+          <p class="settings-hint">Stored value is never shown. Leave blank to keep it unchanged.</p>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
-  </div>
+  </section>
   {% endfor %}
 
-  <div class="sticky bottom-4 panel flex justify-end gap-3" style="background: var(--surface);">
-    <button class="btn btn-primary">Save all changes</button>
+  <div class="settings-savebar">
+    <div class="settings-savebar-text">
+      <span class="settings-savebar-title">Save changes</span>
+      <span class="settings-savebar-sub">
+        {{ 'Leave secret fields blank to keep their current value.' if ns.has_secret else 'Changes apply immediately to new quotes and documents.' }}
+      </span>
+    </div>
+    <button type="submit" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" width="15" height="15" aria-hidden="true">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"
+              stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Save settings
+    </button>
   </div>
 </form>
+{% else %}
+<div class="panel text-center py-16">
+  <p class="text-neutral-400 mb-2">No settings have been registered yet.</p>
+  <p class="text-noctra-dim text-sm">Settings appear here once they are seeded in the database.</p>
+</div>
+{% endif %}
 {% endblock %}

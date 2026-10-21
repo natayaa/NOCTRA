@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
+{% block html_lang %}id{% endblock %}
+{% block meta_robots %}index, follow{% endblock %}
+{% block body_class %}public-site{% endblock %}
+
 {% block extra_css %}
-  <link rel="stylesheet" href="/static/css/public.css" />
+  <link rel="stylesheet" href="{{ asset_url('css/public.css') }}" />
 {% endblock %}
 
 {% block body %}
-{% include "components/flash.html" %}
-
 {% set path = request.url.path if request else '/' %}
-
-<div class="public-site" style="min-height:100dvh;">
 
   <header class="pub-header">
     <div class="pub-header-inner">
 
       {# Brand #}
-      <a href="/" class="pub-brand">
+      <a href="/" class="pub-brand" aria-label="NOCTRA Autoworks — beranda">
         <span class="pub-brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 6l12 12M18 6L6 18" />
+            <path d="M5 20V4L19 20V4" />
           </svg>
         </span>
         <span class="pub-brand-text">
@@ -28,47 +28,61 @@
       </a>
 
       {# Desktop nav #}
-      <nav class="pub-nav" aria-label="Primary">
-        <a href="/services" class="{% if path.startswith('/services') %}active{% endif %}">Layanan</a>
-        <a href="/#portfolio" class="{% if path == '/#portfolio' %}active{% endif %}">Galeri</a>
-        <a href="/about" class="{% if path.startswith('/about') %}active{% endif %}">Tentang</a>
-        <a href="/contact" class="{% if path.startswith('/contact') %}active{% endif %}">Kontak</a>
+      <nav class="pub-nav" aria-label="Navigasi utama">
+        <a href="/services" class="{% if path.startswith('/services') %}active{% endif %}"
+           {% if path.startswith('/services') %}aria-current="page"{% endif %}>Layanan</a>
+        <a href="/#portfolio">Galeri</a>
+        <a href="/about" class="{% if path.startswith('/about') %}active{% endif %}"
+           {% if path.startswith('/about') %}aria-current="page"{% endif %}>Tentang</a>
+        <a href="/contact" class="{% if path.startswith('/contact') %}active{% endif %}"
+           {% if path.startswith('/contact') %}aria-current="page"{% endif %}>Kontak</a>
       </nav>
 
       {# Desktop CTA #}
       <a href="/contact" class="pub-cta">Dapatkan Penawaran</a>
 
       {# Mobile menu button #}
-      <button type="button" class="pub-menu-btn" data-mobile-toggle aria-label="Menu">
-        <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+      <button type="button"
+              class="pub-menu-btn"
+              data-mobile-toggle
+              aria-label="Buka menu"
+              aria-expanded="false"
+              aria-controls="pub-mobile-menu">
+        <svg class="menu-icon" viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
           <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+        <svg class="close-icon" viewBox="0 0 24 24" fill="none" width="20" height="20" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
         </svg>
       </button>
     </div>
 
     {# Mobile menu #}
-    <div class="pub-mobile-menu" data-mobile-menu>
-      <div class="pub-mobile-menu-inner">
-        <a href="/services">Layanan</a>
+    <div class="pub-mobile-menu" id="pub-mobile-menu" data-mobile-menu>
+      <nav class="pub-mobile-menu-inner" aria-label="Navigasi seluler">
+        <a href="/services" class="{% if path.startswith('/services') %}active{% endif %}"
+           {% if path.startswith('/services') %}aria-current="page"{% endif %}>Layanan</a>
         <a href="/#portfolio">Galeri</a>
-        <a href="/about">Tentang</a>
-        <a href="/contact">Kontak</a>
+        <a href="/about" class="{% if path.startswith('/about') %}active{% endif %}"
+           {% if path.startswith('/about') %}aria-current="page"{% endif %}>Tentang</a>
+        <a href="/contact" class="{% if path.startswith('/contact') %}active{% endif %}"
+           {% if path.startswith('/contact') %}aria-current="page"{% endif %}>Kontak</a>
         <a href="/contact" class="pub-cta">Dapatkan Penawaran</a>
-      </div>
+      </nav>
     </div>
   </header>
 
-  <main>
+  <main id="main-content">
     {% block content %}{% endblock %}
   </main>
 
   <footer class="pub-footer">
     <div class="pub-footer-inner">
       <div class="pub-footer-brand">
-        <a href="/" class="pub-brand">
+        <a href="/" class="pub-brand" aria-label="NOCTRA Autoworks — beranda">
           <span class="pub-brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M6 6l12 12M18 6L6 18" />
+              <path d="M5 20V4L19 20V4" />
             </svg>
           </span>
           <span class="pub-brand-text">
@@ -82,10 +96,10 @@
       <div class="pub-footer-col">
         <h4>Layanan</h4>
         <ul>
-          <li><a href="/services">Full Body Repaint</a></li>
-          <li><a href="/services">Restorasi</a></li>
-          <li><a href="/services">Custom Paint</a></li>
-          <li><a href="/services">Detailing</a></li>
+          <li><a href="/services#repaint">Full Body Repaint</a></li>
+          <li><a href="/services#restore">Restorasi</a></li>
+          <li><a href="/services#custom">Custom Paint</a></li>
+          <li><a href="/services#detail">Detailing</a></li>
         </ul>
       </div>
 
@@ -107,15 +121,47 @@
     </div>
 
     <div class="pub-footer-bottom">
-      <span>© {{ 2026 }} {{ app_name }}</span>
-      <span>Built with FastAPI</span>
+      <span>© {{ today().year }} {{ app_name }}</span>
+      <span>Jakarta · Indonesia</span>
     </div>
   </footer>
-</div>
 
 <script>
-  document.querySelector('[data-mobile-toggle]')?.addEventListener('click', () => {
-    document.querySelector('[data-mobile-menu]')?.classList.toggle('open');
-  });
+  (function () {
+    var btn = document.querySelector('[data-mobile-toggle]');
+    var menu = document.querySelector('[data-mobile-menu]');
+    if (!btn || !menu) return;
+
+    function setOpen(open) {
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.setAttribute('aria-label', open ? 'Tutup menu' : 'Buka menu');
+      menu.classList.toggle('open', open);
+    }
+
+    btn.addEventListener('click', function () {
+      setOpen(btn.getAttribute('aria-expanded') !== 'true');
+    });
+
+    menu.querySelectorAll('a').forEach(function (link) {
+      link.addEventListener('click', function () { setOpen(false); });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && menu.classList.contains('open')) {
+        setOpen(false);
+        btn.focus();
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!menu.classList.contains('open')) return;
+      if (menu.contains(e.target) || btn.contains(e.target)) return;
+      setOpen(false);
+    });
+
+    window.addEventListener('resize', function () {
+      if (window.innerWidth > 900) setOpen(false);
+    });
+  })();
 </script>
 {% endblock %}

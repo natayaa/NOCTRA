@@ -11,6 +11,9 @@
     <p class="page-subtitle">
       {{ page_meta.total }} total
       {% if stats.get('active') %}· <span class="text-noctra-muted">{{ stats.get('active') }} active</span>{% endif %}
+      {% if has_filters %}
+        · <a class="text-accent" href="/admin/materials">Clear filters</a>
+      {% endif %}
     </p>
   </div>
   <div class="page-actions flex gap-2">
@@ -22,8 +25,8 @@
 {# ── Category chips ─────────────────────────────────── #}
 <div class="mb-4 overflow-x-auto pb-1">
   <div class="flex gap-2 items-center w-max">
-    <a href="/admin/materials{{ qs(category='') }}"
-       class="badge whitespace-nowrap {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
+    <a href="/admin/materials{{ qs(category='', is_active='') }}"
+       class="badge whitespace-nowrap {% if not category_filter and is_active_filter is none %}badge-accent{% else %}badge-neutral{% endif %}">
       All
     </a>
     {% for c in all_categories %}
@@ -33,6 +36,10 @@
         {% if stats.get('cat_' ~ c) %}<span class="opacity-70">· {{ stats.get('cat_' ~ c) }}</span>{% endif %}
       </a>
     {% endfor %}
+    <a href="/admin/materials{{ qs(is_active='true') }}"
+       class="badge whitespace-nowrap {% if is_active_filter is sameas true %}badge-accent{% else %}badge-neutral{% endif %}">
+      Active only
+    </a>
     <a href="/admin/materials{{ qs(is_active='false') }}"
        class="badge whitespace-nowrap {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
       Disabled only
@@ -41,7 +48,7 @@
 </div>
 
 {# ── Filter form ────────────────────────────────────── #}
-<form method="get" class="panel mb-4">
+<form method="get" action="/admin/materials" class="panel mb-4">
   {% if category_filter %}<input type="hidden" name="category" value="{{ category_filter }}" />{% endif %}
   {% if is_active_filter is not none %}
     <input type="hidden" name="is_active" value="{{ 'true' if is_active_filter else 'false' }}" />
@@ -107,8 +114,7 @@
     <table class="table w-full">
       <thead>
         <tr>
-          <!-- 🐛 FIX: <th>#</th> dihapus -->
-          <th class="text-left w-24">Code</th>
+          <th class="text-left w-28">Code</th>
           <th class="text-left">Name</th>
           <th class="text-left w-32">Category</th>
           <th class="text-right w-28">Stock</th>
@@ -121,11 +127,13 @@
         {% for m in materials %}
         {% set stock = stock_map.get(m.id, 0.0) %}
         {% set cost = m.cost_per_stock_unit %}
-        {% set below_reorder = stock <= (m.reorder_point | float) %}
-        {% set below_min = stock <= (m.min_stock | float) %}
+        {% set reorder_f = m.reorder_point | float %}
+        {% set min_f = m.min_stock | float %}
+        {% set below_reorder = reorder_f > 0 and stock <= reorder_f %}
+        {% set below_min = min_f > 0 and stock <= min_f %}
         <tr class="{% if not m.is_active %}opacity-60{% endif %}
                    {% if below_min %}bg-red-500/5{% elif below_reorder %}bg-amber-500/5{% endif %}">
-          <td class="mono text-xs text-left">{{ m.code }}</td>
+          <td class="mono text-xs text-left whitespace-nowrap">{{ m.code }}</td>
           <td class="text-left">
             <div class="font-medium">
               {{ m.name }}
@@ -134,25 +142,27 @@
               {% endif %}
             </div>
             {% if m.brand %}<div class="text-xs text-noctra-dim">{{ m.brand }}</div>{% endif %}
-            {% if m.location %}<div class="text-xs text-noctra-faint">{{ m.location }}</div>{% endif %}
+            {% if m.location %}<div class="text-xs text-noctra-dim">{{ m.location }}</div>{% endif %}
           </td>
           <td class="text-left">
-            <span class="badge {{ category_tone.get(m.category, 'badge-neutral') }}">
+            <span class="badge {{ category_tone.get(m.category, 'badge-neutral') }} whitespace-nowrap">
               {{ category_labels.get(m.category, m.category) }}
             </span>
           </td>
-          <td class="text-right">
+          <td class="text-right whitespace-nowrap">
             <div class="font-mono text-sm
               {% if below_min %}text-red-400 font-medium
               {% elif below_reorder %}text-amber-400{% endif %}">
-              {{ '%.2f'|format(stock) }}
+              {{ stock | qty }}
               <span class="text-xs text-noctra-dim">{{ m.stock_unit }}</span>
             </div>
           </td>
-          <td class="text-right font-mono text-xs">
-            {{ cost | rupiah }}<span class="text-noctra-dim">/{{ m.stock_unit }}</span>
+          <td class="text-right font-mono text-xs whitespace-nowrap">
+            {{ cost | rupiah(decimals=2) }}<span class="text-noctra-dim">/{{ m.stock_unit }}</span>
           </td>
-          <td class="text-right font-mono text-sm">{{ (stock * cost) | rupiah }}</td>
+          <td class="text-right font-mono text-sm whitespace-nowrap">
+            {{ (stock * cost) | rupiah }}
+          </td>
           <td class="text-right whitespace-nowrap">
             <a href="/admin/materials/{{ m.id }}" class="btn btn-ghost btn-sm">View</a>
           </td>
@@ -168,8 +178,10 @@
   {% for m in materials %}
   {% set stock = stock_map.get(m.id, 0.0) %}
   {% set cost = m.cost_per_stock_unit %}
-  {% set below_reorder = stock <= (m.reorder_point | float) %}
-  {% set below_min = stock <= (m.min_stock | float) %}
+  {% set reorder_f = m.reorder_point | float %}
+  {% set min_f = m.min_stock | float %}
+  {% set below_reorder = reorder_f > 0 and stock <= reorder_f %}
+  {% set below_min = min_f > 0 and stock <= min_f %}
   <a href="/admin/materials/{{ m.id }}"
      class="block panel !p-4 active:scale-[0.995] transition
             {% if not m.is_active %}opacity-60{% endif %}
@@ -192,7 +204,7 @@
           {% if below_min %}text-red-400 font-medium
           {% elif below_reorder %}text-amber-400
           {% else %}text-noctra-text{% endif %}">
-          {{ '%.2f'|format(stock) }} <span class="text-xs text-noctra-dim">{{ m.stock_unit }}</span>
+          {{ stock | qty }} <span class="text-xs text-noctra-dim">{{ m.stock_unit }}</span>
         </div>
       </div>
       <div class="text-right">
