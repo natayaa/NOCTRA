@@ -69,6 +69,9 @@ class CustomerService:
             source=payload.source or CustomerSource.ADMIN.value,
             status=CustomerStatus.LEAD.value,
             is_active=True,
+            # Seed the collection before flush; assigning it afterwards
+            # triggers an async lazy load (MissingGreenlet).
+            contacts=[],
         )
         try:
             await self.repo.add(customer)
@@ -107,8 +110,8 @@ class CustomerService:
             },
         )
 
-        # New customer has no contacts — no need to `refresh` (saves a query).
-        customer.contacts = []   # set explicitly to satisfy the response DTO
+        # New customer has no contacts; the empty collection was seeded in
+        # the constructor so the response DTO can read it without IO.
         return customer
 
     # ── Find-or-create (used by public intake) ─────────
@@ -140,6 +143,7 @@ class CustomerService:
             source=source,
             status=CustomerStatus.LEAD.value,
             is_active=True,
+            contacts=[],
         )
         try:
             await self.repo.add(customer)
@@ -161,7 +165,6 @@ class CustomerService:
             new_data={"code": customer.code, "name": customer.name, "source": source},
         )
 
-        customer.contacts = []
         return customer, True
 
     # ── Update ────────────────────────────────────────

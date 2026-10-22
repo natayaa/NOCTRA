@@ -85,7 +85,14 @@ async def admin_root() -> RedirectResponse:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request) -> HTMLResponse:
-    return templates.render(request, "admin/login.html", {"title": "Sign In"})
+    return templates.render(
+        request,
+        "admin/login.html",
+        {
+            "title": "Sign In",
+            "next": request.query_params.get("next", ""),
+        },
+    )
 
 
 @router.post("/login")

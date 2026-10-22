@@ -116,6 +116,9 @@ class PublicIntakeService:
             source=InquirySource.WEBSITE.value,
             budget_range=payload.budget_range,
             desired_date=payload.desired_date,
+            # Seed before flush so nothing can trigger a lazy load
+            # (MissingGreenlet) on the new inquiry.
+            photos=[],
         )
         await self.inquiries.add(inquiry)
 

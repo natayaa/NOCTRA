@@ -7,6 +7,7 @@ from datetime import date
 from fastapi import APIRouter, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.core.csrf import get_form
 from app.core.deps import DbSession
 from app.core.exceptions import AppError
 from app.core.logging import log
@@ -89,10 +90,11 @@ async def contact_success(request: Request) -> HTMLResponse:
 
 @router.post("/contact")
 async def contact_submit(request: Request, db: DbSession):
-    form = await request.form()
+    form = await get_form(request)
 
     # ── Honeypot ─────────────────────────────────────
     if (form.get("website") or "").strip():
+        await form.close()
         return RedirectResponse(url="/contact/success", status_code=303)
 
     # ── Preferences from pref_* fields ───────────────
@@ -169,6 +171,10 @@ async def contact_submit(request: Request, db: DbSession):
             },
             status_code=exc.status_code,
         )
+    finally:
+        # FormData owns Starlette's spooled upload files; close them on
+        # both the success and validation-error paths.
+        await form.close()
 
     await db.commit()
 

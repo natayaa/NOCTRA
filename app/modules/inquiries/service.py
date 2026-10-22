@@ -78,6 +78,9 @@ class InquiryService:
             desired_date=payload.desired_date,
             follow_up_date=payload.follow_up_date,
             notes=payload.notes,
+            # Seed before flush so InquiryDetail can read it without a
+            # lazy load (MissingGreenlet) right after creation.
+            photos=[],
         )
         await self.repo.add(inquiry)
 

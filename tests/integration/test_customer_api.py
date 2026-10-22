@@ -56,7 +56,7 @@ async def test_list_customers_pagination(client: AsyncClient, admin_headers):
             headers=admin_headers,
             json={"name": f"Cust {i}", "phone": f"08000000{i:02d}"},
         )
-    r = await client.get("/api/v1/customers?page=1&size=2", headers=admin_headers)
+    r = await client.get("/api/v1/customers?page=1&per_page=2", headers=admin_headers)
     body = r.json()
     assert body["meta"]["total"] >= 3
     assert len(body["items"]) == 2

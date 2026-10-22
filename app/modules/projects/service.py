@@ -557,6 +557,9 @@ class ProjectService:
             target_end_date=payload.target_end_date,
             internal_notes=payload.internal_notes,
             created_by_id=actor.id,
+            # Seed before flush so ProjectDetail can read it without a
+            # lazy load (MissingGreenlet) right after creation.
+            items=[],
         )
         await self.repo.add(project)
 
@@ -827,6 +830,7 @@ class ProjectService:
                 f"Finish: {inquiry.finish_preference or '—'}"
             ),
             created_by_id=actor.id,
+            items=[],
         )
         await self.repo.add(project)
 

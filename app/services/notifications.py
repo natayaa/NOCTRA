@@ -64,8 +64,8 @@ async def notify_inquiry_received(
     # ── 1. Customer auto-response ──
     if customer_email:
         await email.send_template(
-            template_name=EmailTemplate.INQUIRY_AUTO_RESPONSE.value,
-            template="emails/inquiry_auto_response.html",
+            template=EmailTemplate.INQUIRY_AUTO_RESPONSE,
+            template_path="emails/inquiry_auto_response.html",
             to_email=customer_email,
             to_name=customer_name,
             subject=f"We received your inquiry — {inquiry_code}",
@@ -91,8 +91,8 @@ async def notify_inquiry_received(
     if sales_email:
         admin_url = f"{settings.APP_BASE_URL}/admin/inquiries/{inquiry_id}"
         await email.send_template(
-            template_name=EmailTemplate.INQUIRY_SALES_NOTIFICATION.value,
-            template="emails/inquiry_sales_notification.html",
+            template=EmailTemplate.INQUIRY_SALES_NOTIFICATION,
+            template_path="emails/inquiry_sales_notification.html",
             to_email=sales_email,
             to_name=None,
             subject=f"[New Inquiry] {customer_name} — {service_label or 'Inquiry'} ({inquiry_code})",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -55,6 +56,20 @@ async def _clean_tables(engine):
     async with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             await conn.execute(text(f'TRUNCATE TABLE "{table.name}" CASCADE'))
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """The sliding-window limiter is module-global; reset it per test.
+
+    Without this, login calls accumulate across the suite (10/min per IP)
+    and later tests receive 429 instead of a token.
+    """
+    from app.core.rate_limit import limiter
+
+    limiter._buckets.clear()
+    yield
+    limiter._buckets.clear()
 
 
 @pytest_asyncio.fixture

@@ -8,9 +8,14 @@ Body handling:
     For `x-www-form-urlencoded` we read the (small) body. For multipart
     we go straight to `request.form()`, which streams into Starlette's
     spooled temp files (~1 MB threshold) instead of buffering the whole
-    upload in RAM. The resulting `FormData` is cached on the request, so
-    the downstream route can call `request.form()` again and gets the
-    same object.
+    upload in RAM.
+
+    `BaseHTTPMiddleware` hands the route a different `Request` and only
+    replays the body when `body()` was called — a body consumed through
+    `stream()` (which `form()` uses for multipart) is passed downstream
+    empty. The parsed `FormData` is therefore left on the shared ASGI
+    scope, and routes must read forms through `get_form()` instead of
+    calling `request.form()` again.
 
     We deliberately use Starlette's parser for multipart rather than
     substring-searching for `name="_csrf"` — the latter also matches
@@ -22,6 +27,7 @@ from __future__ import annotations
 import hmac
 from urllib.parse import parse_qs, unquote
 
+from starlette.datastructures import FormData
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -55,6 +61,14 @@ def _clean(value: str | None) -> str | None:
     return unquote(v)
 
 
+async def get_form(request: Request) -> FormData:
+    """Return the submitted form, reusing CSRFMiddleware's multipart parse."""
+    form = request.scope.get("_csrf_form")
+    if isinstance(form, FormData):
+        return form
+    return await request.form()
+
+
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.method in SAFE_METHODS:
@@ -86,6 +100,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             ip=request.client.host if request.client else None,
             request_id=get_request_id(),
         )
+        form = request.scope.get("_csrf_form")
+        if isinstance(form, FormData):
+            await form.close()
         return self._reject(request, "token_invalid")
 
     @staticmethod
@@ -153,6 +170,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             # so a 10 MB upload costs ~1 MB RAM per request, not 10 MB.
             try:
                 form = await request.form()
+                request.scope["_csrf_form"] = form
                 raw = form.get("_csrf")
                 if isinstance(raw, str):  # ignore uploaded-file masquerade
                     token = raw

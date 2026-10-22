@@ -1,7 +1,9 @@
+from urllib.parse import quote
+
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
@@ -46,9 +48,47 @@ def _safe_errors(errors: list[dict], *, include_ctx: bool) -> list[dict]:
     return out
 
 
+def _needs_login_redirect(request: Request) -> bool:
+    """Browser page requests under /admin should land on the login page.
+
+    HTMX partial requests keep the JSON 401 so the client-side handler in
+    `htmx-config.js` can navigate away without swapping login HTML into a
+    fragment target.
+    """
+    path = request.url.path
+    if not (path == "/admin" or path.startswith("/admin/")):
+        return False
+    if path == "/admin/login":
+        return False
+    return request.headers.get("hx-request", "").lower() != "true"
+
+
+def _login_redirect(request: Request) -> RedirectResponse:
+    # Imported lazily to keep core error handling free of auth imports.
+    from app.modules.auth.dependencies import (
+        ACCESS_COOKIE_NAME,
+        REFRESH_COOKIE_NAME,
+    )
+
+    target = request.url.path
+    if request.url.query:
+        target = f"{target}?{request.url.query}"
+
+    response = RedirectResponse(
+        url=f"/admin/login?next={quote(target, safe='')}",
+        status_code=303,
+    )
+    # A stale or revoked cookie would otherwise cause a redirect loop:
+    # the login page would load, but every subsequent admin request would
+    # fail the same way until the token expires.
+    for name in (ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME):
+        response.delete_cookie(name, path="/")
+    return response
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
-    async def _app_error(request: Request, exc: AppError) -> JSONResponse:
+    async def _app_error(request: Request, exc: AppError) -> Response:
         log.warning(
             "app_error",
             code=exc.code,
@@ -56,6 +96,8 @@ def register_error_handlers(app: FastAPI) -> None:
             path=request.url.path,
             context=exc.context,
         )
+        if exc.status_code == 401 and _needs_login_redirect(request):
+            return _login_redirect(request)
         return JSONResponse(
             status_code=exc.status_code,
             content=_payload(exc.code, exc.message),

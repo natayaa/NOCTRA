@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
@@ -12,6 +13,7 @@ from app.core.deps import DbSession
 from app.core.exceptions import AppError
 from app.modules.auth.dependencies import get_current_user
 from app.modules.settings.constants import KNOWN_SETTINGS, is_secret_key
+from app.modules.settings.models import AppSetting
 from app.modules.settings.repository import SettingsRepository
 from app.modules.settings.service import SettingsService
 from app.web.admin._perms import read, write
@@ -20,6 +22,27 @@ from app.web.templates_env import templates
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
 
 _FORM_ERRORS = (AppError, ValueError, KeyError)
+
+
+@dataclass(frozen=True, slots=True)
+class SettingView:
+    key: str
+    value: str | None
+    category: str
+    description: str | None
+    is_secret: bool
+
+
+def to_setting_view(row: AppSetting) -> SettingView:
+    """Return a detached, masked copy of a settings row."""
+    is_secret = bool(row.is_secret)
+    return SettingView(
+        key=row.key,
+        value="***" if is_secret and row.value else row.value,
+        category=row.category or "general",
+        description=row.description,
+        is_secret=is_secret,
+    )
 
 
 # ════════════════════════════════════════════════════════════════
@@ -35,19 +58,13 @@ async def list_view(
 ) -> HTMLResponse:
     rows = list((await db.execute(SettingsRepository(db).query())).scalars().all())
 
-    grouped: dict[str, list] = {}
+    # Build masked copies instead of mutating the ORM rows: the
+    # request-scoped session commits on teardown, so assigning "***"
+    # here used to overwrite the stored secret.
+    grouped: dict[str, list[SettingView]] = {}
     for s in rows:
-        grouped.setdefault(s.category or "general", []).append(s)
-
-    # Mask secret values so they never reach the HTML response body.
-    # The template does NOT use `s.value` for secret fields — it renders
-    # an empty input with a "(set)" placeholder. But we still mask here
-    # as defense-in-depth: if a template later forgets to check
-    # `is_secret`, the value won't leak.
-    for group in grouped.values():
-        for s in group:
-            if s.is_secret and s.value:
-                s.value = "***"  # type: ignore[misc]
+        view = to_setting_view(s)
+        grouped.setdefault(view.category, []).append(view)
 
     return templates.render(
         request,
