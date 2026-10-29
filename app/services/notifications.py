@@ -19,7 +19,11 @@ from app.modules.inquiries.constants import (
     SERVICE_INTEREST_LABELS,
 )
 from app.modules.inquiries.models import Inquiry
-from app.modules.settings.constants import KEY_NOTIFICATIONS_SALES_EMAIL
+from app.modules.settings.constants import (
+    KEY_NOTIFICATIONS_SALES_EMAIL,
+    KEY_PUBLIC_AUTO_RESPONSE_ENABLED,
+    KEY_PUBLIC_AUTO_RESPONSE_SUBJECT,
+)
 
 
 async def notify_inquiry_received(
@@ -54,6 +58,9 @@ async def notify_inquiry_received(
     from app.modules.pricing.service import margin_of  # only if needed
 
     email = EmailService(db)
+    from app.modules.settings.service import SettingsService
+
+    settings_svc = SettingsService(db)
 
     service_label = SERVICE_INTEREST_LABELS.get(service_interest, service_interest) if service_interest else None
     color_label = COLOR_LABELS.get(color_family, color_family) if color_family else color_preference
@@ -62,13 +69,27 @@ async def notify_inquiry_received(
     desired = desired_date.strftime("%d %b %Y") if desired_date else None
 
     # ── 1. Customer auto-response ──
-    if customer_email:
+    raw_auto = await settings_svc.get_value(
+        KEY_PUBLIC_AUTO_RESPONSE_ENABLED, "true"
+    )
+    auto_enabled = str(raw_auto or "true").strip().lower() not in {
+        "false", "0", "no", "off",
+    }
+    if customer_email and auto_enabled:
+        raw_subject = await settings_svc.get_value(
+            KEY_PUBLIC_AUTO_RESPONSE_SUBJECT, ""
+        )
+        subject = (raw_subject or "").strip() or (
+            f"We received your inquiry — {inquiry_code}"
+        )
+        # Allow the configured subject to reference the inquiry code.
+        subject = subject.replace("{code}", inquiry_code)
         await email.send_template(
             template=EmailTemplate.INQUIRY_AUTO_RESPONSE,
             template_path="emails/inquiry_auto_response.html",
             to_email=customer_email,
             to_name=customer_name,
-            subject=f"We received your inquiry — {inquiry_code}",
+            subject=subject,
             context={
                 "inquiry_code": inquiry_code,
                 "inquiry": {"customer_name": customer_name},
@@ -83,8 +104,7 @@ async def notify_inquiry_received(
         )
 
     # ── 2. Sales notification ──
-    from app.modules.settings.service import SettingsService
-    sales_email = await SettingsService(db).get_value(
+    sales_email = await settings_svc.get_value(
         KEY_NOTIFICATIONS_SALES_EMAIL, settings.PUBLIC_EMAIL,
     )
 

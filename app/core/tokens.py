@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 
-TokenType = Literal["access", "refresh"]
+TokenType = Literal["access", "refresh", "password_reset"]
 
 
 class TokenPayload(BaseModel):
@@ -72,6 +72,25 @@ def decode_token(token: str, *, expected_typ: TokenType | None = None) -> TokenP
     if expected_typ is not None and payload.typ != expected_typ:
         raise ValueError(f"Expected {expected_typ} token, got {payload.typ}")
     return payload
+
+
+def create_password_reset_token(sub: str, fingerprint: str) -> str:
+    """Single-use password-reset token.
+
+    `fingerprint` is derived from the current password hash: once the
+    password changes, the fingerprint no longer matches and the token is
+    dead — no server-side token table needed.
+    """
+    return _encode(
+        sub,
+        "password_reset",
+        timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES),
+        {"fp": fingerprint},
+    )
+
+
+def decode_password_reset_token(token: str) -> TokenPayload:
+    return decode_token(token, expected_typ="password_reset")
 
 
 def decode_access_token(token: str) -> TokenPayload:

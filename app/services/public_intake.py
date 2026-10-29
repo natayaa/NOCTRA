@@ -6,13 +6,14 @@ transaction. Finds existing records where possible to avoid duplicates.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
 from uuid import UUID
 
 from fastapi import UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.constants import AuditAction
 from app.core.exceptions import ValidationError
 from app.core.upload import save_inquiry_photos
@@ -27,33 +28,39 @@ from app.modules.vehicles.models import Vehicle
 from app.modules.vehicles.repository import VehicleRepository
 
 
-@dataclass
-class PublicIntakePayload:
+class PublicIntakePayload(BaseModel):
+    """Validated public form submission.
+
+    Bounds mirror the destination columns (customers, vehicles, inquiries):
+    without them an oversized field reaches Postgres and surfaces as a 500
+    `DataError` instead of a clean 400.
+    """
+
     # Contact
-    name: str
-    phone: str
-    email: str | None = None
+    name: str = Field(..., min_length=1, max_length=255)
+    phone: str = Field(..., min_length=1, max_length=32)
+    email: str | None = Field(None, max_length=255)
 
     # Vehicle
-    vehicle_brand: str | None = None
-    vehicle_model: str | None = None
-    vehicle_year: int | None = None
-    vehicle_plate: str | None = None
-    vehicle_category: str | None = None
+    vehicle_brand: str | None = Field(None, max_length=100)
+    vehicle_model: str | None = Field(None, max_length=120)
+    vehicle_year: int | None = Field(None, ge=1900, le=2100)
+    vehicle_plate: str | None = Field(None, max_length=20)
+    vehicle_category: str | None = Field(None, max_length=20)
 
     # Request
-    service_interest: str | None = None
-    description: str = ""
-    color_preference: str | None = None
-    color_family: str | None = None
-    finish_preference: str | None = None
+    service_interest: str | None = Field(None, max_length=32)
+    description: str = Field("", max_length=5000)
+    color_preference: str | None = Field(None, max_length=64)
+    color_family: str | None = Field(None, max_length=16)
+    finish_preference: str | None = Field(None, max_length=16)
     has_custom_graphics: bool = False
 
     # Preferences (JSONB extras from the form)
     preferences: dict | None = None
 
     # Logistics
-    budget_range: str | None = None
+    budget_range: str | None = Field(None, max_length=32)
     desired_date: date | None = None
 
 
@@ -87,6 +94,18 @@ class PublicIntakeService:
             phone=payload.phone.strip(),
             email=(payload.email or "").strip() or None,
         )
+
+        # ── Duplicate guard (double-click / retry) ──────
+        # Returns the existing inquiry so the customer still sees their
+        # reference; the route skips notifications for it.
+        duplicate = await self.inquiries.recent_duplicate(
+            customer_id=customer.id,
+            description=payload.description.strip(),
+            within_minutes=settings.PUBLIC_INTAKE_DEDUPE_MINUTES,
+        )
+        if duplicate is not None:
+            duplicate._deduplicated = True  # type: ignore[attr-defined]
+            return duplicate
 
         # ── Find or create vehicle (if we have enough info) ──
         vehicle: Vehicle | None = None
@@ -187,7 +206,9 @@ class PublicIntakeService:
             return existing, False
 
         customer = Customer(
-            code=await self.customers.next_code(),
+            # Locked variant: public submissions are concurrent by nature and
+            # an unlocked read of the last code collides on the unique index.
+            code=await self.customers.next_code_locked(),
             name=name,
             email=email,
             phone=phone,

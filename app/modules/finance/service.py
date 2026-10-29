@@ -11,11 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import AuditAction
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.logging import log
 from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.finance.constants import (
+    DEFAULT_DP_PERCENT,
     EXPENSE_CATEGORY_LABELS,
     INVOICE_STATUSES,
+    InvoiceKind,
     InvoiceStatus,
     PaymentDirection,
     PaymentReferenceType,
@@ -65,6 +68,7 @@ class InvoiceService:
         if not await CustomerRepository(self.db).get(payload.customer_id):
             raise NotFoundError("Customer not found")
 
+        project = None
         if payload.project_id:
             await self.repo.lock_project(payload.project_id)
 
@@ -80,22 +84,39 @@ class InvoiceService:
                     f"Invoice customer must match the project's customer."
                 )
 
-            existing = (await self.db.execute(
-                select(Invoice)
-                .where(Invoice.project_id == payload.project_id)
-                .where(Invoice.status != InvoiceStatus.CANCELLED.value)
-                .limit(1)
-            )).scalar_one_or_none()
-            if existing:
-                raise ConflictError(
-                    f"Project {project.code} already has invoice "
-                    f"{existing.code}. Cancel it first if you need to re-issue."
-                )
+        # Validate money fields before touching the ORM object: AppError
+        # responses still commit pending changes in DBSessionMiddleware, so a
+        # rejected update must not leave a mutated invoice behind.
+        subtotal = sum(
+            float(i.quantity) * float(i.unit_price) for i in payload.items
+        )
+        discount = float(payload.discount_amount)
+        if discount > subtotal + 0.01:
+            raise ValidationError(
+                f"Discount ({discount:,.0f}) cannot exceed "
+                f"the subtotal ({subtotal:,.0f})."
+            )
+
+        if project is not None:
+            await self._assert_within_contract(
+                project, new_net=subtotal - discount
+            )
+
+        # A project can be billed in stages. When the caller did not pick a
+        # kind, a project invoice is a final bill by default; invoices
+        # without a project are always OTHER.
+        if payload.project_id and "kind" in payload.model_fields_set:
+            kind = payload.kind
+        elif payload.project_id:
+            kind = InvoiceKind.FINAL.value
+        else:
+            kind = InvoiceKind.OTHER.value
 
         invoice = Invoice(
             code=await self.repo.next_code(),
             customer_id=payload.customer_id,
             project_id=payload.project_id,
+            kind=kind,
             issue_date=payload.issue_date,
             due_date=payload.due_date,
             discount_amount=payload.discount_amount,
@@ -120,9 +141,9 @@ class InvoiceService:
         await self._recalc_totals(invoice)
 
         if invoice.project_id:
-            await PaymentService(self.db).link_project_payments_to_invoice(
+            await PaymentService(self.db).apply_project_advances(
                 project_id=invoice.project_id,
-                invoice_id=invoice.id,
+                invoice=invoice,
                 actor=actor,
             )
 
@@ -134,6 +155,7 @@ class InvoiceService:
             new_data={
                 "code": invoice.code,
                 "customer_id": str(payload.customer_id),
+                "kind": invoice.kind,
                 "total": float(invoice.total),
             },
         )
@@ -143,6 +165,13 @@ class InvoiceService:
     async def create_from_project(
         self, payload: InvoiceFromProject, *, actor: User
     ) -> Invoice:
+        """Bill a project stage: a DP up front or the final remainder.
+
+        Amounts are pre-tax net amounts (subtotal - discount). The contract
+        value is the ceiling on everything billed across the project, so a
+        DP of 50% plus a final bill of the remainder lands exactly on the
+        contract regardless of tax.
+        """
         from app.modules.projects.repository import ProjectRepository
 
         await self.repo.lock_project(payload.project_id)
@@ -150,54 +179,95 @@ class InvoiceService:
         project = await ProjectRepository(self.db).get(payload.project_id)
         if not project:
             raise NotFoundError("Project not found")
-        if project.approved_price is None and project.quoted_price is None:
-            raise ValidationError("Project has no approved or quoted price")
 
-        existing = (await self.db.execute(
-            select(Invoice)
-            .where(Invoice.project_id == project.id)
-            .where(Invoice.status != InvoiceStatus.CANCELLED.value)
-            .limit(1)
-        )).scalar_one_or_none()
-        if existing:
-            raise ConflictError(
-                f"Project {project.code} already has invoice {existing.code}. "
-                f"Cancel it first if you need to re-issue."
+        contract = self._contract_value(project)
+        if contract is None:
+            raise ValidationError("Project has no approved or quoted price")
+        if contract <= 0.01:
+            raise ValidationError(
+                "Project contract value is 0 — create the invoice manually."
             )
 
-        price = float(project.approved_price or project.quoted_price)
-        description = project.title or f"Project {project.code}"
+        active = await self._active_project_invoices(project.id)
+        invoiced = sum(self._net_billed(i) for i in active)
+        remaining = contract - invoiced
+        if remaining <= 0.01:
+            raise ConflictError(
+                f"Project {project.code} is fully invoiced "
+                f"({invoiced:,.0f} of {contract:,.0f})."
+            )
+
+        kind = payload.kind
+        if kind == InvoiceKind.FINAL.value and any(
+            i.kind == InvoiceKind.FINAL.value for i in active
+        ):
+            raise ConflictError(
+                f"Project {project.code} already has a final invoice."
+            )
+
+        if payload.amount is not None and payload.amount > remaining + 0.01:
+            raise ValidationError(
+                f"Amount ({payload.amount:,.0f}) exceeds the uninvoiced "
+                f"remainder ({remaining:,.0f}) of project {project.code}."
+            )
+
+        if payload.amount is not None:
+            amount = payload.amount
+        elif kind == InvoiceKind.DP.value:
+            percent = (
+                payload.percent
+                if payload.percent is not None
+                else DEFAULT_DP_PERCENT
+            )
+            amount = contract * percent / 100.0
+            # Never bill past the contract: a DP after a partial bill is
+            # capped at what is still uninvoiced.
+            amount = min(amount, remaining)
+        else:
+            amount = remaining
+
+        amount = round(amount, 2)
+        title = project.title or f"Project {project.code}"
+        label = {
+            InvoiceKind.DP.value: "DP",
+            InvoiceKind.FINAL.value: "Pelunasan",
+            InvoiceKind.OTHER.value: "Tagihan",
+        }[kind]
         issue = payload.issue_date or today_local()
 
         invoice = Invoice(
             code=await self.repo.next_code(),
             customer_id=project.customer_id,
             project_id=project.id,
+            kind=kind,
             issue_date=issue,
             due_date=payload.due_date,
             discount_amount=0,
             tax_rate_pct=payload.tax_rate_pct,
             status=InvoiceStatus.DRAFT.value,
             terms="Payment due on receipt.",
-            notes=f"Auto-generated from project {project.code}.",
+            notes=(
+                f"Auto-generated from project {project.code} "
+                f"({label.lower()}, {invoiced:,.0f} already invoiced)."
+            ),
             created_by_id=actor.id,
         )
 
         invoice.items.append(
             InvoiceItem(
-                description=description,
+                description=f"{label} — {title}",
                 quantity=1,
-                unit_price=price,
-                amount=price,
+                unit_price=amount,
+                amount=amount,
             )
         )
 
         await self.repo.add(invoice)
         await self._recalc_totals(invoice)
 
-        await PaymentService(self.db).link_project_payments_to_invoice(
+        await PaymentService(self.db).apply_project_advances(
             project_id=project.id,
-            invoice_id=invoice.id,
+            invoice=invoice,
             actor=actor,
         )
 
@@ -209,11 +279,66 @@ class InvoiceService:
             new_data={
                 "code": invoice.code,
                 "project_id": str(project.id),
+                "kind": kind,
                 "total": float(invoice.total),
+                "uninvoiced_before": remaining,
             },
         )
         await self.db.refresh(invoice, ["items"])
         return invoice
+
+    # ── Billing math helpers ─────────────────────────────────────
+
+    @staticmethod
+    def _contract_value(project) -> float | None:
+        price = (
+            project.approved_price
+            if project.approved_price is not None
+            else project.quoted_price
+        )
+        return float(price) if price is not None else None
+
+    @staticmethod
+    def _net_billed(invoice: Invoice) -> float:
+        """Pre-tax amount an invoice bills: subtotal minus discount."""
+        return float(invoice.subtotal or 0) - float(invoice.discount_amount or 0)
+
+    async def _active_project_invoices(self, project_id: UUID) -> list[Invoice]:
+        stmt = (
+            select(Invoice)
+            .where(Invoice.project_id == project_id)
+            .where(Invoice.status != InvoiceStatus.CANCELLED.value)
+            .order_by(Invoice.issue_date, Invoice.created_at)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
+
+    async def _assert_within_contract(
+        self,
+        project,
+        *,
+        new_net: float,
+        exclude_invoice_id: UUID | None = None,
+    ) -> None:
+        """Reject billing that would push the project past its contract.
+
+        A project with no price (or an explicit zero) is not guarded — the
+        operator is invoicing something the system cannot bound.
+        """
+        contract = self._contract_value(project)
+        if contract is None or contract <= 0.01:
+            return
+        active = await self._active_project_invoices(project.id)
+        invoiced = sum(
+            self._net_billed(i)
+            for i in active
+            if i.id != exclude_invoice_id
+        )
+        if invoiced + new_net > contract + 0.01:
+            raise ValidationError(
+                f"This invoice would bill {invoiced + new_net:,.0f} against "
+                f"project {project.code}, over its {contract:,.0f} contract "
+                f"value ({invoiced:,.0f} already invoiced)."
+            )
 
     # ── UPDATE — now supports item replacement + serializes with payments
     async def update(
@@ -240,13 +365,68 @@ class InvoiceService:
         # items=null is rejected by the schema; reaching here with a
         # non-None value means the caller really wants to replace the list.
         items_supplied = "items" in payload.model_fields_set
+        money_fields = payload.model_fields_set & {
+            "items", "discount_amount", "tax_rate_pct",
+        }
 
-        if items_supplied:
-            paid = await self.repo.paid_amount(iid)
-            if paid > 0.01:
+        # Compute the prospective money values and validate them BEFORE the
+        # `setattr` loop. AppError responses still commit pending changes, so
+        # `raise` after mutating would persist the invalid edit.
+        paid = await self.repo.paid_amount(iid) if money_fields else 0.0
+
+        if items_supplied and paid > 0.01:
+            raise ConflictError(
+                f"Cannot modify invoice items — {paid:,.0f} already paid. "
+                f"Reverse the payments first."
+            )
+
+        if items_supplied and payload.items is not None:
+            prospective_subtotal = sum(
+                float(i.quantity) * float(i.unit_price) for i in payload.items
+            )
+        else:
+            prospective_subtotal = float(invoice.subtotal or 0)
+
+        prospective_discount = (
+            float(payload.discount_amount)
+            if "discount_amount" in payload.model_fields_set
+            else float(invoice.discount_amount or 0)
+        )
+        if prospective_discount > prospective_subtotal + 0.01:
+            raise ValidationError(
+                f"Discount ({prospective_discount:,.0f}) cannot exceed the "
+                f"subtotal ({prospective_subtotal:,.0f})."
+            )
+
+        # Keep staged billing within the contract even when items or the
+        # discount change after creation.
+        if money_fields and invoice.project_id:
+            from app.modules.projects.repository import ProjectRepository
+
+            project = await ProjectRepository(self.db).get(invoice.project_id)
+            if project is not None:
+                await self._assert_within_contract(
+                    project,
+                    new_net=prospective_subtotal - prospective_discount,
+                    exclude_invoice_id=invoice.id,
+                )
+
+        if paid > 0.01:
+            # Changing discount/tax on a partially paid invoice must not drop
+            # the total below what has already been collected.
+            prospective_tax = (
+                float(payload.tax_rate_pct)
+                if "tax_rate_pct" in payload.model_fields_set
+                else float(invoice.tax_rate_pct or 0)
+            )
+            prospective_total = (
+                prospective_subtotal - prospective_discount
+            ) * (1 + prospective_tax / 100.0)
+            if prospective_total < paid - 0.01:
                 raise ConflictError(
-                    f"Cannot modify invoice items — {paid:,.0f} already paid. "
-                    f"Reverse the payments first."
+                    f"This change would drop the invoice total to "
+                    f"{prospective_total:,.0f}, below the {paid:,.0f} already "
+                    f"paid. Reverse the payments first."
                 )
 
         # Apply scalar field changes. `items` is handled separately so we
@@ -445,23 +625,38 @@ class PaymentService:
                     update={"customer_id": project.customer_id}
                 )
 
-            # If the project already has an active invoice, redirect the
-            # payment to that invoice. Otherwise it would be a phantom:
-            # recorded against the project but never seen by any invoice's
-            # balance. The invoice is the only place `paid_amount` is
-            # computed, so leaving it as PROJECT silently drops the payment
-            # from receivables and the invoice's status never updates.
+            # If the project already has an open invoice, redirect the
+            # payment to it. Otherwise it would be a phantom: recorded
+            # against the project but never seen by any invoice's balance.
+            # The invoice is the only place `paid_amount` is computed, so
+            # leaving it as PROJECT silently drops the payment from
+            # receivables and the invoice's status never updates. With
+            # staged billing there may be several invoices — pick the
+            # oldest one that still owes money.
             existing_invoice = (await self.db.execute(
                 select(Invoice)
                 .where(Invoice.project_id == project.id)
-                .where(Invoice.status != InvoiceStatus.CANCELLED.value)
+                .where(Invoice.status.not_in([
+                    InvoiceStatus.CANCELLED.value,
+                    InvoiceStatus.PAID.value,
+                ]))
+                .order_by(Invoice.issue_date, Invoice.created_at)
                 .limit(1)
             )).scalar_one_or_none()
-            if existing_invoice:
-                payload = payload.model_copy(update={
-                    "reference_type": PaymentReferenceType.INVOICE.value,
-                    "reference_id": existing_invoice.id,
-                })
+            if (
+                existing_invoice is not None
+                and payload.direction == PaymentDirection.IN.value
+            ):
+                # Only absorb the payment when it fits this invoice. A
+                # larger advance stays at project level so it can cover a
+                # later bill instead of being rejected as an overpayment.
+                inv_paid = await self.invoices.paid_amount(existing_invoice.id)
+                inv_remaining = float(existing_invoice.total) - inv_paid
+                if inv_remaining > 0.01 and payload.amount <= inv_remaining + 0.01:
+                    payload = payload.model_copy(update={
+                        "reference_type": PaymentReferenceType.INVOICE.value,
+                        "reference_id": existing_invoice.id,
+                    })
 
         # ── Invoice-referenced payment ────────────────────────────────
         if (
@@ -480,6 +675,24 @@ class PaymentService:
                 raise NotFoundError("Referenced invoice not found")
             if inv.status == InvoiceStatus.CANCELLED.value:
                 raise ConflictError("Cannot apply a payment to a cancelled invoice")
+
+            # Money received means the bill was issued. Recording a payment
+            # against a DRAFT invoice used to skip SENT and jump straight to
+            # PARTIALLY_PAID/PAID — issue it first so the lifecycle is honest.
+            if inv.status == InvoiceStatus.DRAFT.value:
+                inv.status = InvoiceStatus.SENT.value
+                await self.db.flush()
+                await self.audit.log(
+                    action=AuditAction.INVOICE_SENT,
+                    table_name="invoices",
+                    record_id=inv.id,
+                    user_id=actor.id,
+                    old_data={"status": InvoiceStatus.DRAFT.value},
+                    new_data={
+                        "status": InvoiceStatus.SENT.value,
+                        "reason": "payment recorded",
+                    },
+                )
 
             # Inherit customer from the invoice for both IN and OUT so that
             # refunds also appear in per-customer reports.
@@ -500,7 +713,7 @@ class PaymentService:
                     raise ConflictError(
                         f"Payment of {payload.amount:,.0f} exceeds the outstanding "
                         f"balance of {remaining:,.0f}. Record the excess as a "
-                        f"separate unapplied payment."
+                        f"project advance (DP) instead."
                     )
             else:
                 if payload.amount > already_paid + 0.01:
@@ -633,9 +846,17 @@ class PaymentService:
         )
         return reversal
 
-    async def link_project_payments_to_invoice(
-        self, *, project_id: UUID, invoice_id: UUID, actor: User
+    async def apply_project_advances(
+        self, *, project_id: UUID, invoice: Invoice, actor: User
     ) -> int:
+        """Move project-level advances onto a freshly created invoice.
+
+        Advances are payments received before any bill existed (the classic
+        DP). They are applied only when the whole advance set fits inside
+        this invoice: relinking a larger advance would leave the invoice
+        "paid" beyond its total and silently consume money that belongs to
+        a later bill. Leftover advances stay at project level.
+        """
         stmt = (
             select(Payment)
             .where(Payment.reference_type == PaymentReferenceType.PROJECT.value)
@@ -645,22 +866,47 @@ class PaymentService:
         if not payments:
             return 0
 
+        advance_net = sum(
+            float(p.amount)
+            if p.direction == PaymentDirection.IN.value
+            else -float(p.amount)
+            for p in payments
+        )
+        if advance_net <= 0.01:
+            return 0
+        if advance_net > float(invoice.total) + 0.01:
+            # UI warning; the operator can still record the bill for at
+            # least the advance amount or refund the excess.
+            log.warning(
+                "project_advance_exceeds_invoice",
+                project_id=str(project_id),
+                invoice_code=invoice.code,
+                advance=advance_net,
+                invoice_total=float(invoice.total),
+            )
+            return 0
+
         for p in payments:
             p.reference_type = PaymentReferenceType.INVOICE.value
-            p.reference_id = invoice_id
+            p.reference_id = invoice.id
+
+        # An invoice that received money was issued, exactly like a manual
+        # payment against a DRAFT invoice.
+        if invoice.status == InvoiceStatus.DRAFT.value:
+            invoice.status = InvoiceStatus.SENT.value
 
         await self.db.flush()
 
-        await InvoiceService(self.db).apply_payment_status(invoice_id)
+        await InvoiceService(self.db).apply_payment_status(invoice.id)
 
         await self.audit.log(
             action=AuditAction.UPDATE,
             table_name="payments",
-            record_id=invoice_id,
+            record_id=invoice.id,
             user_id=actor.id,
             new_data={
                 "relinked_count": len(payments),
-                "invoice_id": str(invoice_id),
+                "invoice_id": str(invoice.id),
                 "project_id": str(project_id),
                 "payment_codes": [p.code for p in payments],
             },
@@ -784,8 +1030,8 @@ class FinanceReportService:
                 InventoryTransaction.quantity * InventoryTransaction.unit_cost
             ), 0))
             .where(InventoryTransaction.transaction_type == TransactionType.CONSUMPTION.value)
-            .where(InventoryTransaction.created_at >= start)
-            .where(InventoryTransaction.created_at < end_exclusive)
+            .where(InventoryTransaction.occurred_at >= start)
+            .where(InventoryTransaction.occurred_at < end_exclusive)
         )
         cogs_materials = float(
             (await self.db.execute(cogs_materials_stmt)).scalar_one() or 0
@@ -797,8 +1043,8 @@ class FinanceReportService:
             ), 0))
             .where(InventoryTransaction.transaction_type == TransactionType.ADJUSTMENT_IN.value)
             .where(InventoryTransaction.reference_type == ReferenceType.PROJECT.value)
-            .where(InventoryTransaction.created_at >= start)
-            .where(InventoryTransaction.created_at < end_exclusive)
+            .where(InventoryTransaction.occurred_at >= start)
+            .where(InventoryTransaction.occurred_at < end_exclusive)
         )
         cogs_materials -= float(
             (await self.db.execute(reversal_stmt)).scalar_one() or 0
@@ -816,8 +1062,8 @@ class FinanceReportService:
                 CostCategory.LABOR.value,
                 CostCategory.OUTSOURCE.value,
             ]))
-            .where(ProjectItem.created_at >= start)
-            .where(ProjectItem.created_at < end_exclusive)
+            .where(ProjectItem.occurred_at >= start)
+            .where(ProjectItem.occurred_at < end_exclusive)
             .group_by(ProjectItem.category)
         )
         cogs_rows = (await self.db.execute(cogs_stmt)).all()
@@ -939,9 +1185,16 @@ class FinanceReportService:
                 )), 0).label("overdue_count"),
             )
             .outerjoin(paid_subq, paid_subq.c.invoice_id == Invoice.id)
-            .where(Invoice.status.not_in([
-                InvoiceStatus.PAID.value, InvoiceStatus.CANCELLED.value,
+            .where(Invoice.status.in_([
+                # Only issued, still-open invoices are receivables. DRAFT
+                # invoices are internal and must not inflate AR.
+                InvoiceStatus.SENT.value,
+                InvoiceStatus.PARTIALLY_PAID.value,
+                InvoiceStatus.OVERDUE.value,
             ]))
+            # A fully-paid invoice may still carry an open status if legacy
+            # data never ran apply_payment_status; don't count zero balances.
+            .where(balance > 0.01)
         )
         row = (await self.db.execute(stmt)).one()
 
@@ -982,9 +1235,13 @@ class FinanceReportService:
             )
             .outerjoin(paid_subq, paid_subq.c.po_id == PurchaseOrder.id)
             .where(PurchaseOrder.status.in_([
-                PurchaseOrderStatus.RECEIVED.value,
                 PurchaseOrderStatus.SENT.value,
+                PurchaseOrderStatus.RECEIVED.value,
+                # CLOSED means the workflow finished, not that the supplier
+                # was paid. An unpaid closed PO is still a liability.
+                PurchaseOrderStatus.CLOSED.value,
             ]))
+            .where(balance > 0.01)
         )
         row = (await self.db.execute(stmt)).one()
 

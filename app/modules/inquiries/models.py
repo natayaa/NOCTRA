@@ -35,6 +35,8 @@ class Inquiry(Base, UUIDMixin, TimestampMixin):
         Index("ix_inquiries_customer_created", "customer_id", "created_at"),
         Index("ix_inquiries_color_family", "color_family"),
         Index("ix_inquiries_finish_preference", "finish_preference"),
+        # Overdue follow-up counts filter on this column on every list load.
+        Index("ix_inquiries_follow_up_date", "follow_up_date"),
     )
 
     # ── Identity ────────────────────────────────────────

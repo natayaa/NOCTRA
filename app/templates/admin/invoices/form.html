@@ -101,6 +101,52 @@
     {% endif %}
   </section>
 
+  {# ── Billing stage ──────────────────────────── #}
+  <section class="panel">
+    <div class="flex items-baseline justify-between gap-3 mb-4">
+      <h2 class="panel-title !mb-0">Jenis Tagihan</h2>
+      {% if billing %}
+      <span class="text-xs text-noctra-dim">
+        Kontrak {{ billing.contract | rupiah }} · sudah ditagih {{ billing.invoiced | rupiah }}
+      </span>
+      {% endif %}
+    </div>
+
+    {% if mode == 'create' %}
+      <div class="grid md:grid-cols-2 gap-5">
+        <div class="form-row !mb-0">
+          <label class="form-label" for="kind">Jenis</label>
+          <select class="select" id="kind" name="kind">
+            {% for k in invoice_kinds %}
+            <option value="{{ k }}" {% if k == kind %}selected{% endif %}>
+              {{ invoice_kind_labels.get(k, k) }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-hint">
+            DP = uang muka di awal. Pelunasan = sisa tagihan proyek.
+            Lainnya untuk invoice tanpa proyek.
+          </div>
+        </div>
+        {% if billing %}
+        <div class="form-row !mb-0">
+          <label class="form-label">Sisa belum ditagih</label>
+          <input class="input" disabled value="{{ billing.remaining | rupiah }}" />
+          <div class="form-hint">
+            Total semua invoice aktif tidak boleh melebihi nilai kontrak.
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="form-row !mb-0">
+        <label class="form-label">Jenis</label>
+        <input class="input" disabled value="{{ invoice_kind_labels.get(invoice.kind, invoice.kind) }}" />
+        <div class="form-hint">Jenis tagihan tidak dapat diubah setelah dibuat.</div>
+      </div>
+    {% endif %}
+  </section>
+
   {# ── Dates & Tax ────────────────────────────── #}
   <section class="panel">
     <div class="flex items-baseline justify-between gap-3 mb-4">
@@ -145,15 +191,18 @@
       <div class="grid grid-cols-12 gap-3 items-end" data-item-row>
         <div class="col-span-12 md:col-span-6">
           <label class="form-label">Description</label>
-          <input class="input" name="item_description" placeholder="e.g. Full body repaint" maxlength="500" />
+          <input class="input" name="item_description" placeholder="e.g. Full body repaint" maxlength="500"
+                 value="{{ v('item_description', '') }}" />
         </div>
         <div class="col-span-4 md:col-span-2">
           <label class="form-label">Qty</label>
-          <input class="input" type="number" step="any" min="0.01" name="item_quantity" value="1" />
+          <input class="input" type="number" step="any" min="0.01" name="item_quantity"
+                 value="{{ v('item_quantity', '1') }}" />
         </div>
         <div class="col-span-8 md:col-span-3">
           <label class="form-label">Unit price (IDR)</label>
-          <input class="input" type="number" step="any" min="0" name="item_unit_price" value="0" />
+          <input class="input" type="number" step="any" min="0" name="item_unit_price"
+                 value="{{ v('item_unit_price', '0') }}" />
         </div>
         <div class="col-span-12 md:col-span-1 flex justify-end">
           <button type="button" class="btn btn-ghost btn-sm text-noctra-danger !p-1.5"

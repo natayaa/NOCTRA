@@ -1,0 +1,19 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<div class="pub-success">
+  <div class="pub-section-eyebrow">Formulir ditutup</div>
+  <h1 class="pub-page-title">Permintaan inquiry sementara ditutup.</h1>
+  <p class="pub-page-sub">
+    Kami tidak sedang menerima permintaan baru melalui formulir ini.
+    Silakan hubungi kami langsung — kami akan senang membantu.
+  </p>
+
+  <div class="pub-success-actions">
+    <a href="/" class="pub-btn pub-btn-secondary">Kembali ke beranda</a>
+    {% if public_phone %}
+    <a href="tel:{{ public_phone }}" class="pub-btn pub-btn-primary">Telepon kami</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

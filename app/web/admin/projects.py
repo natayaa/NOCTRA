@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from urllib.parse import quote, urlencode
 from uuid import UUID
 
@@ -14,6 +14,7 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 
 from app.core.constants import PermissionCode
+from app.core.csv_export import csv_safe_row
 from app.core.deps import DbSession
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
@@ -32,7 +33,12 @@ from app.modules.projects.constants import (
     PROJECT_STATUS_TONE,
     PROJECT_STATUSES,
 )
-from app.modules.finance.constants import PAYMENT_METHOD_LABELS
+from app.modules.finance.constants import (
+    INVOICE_KIND_LABELS,
+    INVOICE_STATUS_LABELS,
+    PAYMENT_METHOD_LABELS,
+    PaymentDirection,
+)
 from app.modules.inquiries.constants import INQUIRY_STATUS_LABELS
 from app.modules.projects.repository import (
     EmployeeRepository,
@@ -81,13 +87,26 @@ async def _load_assignees(db) -> list[User]:
 
 
 def _form_error(exc: Exception) -> str:
+    if isinstance(exc, PydanticValidationError):
+        errors = exc.errors()
+        if errors:
+            # Pydantic prefixes field validators with "Value error, ".
+            msg = str(errors[0].get("msg") or "").removeprefix("Value error, ")
+            if msg.strip():
+                return msg.strip()
     return (getattr(exc, "message", None) or str(exc) or "Invalid input").strip()
 
 
-def _redirect_with_error(project_id: UUID, exc: Exception) -> RedirectResponse:
+def _redirect_with_error(
+    project_id: UUID, exc: Exception, *, open_add: bool = False
+) -> RedirectResponse:
+    # `add=1` tells the detail page to re-open the add-item modal, so a
+    # rejected submission lands back where the operator was typing instead
+    # of dropping them at the top of a long page.
+    suffix = "&add=1" if open_add else ""
     return RedirectResponse(
         url=f"/admin/projects/{project_id}?error="
-            f"{quote(_form_error(exc), safe='')}",
+        f"{quote(_form_error(exc), safe='')}{suffix}",
         status_code=303,
     )
 
@@ -250,7 +269,7 @@ async def export_csv(
     ])
     for p in rows:
         c = customers.get(p.customer_id)
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             p.code, p.status, p.title or "",
             c[0] if c else "", c[1] if c else "",
             p.quoted_price or "", p.approved_price or "",
@@ -260,10 +279,10 @@ async def export_csv(
             p.target_end_date.isoformat() if p.target_end_date else "",
             p.actual_end_date.isoformat() if p.actual_end_date else "",
             p.created_at.isoformat() if p.created_at else "",
-        ])
+        ]))
 
     buf.seek(0)
-    filename = f"projects-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.csv"
+    filename = f"projects-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')}.csv"
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",
@@ -386,6 +405,7 @@ async def detail_view(
     request: Request,
     db: DbSession,
     error: str | None = Query(None),
+    add: str | None = Query(None),
     _=read(PermissionCode.PROJECT_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
@@ -394,12 +414,63 @@ async def detail_view(
     from app.modules.finance.repository import PaymentRepository
 
     payments = await PaymentRepository(db).payments_for_project(project_id)
-    total_received = sum(float(p.amount) for p in payments)
+    total_received = sum(
+        float(p.amount)
+        if p.direction == PaymentDirection.IN.value
+        else -float(p.amount)
+        for p in payments
+    )
 
     repo = ProjectRepository(db)
     project = await repo.get(project_id)
     if not project:
         raise NotFoundError("Project not found")
+
+    # ── Billing summary: contract vs invoiced vs received ─────────
+    from app.modules.finance.models import Invoice
+    from app.modules.finance.repository import InvoiceRepository
+
+    inv_repo = InvoiceRepository(db)
+    invoices = list(
+        (
+            await db.execute(
+                select(Invoice)
+                .where(Invoice.project_id == project.id)
+                .where(Invoice.status != "CANCELLED")
+                .order_by(Invoice.issue_date, Invoice.created_at)
+            )
+        ).scalars().all()
+    )
+    paid_map = await inv_repo.batch_paid_amount([i.id for i in invoices])
+    invoice_rows = [
+        {
+            "invoice": inv,
+            "paid": paid_map.get(inv.id, 0.0),
+            "balance": float(inv.total) - paid_map.get(inv.id, 0.0),
+        }
+        for inv in invoices
+    ]
+    contract = float(
+        project.approved_price
+        if project.approved_price is not None
+        else (project.quoted_price or 0)
+    )
+    invoiced = sum(
+        float(inv.subtotal or 0) - float(inv.discount_amount or 0)
+        for inv in invoices
+    )
+    billing = {
+        "contract": contract,
+        "invoiced": invoiced,
+        "remaining": max(contract - invoiced, 0.0),
+        "outstanding": sum(
+            max(0.0, row["balance"]) for row in invoice_rows
+        ),
+    }
+    advances = [
+        p for p in payments
+        if p.reference_type == "PROJECT"
+    ]
 
     items = await repo.list_items(project_id)
     customer = (
@@ -462,6 +533,7 @@ async def detail_view(
             "project": project,
             "items": items,
             "items_by_category": by_category,
+            "open_add": add == "1",
             "customer": customer,
             "vehicle": vehicle,
             "source_inquiry": source_inquiry,
@@ -473,6 +545,11 @@ async def detail_view(
             "pricing_recommendation": pricing_recommendation,
             "pricing_evaluation": pricing_evaluation,
             "payments": payments,
+            "advances": advances,
+            "invoice_rows": invoice_rows,
+            "billing": billing,
+            "invoice_kind_labels": INVOICE_KIND_LABELS,
+            "invoice_status_labels": INVOICE_STATUS_LABELS,
             "total_received": total_received,
             "error": error,
             "payment_method_labels": PAYMENT_METHOD_LABELS,      # ← NEW
@@ -605,7 +682,7 @@ async def add_item_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return _redirect_with_error(project_id, exc)
+        return _redirect_with_error(project_id, exc, open_add=True)
     return RedirectResponse(url=f"/admin/projects/{project_id}", status_code=303)
 
 

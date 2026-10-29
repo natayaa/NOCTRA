@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set has_filters = q or is_active_filter is not none %}
 {% set current_per_page = request.query_params.get('per_page', '50') %}
@@ -31,21 +32,15 @@
   beats category-only, which beats the default.
 </p>
 
-{# ── Status chips ───────────────────────────────── #}
-<div class="mb-4 flex flex-wrap gap-2">
-  <a href="/admin/pricing-rules{{ qs(is_active='') }}"
-     class="badge whitespace-nowrap {% if is_active_filter is none %}badge-accent{% else %}badge-neutral{% endif %}">
-    All
-  </a>
-  <a href="/admin/pricing-rules{{ qs(is_active='true') }}"
-     class="badge whitespace-nowrap {% if is_active_filter is sameas true %}badge-accent{% else %}badge-neutral{% endif %}">
-    Active
-  </a>
-  <a href="/admin/pricing-rules{{ qs(is_active='false') }}"
-     class="badge whitespace-nowrap {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
-    Inactive
-  </a>
-</div>
+{# ── Status tabs ───────────────────────────────── #}
+{% call filter_tabs('Filter pricing rules by status') %}
+  {{ filter_tab('/admin/pricing-rules' ~ qs(is_active=''), 'All',
+                is_active_filter is none) }}
+  {{ filter_tab('/admin/pricing-rules' ~ qs(is_active='true'), 'Active',
+                is_active_filter is sameas true) }}
+  {{ filter_tab('/admin/pricing-rules' ~ qs(is_active='false'), 'Inactive',
+                is_active_filter is sameas false) }}
+{% endcall %}
 
 {# ── Filter form ────────────────────────────────── #}
 <form method="get" action="/admin/pricing-rules" class="panel mb-4">

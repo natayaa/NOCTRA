@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set has_filters = q or category_filter %}
 {% set current_per_page = request.query_params.get('per_page', '50') %}
@@ -20,21 +21,14 @@
   </div>
 </div>
 
-{# ── Category chips ────────────────────────────── #}
-<div class="mb-4 -mx-1 px-1 overflow-x-auto md:overflow-visible">
-  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
-    <a href="/admin/expenses{{ qs(category='') }}"
-       class="badge whitespace-nowrap {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-      All
-    </a>
-    {% for c in categories %}
-      <a href="/admin/expenses{{ qs(category=c) }}"
-         class="badge whitespace-nowrap {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
-        {{ category_labels.get(c, c) }}
-      </a>
-    {% endfor %}
-  </div>
-</div>
+{# ── Category tabs ──────────────────────────────── #}
+{% call filter_tabs('Filter expenses by category') %}
+  {{ filter_tab('/admin/expenses' ~ qs(category=''), 'All', not category_filter) }}
+  {% for c in categories %}
+    {{ filter_tab('/admin/expenses' ~ qs(category=c),
+                  category_labels.get(c, c), category_filter == c) }}
+  {% endfor %}
+{% endcall %}
 
 {# ── Filter form ──────────────────────────────────── #}
 <form method="get" action="/admin/expenses" class="panel mb-4">

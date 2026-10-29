@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
-{% include "components/pagination.html" %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
+{% set current_per_page = request.query_params.get('per_page', '50') %}
 
 {% block content %}
 <div class="page-header">
@@ -12,16 +13,56 @@
   </div>
 </div>
 
+{# ── Status tabs ────────────────────────────────── #}
+{% call filter_tabs('Filter users by status') %}
+  {{ filter_tab('/admin/users' ~ qs(is_active='', page=None), 'All',
+                is_active_filter is none) }}
+  {{ filter_tab('/admin/users' ~ qs(is_active='true', page=None), 'Active',
+                is_active_filter is sameas true) }}
+  {{ filter_tab('/admin/users' ~ qs(is_active='false', page=None), 'Disabled',
+                is_active_filter is sameas false) }}
+{% endcall %}
+
 <form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
+  {% if is_active_filter is not none %}
+    <input type="hidden" name="is_active" value="{{ 'true' if is_active_filter else 'false' }}" />
+  {% endif %}
+  {% if role_filter %}<input type="hidden" name="role" value="{{ role_filter }}" />{% endif %}
   <div class="form-row !mb-0 flex-1 min-w-[240px]">
     <label class="form-label" for="q">Search</label>
     <input class="input" id="q" name="q" value="{{ q }}"
-           placeholder="Username, email, name…" data-search-input />
+           placeholder="Username, email, name…" maxlength="200" data-search-input />
   </div>
   <button class="btn btn-secondary">Filter</button>
+  {% if q or is_active_filter is not none or role_filter %}
+    <a href="/admin/users" class="btn btn-ghost">Clear</a>
+  {% endif %}
 </form>
 
 {% if users %}
+<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+  <div class="text-xs text-noctra-dim">
+    Showing
+    <strong class="text-noctra-text">
+      {{ ((page_meta.page - 1) * page_meta.size) + 1 }}–{{ [page_meta.page * page_meta.size, page_meta.total] | min }}
+    </strong>
+    of <strong class="text-noctra-text">{{ page_meta.total }}</strong>
+  </div>
+  <form method="get" class="per-page-form">
+    {% if q %}<input type="hidden" name="q" value="{{ q }}" />{% endif %}
+    {% if is_active_filter is not none %}
+      <input type="hidden" name="is_active" value="{{ 'true' if is_active_filter else 'false' }}" />
+    {% endif %}
+    {% if role_filter %}<input type="hidden" name="role" value="{{ role_filter }}" />{% endif %}
+    <label for="per_page_users">Show</label>
+    <select id="per_page_users" name="per_page" onchange="this.form.submit()">
+      <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
+      <option value="50"  {% if current_per_page == '50'  %}selected{% endif %}>50</option>
+      <option value="100" {% if current_per_page == '100' %}selected{% endif %}>100</option>
+    </select>
+  </form>
+</div>
+
 <div class="table-wrap">
   <table class="table">
     <thead>
@@ -61,9 +102,17 @@
     </tbody>
   </table>
 </div>
+
+{% include "components/pagination.html" %}
+
 {% else %}
 <div class="panel text-center py-16">
-  <p class="text-neutral-400">No users yet. <a href="/admin/users/new" class="text-noctra-accent hover:underline">Create one</a>.</p>
+  {% if q %}
+    <p class="text-neutral-400 mb-3">No users match “{{ q }}”.</p>
+    <a href="/admin/users" class="btn btn-secondary btn-sm">Clear search</a>
+  {% else %}
+    <p class="text-neutral-400">No users yet. <a href="/admin/users/new" class="text-noctra-accent hover:underline">Create one</a>.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

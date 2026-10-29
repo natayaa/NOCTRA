@@ -11,6 +11,25 @@
     </svg>
   </button>
 
+  {# Auto-derived breadcrumbs: section → list page → current item #}
+  {% set crumbs = admin_crumbs(request.url.path if request else '') %}
+  {% if crumbs %}
+  <nav class="topbar-crumbs" aria-label="Breadcrumb">
+    <ol>
+      {% for crumb in crumbs %}
+        <li>
+          {% if crumb.href %}
+            <a href="{{ crumb.href }}">{{ crumb.label }}</a>
+          {% else %}
+            <span class="{{ 'is-current' if loop.last else 'is-section' }}"
+                  {% if loop.last %}aria-current="page"{% endif %}>{{ crumb.label }}</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  </nav>
+  {% endif %}
+
   <div class="admin-header-spacer"></div>
 
   {# Command palette trigger #}
@@ -26,6 +45,75 @@
     <span class="topbar-search-label">Search or jump to…</span>
     <kbd class="kbd" data-shortcut-hint aria-hidden="true">Ctrl K</kbd>
   </button>
+
+  {# Quick create — same actions the command palette lists #}
+  <details class="topbar-menu quick-create">
+    <summary class="quick-create-trigger" aria-label="Create new" title="Create new">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9"
+              stroke-linecap="round"/>
+      </svg>
+    </summary>
+    <div class="topbar-menu-panel">
+      <div class="topbar-menu-head">Create</div>
+      <a href="/admin/inquiries/new" class="user-menu-item">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20l1.2-5.2A8.5 8.5 0 1 1 21 11.5Z"
+                stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Inquiry
+      </a>
+      <a href="/admin/customers/new" class="user-menu-item">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"
+                stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Customer
+      </a>
+      <a href="/admin/vehicles/new" class="user-menu-item">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 17h14M6 13l2-5h8l2 5M7 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm14 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"
+                stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Vehicle
+      </a>
+      <a href="/admin/projects/new" class="user-menu-item">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Project
+      </a>
+      <a href="/admin/invoices/new" class="user-menu-item">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6"
+                stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Invoice
+      </a>
+      <a href="/admin/purchase-orders/new" class="user-menu-item">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M9 22a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm11 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"
+                stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Purchase order
+      </a>
+      <a href="/admin/expenses/new" class="user-menu-item">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 2v20l4-2 4 2 4-2 4 2V2l-4 2-4-2-4 2zM8 8h8M8 12h8M8 16h5"
+                stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Expense
+      </a>
+    </div>
+  </details>
 
   {# Activity log replaces the old always-on notification dot #}
   <a href="/admin/audit" class="admin-icon-btn" aria-label="Activity log" title="Activity log">

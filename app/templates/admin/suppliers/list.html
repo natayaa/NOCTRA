@@ -14,9 +14,11 @@
 <form method="get" class="panel mb-4 flex flex-wrap gap-3 items-end">
   <div class="form-row !mb-0 flex-1 min-w-[240px]">
     <label class="form-label" for="q">Search</label>
-    <input class="input" id="q" name="q" value="{{ q }}" data-search-input />
+    <input class="input" id="q" name="q" value="{{ q }}"
+           placeholder="Code, name, contact…" maxlength="200" data-search-input />
   </div>
   <button class="btn btn-secondary">Filter</button>
+  {% if q %}<a href="/admin/suppliers" class="btn btn-ghost">Clear</a>{% endif %}
 </form>
 
 {% if suppliers %}
@@ -38,6 +40,10 @@
 </div>
 {% include "components/pagination.html" %}
 {% else %}
-{{ empty_state('No suppliers yet', 'Add your first supplier to get started.', '/admin/suppliers/new', 'New Supplier', 'plus') }}
+{% if q %}
+  {{ empty_state('No suppliers match your search', 'Try a different name, code, or contact.', '/admin/suppliers', 'Clear search', 'search') }}
+{% else %}
+  {{ empty_state('No suppliers yet', 'Add your first supplier to get started.', '/admin/suppliers/new', 'New Supplier', 'plus') }}
+{% endif %}
 {% endif %}
 {% endblock %}

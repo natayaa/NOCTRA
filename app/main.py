@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.csrf import CSRFMiddleware
+from app.core.database import DBSessionMiddleware
 from app.core.csrf_token import CsrfTokenMiddleware
 from app.core.error_handlers import register_error_handlers
 from app.core.health import router as health_router
@@ -17,7 +18,10 @@ from app.core.jobs import queue
 from app.core.logging import configure_logging, log
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.request_id import RequestIdMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.template_context import TemplateContextMiddleware
+from app.core.upload import MEDIA_ROOT
+from app.web.templates_env import STATIC_DIR
 
 from app.modules.audit.api import router as audit_router
 from app.modules.auth.api import router as auth_router
@@ -74,7 +78,23 @@ async def lifespan(app: FastAPI):
     configure_logging()
     log.info("app_starting", name=settings.APP_NAME, env=settings.APP_ENV)
     await queue.start()
+
+    scheduler = None
+    if settings.OVERDUE_SWEEP_ENABLED:
+        from app.core.scheduler import DailyJob
+        from app.modules.finance.dunning import run_overdue_sweep
+
+        scheduler = DailyJob(
+            run_overdue_sweep,
+            name="overdue-sweep",
+            hour_local=settings.OVERDUE_SWEEP_HOUR_LOCAL,
+        )
+        scheduler.start()
+
     yield
+
+    if scheduler is not None:
+        await scheduler.stop()
     await queue.stop()
     log.info("app_stopped")
 
@@ -90,16 +110,15 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json" if not settings.is_production else None,
     )
 
-    from pathlib import Path
-
-    MEDIA_DIR = Path("media").resolve()
-    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-    app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
+    # Absolute paths: a CWD-relative mount silently serves a different
+    # directory when the app is started from anywhere but the repo root.
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+    app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
     # ── Middleware ─────────────────────────────────────
     # Starlette middleware runs in REVERSE of add order.
     # Effective request flow (outermost → innermost):
-    #   TrustedHost → TemplateContext → RequestId → RateLimit
+    #   DBSession → TrustedHost → TemplateContext → RequestId → RateLimit
     #     → CsrfToken → CSRF → GZip → app
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(CSRFMiddleware)
@@ -120,11 +139,19 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
+    # DBSession is the outermost stateful layer: every inner layer
+    # (including the exception handlers) has built the response before
+    # commit() runs, and the app hosts exactly one session per request.
+    app.add_middleware(DBSessionMiddleware)
+    # Added last => truly outermost: even 404s, CSRF rejections, and
+    # error-handler JSON get the security headers.
+    app.add_middleware(SecurityHeadersMiddleware)
+
     # ── Errors ─────────────────────────────────────────
     register_error_handlers(app)
 
     # ── Static ─────────────────────────────────────────
-    app.mount("/static", StaticFiles(directory="app/static"), name="static")
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # ── Health ─────────────────────────────────────────
     app.include_router(health_router)

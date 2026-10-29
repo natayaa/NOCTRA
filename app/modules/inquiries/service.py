@@ -128,24 +128,6 @@ class InquiryService:
             if payload.has_custom_graphics is None:
                 raise ValidationError("has_custom_graphics cannot be null")
 
-        if "desired_date" in fields or "follow_up_date" in fields:
-            new_desired = (
-                payload.desired_date if "desired_date" in fields
-                else inquiry.desired_date
-            )
-            new_follow_up = (
-                payload.follow_up_date if "follow_up_date" in fields
-                else inquiry.follow_up_date
-            )
-            if (
-                new_desired is not None
-                and new_follow_up is not None
-                and new_follow_up > new_desired
-            ):
-                raise ValidationError(
-                    "follow_up_date must be on or before desired_date"
-                )
-
         # ── Apply changes ─────────────────────────────────
         if "customer_id" in fields:
             inquiry.customer_id = payload.customer_id
@@ -349,12 +331,14 @@ class InquiryService:
 
     async def delete_photo(
         self, inquiry_id: UUID, photo_id: UUID, *, actor: User
-    ) -> None:
+    ) -> str | None:
+        """Delete a photo row. Returns its public file path for cleanup."""
         photo = await self.db.get(InquiryPhoto, photo_id)
         if not photo or photo.inquiry_id != inquiry_id:
             raise NotFoundError("Photo not found")
 
-        old_data = {"inquiry_id": str(inquiry_id), "file_path": photo.file_path}
+        file_path = photo.file_path
+        old_data = {"inquiry_id": str(inquiry_id), "file_path": file_path}
         await self.repo.delete_photo(photo)
         await self.audit.log(
             action=AuditAction.DELETE,
@@ -363,6 +347,7 @@ class InquiryService:
             user_id=actor.id,
             old_data=old_data,
         )
+        return file_path
 
     # ── Convert to project ────────────────────────────
     async def convert_to_project(

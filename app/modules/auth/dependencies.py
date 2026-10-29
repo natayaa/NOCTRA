@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
@@ -25,6 +26,29 @@ REFRESH_COOKIE_NAME = "noctra_refresh_token"
 # Protects against NTP skew between app servers that issue tokens and the
 # server that wrote `password_changed_at`.
 _CLOCK_SKEW = timedelta(seconds=1)
+
+
+@dataclass(frozen=True, slots=True)
+class _RoleSnapshot:
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentUserSnapshot:
+    """Detached copy of the authenticated user for template rendering.
+
+    Templates render synchronously, so reading an ORM attribute that a
+    `rollback()` expired (form-error paths re-render after rolling back)
+    performs IO outside the greenlet and raises MissingGreenlet. Capture
+    the values while the instance is still loaded.
+    """
+
+    id: UUID
+    username: str
+    email: str | None
+    full_name: str | None
+    is_superuser: bool
+    roles: list[_RoleSnapshot]
 
 
 async def get_current_user(
@@ -59,8 +83,17 @@ async def get_current_user(
             )
 
     # Make the authenticated user available to downstream middleware
-    # (logout, template context, request logging, etc.)
-    request.state.user = user
+    # (logout, template context, request logging, etc.). Templates get a
+    # detached snapshot — the ORM instance is expired by any later
+    # rollback, and Jinja reads attributes synchronously.
+    request.state.user = CurrentUserSnapshot(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name,
+        is_superuser=user.is_superuser,
+        roles=[_RoleSnapshot(name=r.name) for r in user.roles],
+    )
     return user
 
 

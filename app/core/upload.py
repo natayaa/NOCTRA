@@ -43,6 +43,39 @@ def ensure_dirs() -> None:
     INQUIRY_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def remove_media_file(url_path: str | None) -> bool:
+    """
+    Delete a file previously stored under `MEDIA_ROOT`.
+
+    Accepts the public path (`/media/inquiries/...`) recorded in the DB.
+    Returns True when a file was removed. Paths that escape MEDIA_ROOT
+    (traversal, absolute URLs, legacy rows) are ignored.
+    """
+    if not url_path:
+        return False
+
+    prefix = "/media/"
+    if not url_path.startswith(prefix):
+        return False
+
+    try:
+        root = MEDIA_ROOT.resolve()
+        target = (MEDIA_ROOT / url_path[len(prefix):]).resolve()
+        target.relative_to(root)  # raises ValueError outside the root
+    except (OSError, ValueError):
+        return False
+
+    try:
+        target.unlink()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        # A locked/permission-denied file must not break the request.
+        return False
+
+
+
 def _is_valid_image(data: bytes) -> bool:
     if len(data) < 12:
         return False
@@ -166,11 +199,18 @@ async def save_inquiry_photos(files: list[UploadFile]) -> list[dict]:
         )
 
     results = []
-    for i, f in enumerate(real_files):
-        path = await save_inquiry_photo(f)
-        results.append({
-            "file_path": path,
-            "file_name": f.filename,
-            "is_primary": i == 0,
-        })
+    try:
+        for i, f in enumerate(real_files):
+            path = await save_inquiry_photo(f)
+            results.append({
+                "file_path": path,
+                "file_name": f.filename,
+                "is_primary": i == 0,
+            })
+    except Exception:
+        # If file 3 of 5 fails, the first two are already on disk with no
+        # DB rows pointing at them. Remove them before propagating.
+        for item in results:
+            remove_media_file(item["file_path"])
+        raise
     return results

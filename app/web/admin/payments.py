@@ -140,11 +140,27 @@ async def new_view(
     customers: list = []
     suppliers: list = []
     open_invoices: list = []
+    advance_projects: list = []
 
     if direction == "IN":
+        from app.modules.projects.constants import TERMINAL_PROJECT_STATUSES
+        from app.modules.projects.models import Project
+
         customers = (
             await db.execute(select(Customer).order_by(Customer.name))
         ).scalars().all()
+
+        # Projects that can still receive a DP / advance.
+        advance_projects = list(
+            (
+                await db.execute(
+                    select(Project)
+                    .where(Project.status.not_in(TERMINAL_PROJECT_STATUSES))
+                    .order_by(Project.created_at.desc())
+                    .limit(500)
+                )
+            ).scalars().all()
+        )
 
         inv_repo = InvoiceRepository(db)
         inv_rows = (
@@ -183,6 +199,12 @@ async def new_view(
             await db.execute(select(Supplier).order_by(Supplier.name))
         ).scalars().all()
 
+    target = (
+        f"{reference_type}:{reference_id}"
+        if reference_type and reference_id
+        else ""
+    )
+
     return templates.render(
         request,
         "admin/payments/form.html",
@@ -192,11 +214,13 @@ async def new_view(
             "error": error,
             "reference_type": reference_type or "",
             "reference_id": reference_id,
+            "target": target,
             "customer_id": customer_id,
             "accounts": accounts,
             "customers": customers,
             "suppliers": suppliers,
             "open_invoices": open_invoices,
+            "advance_projects": advance_projects,
             "payment_methods": PAYMENT_METHODS,
             "payment_method_labels": PAYMENT_METHOD_LABELS,
             "reference_types": PAYMENT_REFERENCE_TYPES,

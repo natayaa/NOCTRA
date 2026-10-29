@@ -60,10 +60,24 @@ from app.modules.inventory.models import (
 )
 from app.modules.projects.constants import (
     TERMINAL_PROJECT_STATUSES,
+    ProjectStatus,
 )
 from app.modules.projects.models import Project, ProjectItem
 
 _APP_TZ = ZoneInfo(settings.APP_TIMEZONE)
+
+# Projects whose price represents real revenue. DRAFT / ESTIMATING /
+# WAITING_APPROVAL are quotes-in-progress and CANCELLED was never earned;
+# counting them (COALESCE(approved, quoted)) inflated every revenue rollup.
+REVENUE_PROJECT_STATUSES = (
+    ProjectStatus.APPROVED.value,
+    ProjectStatus.IN_PROGRESS.value,
+    ProjectStatus.PAINTING.value,
+    ProjectStatus.ASSEMBLY.value,
+    ProjectStatus.QC.value,
+    ProjectStatus.COMPLETED.value,
+    ProjectStatus.DELIVERED.value,
+)
 
 
 # ── Date-range helpers ────────────────────────────────────────
@@ -130,9 +144,14 @@ class AnalyticsService:
         prev_from = prev_to - timedelta(days=span - 1)
 
         async def _revenue(f: date, t: date) -> float:
+            # Net out refunds: `reverse()` keeps the original IN row and adds
+            # an OUT row, so summing IN-only counts reversed receipts twice.
+            amount_expr = case(
+                (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+                else_=-Payment.amount,
+            )
             stmt = (
-                select(func.coalesce(func.sum(Payment.amount), 0))
-                .where(Payment.direction == PaymentDirection.IN.value)
+                select(func.coalesce(func.sum(amount_expr), 0))
                 .where(Payment.payment_date >= f)
                 .where(Payment.payment_date <= t)
             )
@@ -143,8 +162,8 @@ class AnalyticsService:
             stmt = (
                 select(func.coalesce(func.sum(ProjectItem.actual_cost), 0))
                 .where(ProjectItem.actual_cost > 0)
-                .where(ProjectItem.created_at >= _day_start(f))
-                .where(ProjectItem.created_at < _day_end_exclusive(t))
+                .where(ProjectItem.occurred_at >= _day_start(f))
+                .where(ProjectItem.occurred_at < _day_end_exclusive(t))
             )
             return float((await self.db.execute(stmt)).scalar_one() or 0)
 
@@ -176,14 +195,17 @@ class AnalyticsService:
             return int((await self.db.execute(stmt)).scalar_one() or 0)
 
         async def _unpaid_invoices() -> tuple[int, float]:
-            # Single query — invoice total minus sum of IN payments, per invoice.
+            # Single query — invoice total minus net payments, per invoice.
+            paid_expr = case(
+                (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+                else_=-Payment.amount,
+            )
             paid_subq = (
                 select(
                     Payment.reference_id.label("invoice_id"),
-                    func.coalesce(func.sum(Payment.amount), 0).label("paid"),
+                    func.coalesce(func.sum(paid_expr), 0).label("paid"),
                 )
                 .where(Payment.reference_type == "INVOICE")
-                .where(Payment.direction == PaymentDirection.IN.value)
                 .group_by(Payment.reference_id)
                 .subquery()
             )
@@ -200,10 +222,14 @@ class AnalyticsService:
                     func.coalesce(func.sum(outstanding), 0).label("outstanding"),
                 )
                 .outerjoin(paid_subq, paid_subq.c.invoice_id == Invoice.id)
-                .where(Invoice.status.not_in([
-                    InvoiceStatus.PAID.value,
-                    InvoiceStatus.CANCELLED.value,
+                # Mirror the receivables report: only issued, still-open
+                # invoices are unpaid debt; DRAFT is not receivable yet.
+                .where(Invoice.status.in_([
+                    InvoiceStatus.SENT.value,
+                    InvoiceStatus.PARTIALLY_PAID.value,
+                    InvoiceStatus.OVERDUE.value,
                 ]))
+                .where(outstanding > 0.01)
             )
             row = (await self.db.execute(stmt)).one()
             return int(row.count or 0), float(row.outstanding or 0)
@@ -344,9 +370,12 @@ class AnalyticsService:
         else:
             bucket = func.date_trunc(interval, Payment.payment_date).label("period")
 
+        amount_expr = case(
+            (Payment.direction == PaymentDirection.IN.value, Payment.amount),
+            else_=-Payment.amount,
+        )
         stmt = (
-            select(bucket, func.coalesce(func.sum(Payment.amount), 0).label("total"))
-            .where(Payment.direction == PaymentDirection.IN.value)
+            select(bucket, func.coalesce(func.sum(amount_expr), 0).label("total"))
             .where(Payment.payment_date >= from_date)
             .where(Payment.payment_date <= to_date)
             .group_by(bucket)
@@ -432,21 +461,31 @@ class AnalyticsService:
         ]
 
     async def gross_profit_series(
-        self, from_date: date, to_date: date, interval: str | None = None
+        self,
+        from_date: date,
+        to_date: date,
+        interval: str | None = None,
+        *,
+        revenue: SeriesSet | None = None,
     ) -> SeriesSet:
-        """Revenue − COGS, per period."""
+        """Revenue − COGS, per period.
+
+        Pass `revenue` when the caller already loaded the revenue series
+        (the dashboard does) so the same aggregate is not run twice.
+        """
         interval = interval or pick_interval(from_date, to_date)
 
-        rev = await self.revenue_series(from_date, to_date, interval)
+        rev = revenue or await self.revenue_series(from_date, to_date, interval)
 
-        # COGS is derived from `project_items.created_at` (timestamptz).
-        # `date_trunc` on a timestamptz truncates in the *session* timezone,
-        # which defaults to UTC — that would misbucket a project created at
-        # 01:00 Jakarta into the previous UTC day. Convert to local time
-        # first so bucketing matches `payments.payment_date` (a plain DATE).
+        # COGS is derived from `project_items.occurred_at` (timestamptz) — the
+        # business date that survives later edits. `date_trunc` on a
+        # timestamptz truncates in the *session* timezone, which defaults to
+        # UTC — that would misbucket a project created at 01:00 Jakarta into
+        # the previous UTC day. Convert to local time first so bucketing
+        # matches `payments.payment_date` (a plain DATE).
         cogs_bucket = func.date_trunc(
             interval,
-            func.timezone(settings.APP_TIMEZONE, ProjectItem.created_at),
+            func.timezone(settings.APP_TIMEZONE, ProjectItem.occurred_at),
         ).label("period")
         cogs_stmt = (
             select(
@@ -454,8 +493,8 @@ class AnalyticsService:
                 func.coalesce(func.sum(ProjectItem.actual_cost), 0).label("total"),
             )
             .where(ProjectItem.actual_cost > 0)
-            .where(ProjectItem.created_at >= _day_start(from_date))
-            .where(ProjectItem.created_at < _day_end_exclusive(to_date))
+            .where(ProjectItem.occurred_at >= _day_start(from_date))
+            .where(ProjectItem.occurred_at < _day_end_exclusive(to_date))
             .group_by(cogs_bucket)
             .order_by(cogs_bucket)
         )
@@ -506,6 +545,7 @@ class AnalyticsService:
             )
             .select_from(Project)
             .outerjoin(Inquiry, Inquiry.id == Project.inquiry_id)
+            .where(Project.status.in_(REVENUE_PROJECT_STATUSES))
             .where(Project.created_at >= _day_start(from_date))
             .where(Project.created_at < _day_end_exclusive(to_date))
             .group_by(Inquiry.service_interest)
@@ -555,6 +595,7 @@ class AnalyticsService:
             )
             .select_from(Project)
             .outerjoin(Vehicle, Vehicle.id == Project.vehicle_id)
+            .where(Project.status.in_(REVENUE_PROJECT_STATUSES))
             .where(Project.created_at >= _day_start(from_date))
             .where(Project.created_at < _day_end_exclusive(to_date))
             .group_by(Vehicle.category)
@@ -603,10 +644,15 @@ class AnalyticsService:
                 func.count(Project.id).label("project_count"),
                 func.coalesce(func.sum(revenue_expr), 0).label("revenue"),
                 func.coalesce(func.sum(Project.actual_hpp), 0).label("cost"),
-                func.max(Project.created_at).label("last_project"),
+                # Convert before truncating so early-morning Jakarta projects
+                # report their local business date, not the UTC one.
+                func.timezone(
+                    settings.APP_TIMEZONE, func.max(Project.created_at)
+                ).label("last_project"),
             )
             .select_from(Customer)
             .join(Project, Project.customer_id == Customer.id)
+            .where(Project.status.in_(REVENUE_PROJECT_STATUSES))
             .where(Project.created_at >= _day_start(from_date))
             .where(Project.created_at < _day_end_exclusive(to_date))
             .group_by(Customer.id, Customer.code, Customer.name)
@@ -670,8 +716,8 @@ class AnalyticsService:
                 InventoryTransaction.transaction_type
                 == TransactionType.CONSUMPTION.value
             )
-            .where(InventoryTransaction.created_at >= _day_start(from_date))
-            .where(InventoryTransaction.created_at < _day_end_exclusive(to_date))
+            .where(InventoryTransaction.occurred_at >= _day_start(from_date))
+            .where(InventoryTransaction.occurred_at < _day_end_exclusive(to_date))
             .group_by(
                 Material.id,
                 Material.code,

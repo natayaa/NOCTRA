@@ -2,6 +2,8 @@
 
 from datetime import date, timedelta
 
+import pytest
+
 from app.modules.analytics.constants import (
     Interval,
     PERIOD_PRESETS,
@@ -16,25 +18,28 @@ def test_resolve_today():
     assert f == t == date.today()
 
 
+# Presets are inclusive: "Last 7 days" spans today plus the six days before
+# it, i.e. (to - from).days == 6. The labels are the contract.
 def test_resolve_week():
     f, t = resolve_period("week")
     assert t == date.today()
-    assert (t - f).days == 7
+    assert (t - f).days == 6
+    assert t - f + timedelta(days=1) == timedelta(days=7)
 
 
 def test_resolve_month():
     f, t = resolve_period("month")
-    assert (t - f).days == 30
+    assert (t - f).days == 29
 
 
 def test_resolve_quarter():
     f, t = resolve_period("quarter")
-    assert (t - f).days == 90
+    assert (t - f).days == 89
 
 
 def test_resolve_year():
     f, t = resolve_period("year")
-    assert (t - f).days == 365
+    assert (t - f).days == 364
 
 
 def test_resolve_ytd_starts_jan_1():
@@ -44,9 +49,17 @@ def test_resolve_ytd_starts_jan_1():
     assert f.year == t.year
 
 
-def test_unknown_preset_defaults_to_month():
-    f, t = resolve_period("garbage")
-    assert (t - f).days == 30
+def test_unknown_preset_is_rejected():
+    # Callers validate against PERIOD_PRESETS and turn this into a 400.
+    with pytest.raises(ValueError):
+        resolve_period("garbage")
+
+
+def test_only_one_explicit_date_is_rejected():
+    with pytest.raises(ValueError):
+        resolve_period("month", from_date=date(2025, 1, 1))
+    with pytest.raises(ValueError):
+        resolve_period("month", to_date=date(2025, 1, 1))
 
 
 def test_explicit_dates_override_preset():

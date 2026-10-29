@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy import select
 
 from app.core.constants import PermissionCode
+from app.core.csv_export import csv_safe_row
 from app.core.deps import DbSession
 from app.core.pagination import PageParams, paginate, page_params
 from app.modules.auth.dependencies import get_current_user
@@ -175,7 +176,7 @@ async def export_stock_csv(
     ])
     for r in rows:
         m = r["material"]
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             m.code, m.name, m.brand or "", m.category,
             f"{r['current_stock']:.4f}", m.stock_unit,
             f"{r['cost_per_stock_unit']:.2f}", f"{r['stock_value']:.2f}",
@@ -183,10 +184,10 @@ async def export_stock_csv(
             m.location or "",
             "yes" if r["below_reorder"] else "no",
             "yes" if r["below_min"] else "no",
-        ])
+        ]))
 
     buf.seek(0)
-    filename = f"inventory-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.csv"
+    filename = f"inventory-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')}.csv"
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",
@@ -300,7 +301,7 @@ async def export_ledger_csv(
     ])
     for t in rows:
         m = mat_map.get(t.material_id)
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             t.created_at.isoformat() if t.created_at else "",
             m.code if m else "",
             m.name if m else "",
@@ -312,10 +313,10 @@ async def export_ledger_csv(
             t.reference_type or "",
             t.reference_note or "",
             t.notes or "",
-        ])
+        ]))
 
     buf.seek(0)
-    filename = f"inventory-ledger-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.csv"
+    filename = f"inventory-ledger-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')}.csv"
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",

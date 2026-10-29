@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set has_filters = q or category_filter or is_active_filter is not none %}
 {% set current_per_page = request.query_params.get('per_page', '50') %}
@@ -22,30 +23,20 @@
   </div>
 </div>
 
-{# ── Category chips ─────────────────────────────────── #}
-<div class="mb-4 overflow-x-auto pb-1">
-  <div class="flex gap-2 items-center w-max">
-    <a href="/admin/materials{{ qs(category='', is_active='') }}"
-       class="badge whitespace-nowrap {% if not category_filter and is_active_filter is none %}badge-accent{% else %}badge-neutral{% endif %}">
-      All
-    </a>
-    {% for c in all_categories %}
-      <a href="/admin/materials{{ qs(category=c) }}"
-         class="badge whitespace-nowrap {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
-        {{ category_labels.get(c, c) }}
-        {% if stats.get('cat_' ~ c) %}<span class="opacity-70">· {{ stats.get('cat_' ~ c) }}</span>{% endif %}
-      </a>
-    {% endfor %}
-    <a href="/admin/materials{{ qs(is_active='true') }}"
-       class="badge whitespace-nowrap {% if is_active_filter is sameas true %}badge-accent{% else %}badge-neutral{% endif %}">
-      Active only
-    </a>
-    <a href="/admin/materials{{ qs(is_active='false') }}"
-       class="badge whitespace-nowrap {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
-      Disabled only
-    </a>
-  </div>
-</div>
+{# ── Category tabs ──────────────────────────────────── #}
+{% call filter_tabs('Filter materials by category') %}
+  {{ filter_tab('/admin/materials' ~ qs(category='', is_active=''), 'All',
+                not category_filter and is_active_filter is none) }}
+  {% for c in all_categories %}
+    {{ filter_tab('/admin/materials' ~ qs(category=c),
+                  category_labels.get(c, c), category_filter == c,
+                  stats.get('cat_' ~ c)) }}
+  {% endfor %}
+  {{ filter_tab('/admin/materials' ~ qs(is_active='true'), 'Active only',
+                is_active_filter is sameas true) }}
+  {{ filter_tab('/admin/materials' ~ qs(is_active='false'), 'Disabled only',
+                is_active_filter is sameas false) }}
+{% endcall %}
 
 {# ── Filter form ────────────────────────────────────── #}
 <form method="get" action="/admin/materials" class="panel mb-4">

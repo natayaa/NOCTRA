@@ -22,6 +22,8 @@
           class="pub-contact-card" data-guard>
 
       <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+      {# Signed render time — rejects sub-second and stale submissions #}
+      <input type="hidden" name="_form_ts" value="{{ form_timestamp or '' }}" />
 
       {# Honeypot — hidden from real users, tempting to bots #}
       <div style="position:absolute;left:-9999px;" aria-hidden="true">

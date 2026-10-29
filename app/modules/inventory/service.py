@@ -380,9 +380,11 @@ class InventoryService:
             )
 
     async def stock_overview(self) -> list[dict]:
+        # Include inactive materials so stock left over from a retired SKU
+        # still shows up in valuation instead of silently disappearing.
         materials = list(
             (await self.db.execute(
-                self.material_repo.query(is_active=True)
+                self.material_repo.query()
             )).scalars().all()
         )
         if not materials:
@@ -394,6 +396,8 @@ class InventoryService:
         result = []
         for m in materials:
             stock = stock_map.get(m.id, 0.0)
+            if not m.is_active and abs(stock) < 1e-9:
+                continue
             unit_cost = m.cost_per_stock_unit
             result.append({
                 "material": m,
@@ -548,6 +552,22 @@ class PurchaseOrderService:
         item = await self.repo.get_item(item_id)
         if not item or item.purchase_order_id != po.id:
             raise NotFoundError("Purchase order item not found")
+
+        # Validate before mutating: AppError responses still commit pending
+        # changes (see DBSessionMiddleware), so a rejected edit must not have
+        # touched the ORM object yet. A partially received line cannot shrink
+        # below what already hit stock or the PO dead-ends in SENT forever.
+        new_quantity = (
+            payload.quantity
+            if "quantity" in payload.model_fields_set
+            else item.quantity
+        )
+        received = float(item.quantity_received or 0)
+        if received > 0 and float(new_quantity) < received - 1e-6:
+            raise ValidationError(
+                f"Quantity cannot be lower than the {received:g} already "
+                f"received. Record a return for the excess instead."
+            )
 
         before = {
             "quantity": float(item.quantity),
@@ -709,13 +729,25 @@ class PurchaseOrderService:
                 raise ValidationError(f"Negative quantity for item {item_id}")
 
         total_now = sum(receive_map.values())
+        now = datetime.now(UTC)
         if total_now <= 0:
+            # Legacy/edge case: every line was already fully received while
+            # the PO was left in SENT (e.g. a receipt committed but the
+            # status flip did not). Finalise it instead of trapping the PO
+            # with "nothing to receive".
+            if all(
+                float(item.quantity_received) >= float(item.quantity) - 1e-6
+                for item in po.items
+            ):
+                po.status = PurchaseOrderStatus.RECEIVED.value
+                if po.received_at is None:
+                    po.received_at = now
+                await self.db.flush()
+                return po
             raise ValidationError(
                 "Nothing to receive — supply positive quantities or omit "
                 "received_items to receive all remaining."
             )
-
-        now = datetime.now(UTC)
         for item in po.items:
             qty = receive_map[item.id]
             if qty <= 0:
@@ -808,6 +840,13 @@ class PurchaseOrderService:
         if po.status == PurchaseOrderStatus.RECEIVED.value:
             raise ConflictError(
                 "Received purchase orders cannot be cancelled; use returns"
+            )
+        # A SENT PO can already have stock posted from partial receipts.
+        # Cancelling it would hide received goods; require returns instead.
+        if any(float(i.quantity_received or 0) > 0 for i in po.items):
+            raise ConflictError(
+                "Cannot cancel a purchase order with received stock; "
+                "record a return for the received quantity first."
             )
         po.status = PurchaseOrderStatus.CANCELLED.value
         await self.db.flush()

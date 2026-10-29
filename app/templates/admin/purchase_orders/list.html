@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set has_filters = status_filter %}
 {% set current_per_page = request.query_params.get('per_page', '50') %}
@@ -18,22 +19,32 @@
   </div>
 </div>
 
-{# ── Status chips ───────────────────────────────────── #}
-<div class="mb-4 overflow-x-auto pb-1">
-  <div class="flex gap-2 items-center w-max">
-    <a href="/admin/purchase-orders"
-       class="badge whitespace-nowrap {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-      All
-    </a>
-    {% for s in statuses %}
-      {# 🐛 FIX: Ganti qs(status=s) dengan string literal karena `qs` tidak tersedia di context #}
-      <a href="/admin/purchase-orders?status={{ s }}"
-         class="badge whitespace-nowrap {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
-        {{ status_labels.get(s, s) }}
-      </a>
-    {% endfor %}
+{# ── Status tabs ────────────────────────────────────── #}
+{% call filter_tabs('Filter purchase orders by status') %}
+  {{ filter_tab('/admin/purchase-orders' ~ qs(status=None, page=None), 'All',
+                not status_filter) }}
+  {% for s in statuses %}
+    {{ filter_tab('/admin/purchase-orders' ~ qs(status=s, page=None),
+                  status_labels.get(s, s), status_filter == s) }}
+  {% endfor %}
+{% endcall %}
+
+{# ── Search ───────────────────────────────────────── #}
+<form method="get" action="/admin/purchase-orders" class="panel mb-4 flex flex-wrap items-end gap-3">
+  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+  {% if current_per_page and current_per_page != '50' %}
+    <input type="hidden" name="per_page" value="{{ current_per_page }}" />
+  {% endif %}
+  <div class="form-row !mb-0 flex-1 min-w-[240px]">
+    <label class="form-label" for="po-q">Search</label>
+    <input class="input" id="po-q" name="q" value="{{ q }}"
+           placeholder="Order code or notes…" maxlength="200" data-search-input />
   </div>
-</div>
+  <button class="btn btn-secondary">Search</button>
+  {% if q or status_filter %}
+    <a href="/admin/purchase-orders" class="btn btn-ghost">Clear</a>
+  {% endif %}
+</form>
 
 {# ── Toolbar ──────────────────────────────────────── #}
 {% if purchase_orders %}
@@ -48,6 +59,7 @@
 
   <form method="get" class="per-page-form">
     {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}" />{% endif %}
+    {% if q %}<input type="hidden" name="q" value="{{ q }}" />{% endif %}
     <label for="per_page_po">Show</label>
     <select id="per_page_po" name="per_page" onchange="this.form.submit()">
       <option value="25"  {% if current_per_page == '25'  %}selected{% endif %}>25</option>
@@ -146,12 +158,22 @@
 {% include "components/pagination.html" %}
 
 {% else %}
-{{ empty_state(
-  title='No purchase orders found',
-  message='Create one to start ordering stock.',
-  action_url='/admin/purchase-orders/new',
-  action_label='New PO',
-  icon='plus'
-) }}
+{% if q or status_filter %}
+  {{ empty_state(
+    title='No purchase orders match your filters',
+    message='Try a different search term or clear the status filter.',
+    action_url='/admin/purchase-orders',
+    action_label='Clear filters',
+    icon='search'
+  ) }}
+{% else %}
+  {{ empty_state(
+    title='No purchase orders found',
+    message='Create one to start ordering stock.',
+    action_url='/admin/purchase-orders/new',
+    action_label='New PO',
+    icon='plus'
+  ) }}
+{% endif %}
 {% endif %}
 {% endblock %}

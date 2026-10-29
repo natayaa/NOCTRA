@@ -81,20 +81,12 @@
     </div>
 
     {% if direction == 'IN' %}
-      {% if reference_type == 'PROJECT' and reference_id %}
-      <div class="mb-4 rounded-lg p-3 text-xs flex items-start gap-2"
+      <div class="mb-4 rounded-lg p-3 text-xs text-noctra-muted"
            style="border: 1px solid rgba(14,165,233,0.3); background: rgba(14,165,233,0.05);">
-        <svg class="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
-          <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-        </svg>
-        <span class="text-noctra-muted">
-          Mencatat <strong>DP (Down Payment)</strong> untuk Project ID
-          <span class="mono font-semibold">{{ reference_id }}</span>.
-          Uang ini otomatis akan memotong tagihan saat Invoice dibuat.
-        </span>
+        Pilih <strong>invoice</strong> untuk membayar tagihan, atau
+        <strong>proyek</strong> untuk DP/uang muka sebelum invoice dibuat.
+        DP otomatis dipindahkan ke invoice berikutnya saat invoice dibuat.
       </div>
-      {% endif %}
 
       <div class="form-row" data-party-picker>
         <label class="form-label" for="customer_id">Customer</label>
@@ -119,25 +111,39 @@
         {% endif %}
       </div>
 
-      {% if reference_type != 'PROJECT' %}
-      <div class="form-row mt-5" id="invoice-picker-row">
-        <label class="form-label" for="invoice_id">
-          Kaitkan ke Invoice
-          <span class="text-noctra-dim text-xs">(opsional — kosongkan jika hanya DP/Advance)</span>
+      <div class="form-row mt-5" id="target-picker-row">
+        <label class="form-label" for="target">
+          Terapkan ke
+          <span class="text-noctra-dim text-xs">(invoice atau DP proyek)</span>
         </label>
-        <select class="select" id="invoice_id" name="__invoice_picker">
-          <option value="">— Customer Advance (Belum ada invoice) —</option>
-          {% for inv in open_invoices %}
-          <option value="{{ inv.id }}"
-                  data-customer="{{ inv.customer_id }}"
-                  data-balance="{{ inv.balance }}">
-            {{ inv.code }} — {{ inv.customer_name }} — sisa Rp {{ '{:,.0f}'.format(inv.balance) }}
-          </option>
-          {% endfor %}
+        <select class="select" id="target" name="__target">
+          <option value="">— Tidak dikaitkan (pendapatan lain) —</option>
+          {% if open_invoices %}
+          <optgroup label="Invoice">
+            {% for inv in open_invoices %}
+            <option value="INVOICE:{{ inv.id }}"
+                    data-customer="{{ inv.customer_id }}"
+                    data-balance="{{ inv.balance }}"
+                    {% if target == 'INVOICE:' ~ inv.id %}selected{% endif %}>
+              {{ inv.code }} — {{ inv.customer_name }} — sisa Rp {{ '{:,.0f}'.format(inv.balance) }}
+            </option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+          {% if advance_projects %}
+          <optgroup label="DP / advance proyek (belum ada invoice)">
+            {% for proj in advance_projects %}
+            <option value="PROJECT:{{ proj.id }}"
+                    data-customer="{{ proj.customer_id }}"
+                    {% if target == 'PROJECT:' ~ proj.id %}selected{% endif %}>
+              {{ proj.code }} — {{ proj.title or 'Proyek' }}
+            </option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
         </select>
-        <p class="text-xs text-noctra-accent mt-1 font-medium" id="invoice-hint"></p>
+        <p class="text-xs text-noctra-accent mt-1 font-medium" id="target-hint"></p>
       </div>
-      {% endif %}
 
     {% else %}
       <div class="form-row" data-party-picker>
@@ -221,73 +227,77 @@
     });
   });
 
-  /* ── Invoice picker + reference linkage ─────────── */
+  /* ── Target picker: invoice or project advance ──── */
   const customerSelect = document.getElementById('customer_id');
-  const invoiceSelect = document.getElementById('invoice_id');
+  const targetSelect = document.getElementById('target');
   const amountInput = document.getElementById('amount');
   const refTypeInput = document.getElementById('reference_type');
   const refIdInput = document.getElementById('reference_id');
-  const invoiceHint = document.getElementById('invoice-hint');
+  const targetHint = document.getElementById('target-hint');
 
-  function refreshInvoiceOptions() {
-    if (!invoiceSelect) return;
-    const customerId = customerSelect ? customerSelect.value : '';
-    const current = invoiceSelect.value;
-    const options = Array.from(invoiceSelect.options);
+  function updateFromTarget({ autofill = true, clearWhenEmpty = true } = {}) {
+    if (!targetSelect) return;
+    const opt = targetSelect.options[targetSelect.selectedIndex];
+    const raw = opt && opt.value ? opt.value : '';
 
-    options.forEach((opt, idx) => {
-      if (idx === 0) return;
-      const matches = !customerId || opt.dataset.customer === customerId;
-      opt.hidden = !matches;
-      opt.disabled = !matches;
-    });
-
-    if (current) {
-      const sel = invoiceSelect.querySelector(`option[value="${current}"]`);
-      if (sel && (sel.hidden || sel.disabled)) invoiceSelect.value = '';
-    }
-    updateFromInvoice();
-  }
-
-  function updateFromInvoice() {
-    if (!invoiceSelect) return;
-    const opt = invoiceSelect.options[invoiceSelect.selectedIndex];
-
-    if (!opt || !opt.value) {
-      // Only clear reference fields if there isn't a pre-linked PROJECT ref
-      if (refTypeInput.value !== 'PROJECT') {
+    if (!raw) {
+      if (clearWhenEmpty) {
         refTypeInput.value = '';
         refIdInput.value = '';
+        if (targetHint) targetHint.textContent = '';
       }
-      if (invoiceHint) invoiceHint.textContent = '';
       return;
     }
 
-    const rawBalance = parseFloat(opt.dataset.balance || '0');
-    refTypeInput.value = 'INVOICE';
-    refIdInput.value = opt.value;
+    const sep = raw.indexOf(':');
+    const type = raw.slice(0, sep);
+    const id = raw.slice(sep + 1);
+    refTypeInput.value = type;
+    refIdInput.value = id;
 
-    if (rawBalance > 0) {
-      if (amountInput && !amountInput.value) {
-        amountInput.value = Math.round(rawBalance);
+    if (type === 'INVOICE') {
+      const balance = parseFloat(opt.dataset.balance || '0');
+      if (balance > 0) {
+        if (autofill && amountInput && !amountInput.value) {
+          amountInput.value = Math.round(balance);
+        }
+        if (targetHint) {
+          targetHint.textContent =
+            `Sisa tagihan invoice ini: Rp ${balance.toLocaleString('id-ID')}`;
+        }
+      } else if (targetHint) {
+        targetHint.textContent = 'Invoice ini sudah lunas.';
       }
-      if (invoiceHint) {
-        invoiceHint.textContent = `Sisa tagihan invoice ini: Rp ${rawBalance.toLocaleString('id-ID')}`;
-      }
-    } else if (invoiceHint) {
-      invoiceHint.textContent = 'Invoice ini sudah lunas.';
+    } else if (type === 'PROJECT' && targetHint) {
+      targetHint.textContent =
+        'DP / uang muka proyek — otomatis dipindahkan ke invoice saat invoice dibuat.';
     }
   }
 
-  if (customerSelect) customerSelect.addEventListener('change', refreshInvoiceOptions);
+  function refreshTargetOptions() {
+    if (!targetSelect) return;
+    const customerId = customerSelect ? customerSelect.value : '';
+    const current = targetSelect.value;
+    let kept = false;
 
-  if (invoiceSelect) {
-    invoiceSelect.addEventListener('change', updateFromInvoice);
-    // FIX (T5): skip init filtering when pre-linked to a PROJECT — otherwise
-    // `updateFromInvoice()` would clear the PROJECT reference fields.
-    if (refTypeInput.value !== 'PROJECT') {
-      refreshInvoiceOptions();
-    }
+    Array.from(targetSelect.options).forEach((opt, idx) => {
+      if (idx === 0 || !opt.value) return;
+      const matches = !customerId || opt.dataset.customer === customerId;
+      opt.hidden = !matches;
+      opt.disabled = !matches;
+      if (opt.selected && matches) kept = true;
+    });
+
+    if (current && !kept) targetSelect.value = '';
+    // On first paint keep any server-provided reference even when the
+    // picker has no matching option (e.g. a fully paid invoice).
+    updateFromTarget({ autofill: !current, clearWhenEmpty: false });
+  }
+
+  if (customerSelect) customerSelect.addEventListener('change', refreshTargetOptions);
+  if (targetSelect) {
+    targetSelect.addEventListener('change', () => updateFromTarget());
+    refreshTargetOptions();
   }
 })();
 </script>

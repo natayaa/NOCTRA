@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.types import Email
 from app.modules.customers.constants import CUSTOMER_SOURCES, CUSTOMER_STATUSES
 
 PHONE_PATTERN = r"^[0-9+\-\s()]{6,32}$"
@@ -34,7 +35,7 @@ class CustomerContactIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     role: str | None = Field(None, max_length=64)
     phone: str | None = Field(None, pattern=PHONE_PATTERN)
-    email: EmailStr | None = None
+    email: Email | None = None
     notes: str | None = Field(None, max_length=2000)
 
     @field_validator("name", mode="before")
@@ -54,7 +55,7 @@ class CustomerContactOut(BaseModel):
     name: str
     role: str | None
     phone: str | None
-    email: EmailStr | None
+    email: Email | None
     notes: str | None
     created_at: datetime
 
@@ -62,7 +63,7 @@ class CustomerContactOut(BaseModel):
 # ── Create / Update ─────────────────────────────────────────
 class CustomerCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
-    email: EmailStr | None = None
+    email: Email | None = None
     phone: str | None = Field(None, pattern=PHONE_PATTERN)
     alt_phone: str | None = Field(None, pattern=PHONE_PATTERN)
 
@@ -110,7 +111,7 @@ class CustomerCreate(BaseModel):
 
 class CustomerUpdate(BaseModel):
     name: str | None = Field(None, min_length=2, max_length=255)
-    email: EmailStr | None = None
+    email: Email | None = None
     phone: str | None = Field(None, pattern=PHONE_PATTERN)
     alt_phone: str | None = Field(None, pattern=PHONE_PATTERN)
 
@@ -156,7 +157,7 @@ class CustomerListItem(BaseModel):
     id: UUID
     code: str
     name: str
-    email: EmailStr | None
+    email: Email | None
     phone: str | None
     city: str | None
     status: str

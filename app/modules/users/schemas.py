@@ -3,7 +3,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.types import Email
 
 
 # ════════════════════════════════════════════════════════════════
@@ -14,7 +16,7 @@ class UserCreate(BaseModel):
     username: str = Field(
         ..., min_length=3, max_length=50, pattern=r"^[a-z0-9_\.]+$"
     )
-    email: EmailStr
+    email: Email
     full_name: str = Field(..., min_length=2, max_length=255)
     password: str = Field(..., min_length=8, max_length=128)
     is_active: bool = True
@@ -42,7 +44,7 @@ class UserUpdate(BaseModel):
     elevation must go through the dedicated `/users/{id}/promote` endpoint
     (not implemented yet) or migration. Username is also immutable.
     """
-    email: EmailStr | None = None
+    email: Email | None = None
     full_name: str | None = Field(None, min_length=2, max_length=255)
     is_active: bool | None = None
     role_names: list[str] | None = None
@@ -104,7 +106,7 @@ class UserListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     username: str
-    email: EmailStr
+    email: Email
     full_name: str
     is_active: bool
     is_superuser: bool

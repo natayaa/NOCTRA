@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote
 from uuid import UUID
 
@@ -13,9 +13,11 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 
 from app.core.constants import PermissionCode
+from app.core.csv_export import csv_safe_row
 from app.core.deps import DbSession
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
+from app.core.upload import remove_media_file
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.models import User
 from app.modules.customers.repository import CustomerRepository
@@ -238,7 +240,7 @@ async def export_csv(
         "desired_date", "follow_up_date", "created_at", "description",
     ])
     for r in rows:
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             r.code, r.status, r.source, r.service_interest or "",
             r.color_preference or "", r.color_family or "",
             r.finish_preference or "", "yes" if r.has_custom_graphics else "no",
@@ -247,10 +249,10 @@ async def export_csv(
             r.follow_up_date.isoformat() if r.follow_up_date else "",
             r.created_at.isoformat() if r.created_at else "",
             (r.description or "").replace("\n", " "),
-        ])
+        ]))
 
     buf.seek(0)
-    filename = f"inquiries-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.csv"
+    filename = f"inquiries-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')}.csv"
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",
@@ -636,7 +638,7 @@ async def delete_photo_submit(
     current=Depends(get_current_user),
 ):
     try:
-        await InquiryService(db).delete_photo(
+        file_path = await InquiryService(db).delete_photo(
             inquiry_id, photo_id, actor=current
         )
         await db.commit()
@@ -647,5 +649,9 @@ async def delete_photo_submit(
                 f"{quote(_form_error(exc), safe='')}",
             status_code=303,
         )
+
+    # Only unlink after the row is committed — a failed commit must not
+    # leave a served photo whose DB row still exists.
+    remove_media_file(file_path)
 
     return RedirectResponse(url=f"/admin/inquiries/{inquiry_id}", status_code=303)

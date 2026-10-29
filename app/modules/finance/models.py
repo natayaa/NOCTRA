@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin, UUIDMixin
-from app.modules.finance.constants import InvoiceStatus
+from app.modules.finance.constants import InvoiceKind, InvoiceStatus
 
 
 # ════════════════════════════════════════════════════════════════
@@ -97,6 +97,16 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
         String(20),
         default=InvoiceStatus.DRAFT.value,
         server_default=InvoiceStatus.DRAFT.value,
+        nullable=False,
+    )
+
+    # DP / FINAL / OTHER — a project can be billed in stages. Only matters
+    # for presentation and duplicate-final detection; all money math runs
+    # over the invoice rows themselves.
+    kind: Mapped[str] = mapped_column(
+        String(10),
+        default=InvoiceKind.OTHER.value,
+        server_default=InvoiceKind.OTHER.value,
         nullable=False,
     )
 

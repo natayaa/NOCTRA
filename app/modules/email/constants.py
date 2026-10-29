@@ -18,6 +18,9 @@ class EmailStatus(StrEnum):
 class EmailTemplate(StrEnum):
     INQUIRY_AUTO_RESPONSE = "inquiry_auto_response"
     INQUIRY_SALES_NOTIFICATION = "inquiry_sales_notification"
+    INVOICE_ISSUED = "invoice_issued"
+    INVOICE_REMINDER = "invoice_reminder"
+    PASSWORD_RESET = "password_reset"
 
 
 class EmailRelatedType(StrEnum):
@@ -26,6 +29,7 @@ class EmailRelatedType(StrEnum):
     CUSTOMER = "CUSTOMER"
     PROJECT = "PROJECT"
     INVOICE = "INVOICE"
+    USER = "USER"
 
 
 EMAIL_STATUSES: list[str] = [s.value for s in EmailStatus]

@@ -205,12 +205,6 @@ class InquiryCreate(CustomerRequestMixin):
             raise ValueError("desired_date cannot be in the past")
         if self.follow_up_date and self.follow_up_date < today:
             raise ValueError("follow_up_date cannot be in the past")
-        if (
-            self.desired_date
-            and self.follow_up_date
-            and self.follow_up_date > self.desired_date
-        ):
-            raise ValueError("follow_up_date must be on or before desired_date")
         return self
 
 
@@ -248,12 +242,6 @@ class InquiryUpdate(CustomerRequestMixin):
         if v is not None and v not in BUDGET_RANGES:
             raise ValueError(f"budget_range must be one of {BUDGET_RANGES}")
         return v
-
-    # Cross-field date ordering is checked in the service layer AFTER
-    # merging with the current state — a PATCH may supply only one date,
-    # and we still want to catch `follow_up_date > desired_date` against
-    # the existing counterpart. Doing it in the schema would only catch
-    # the case where both fields are in the payload.
 
 
 class InquiryAssign(BaseModel):

@@ -88,6 +88,15 @@
         <p class="auth-card-sub">Sign in to the admin workspace.</p>
       </div>
 
+      {% if reset_done %}
+      <div class="alert" role="status" style="border-color: rgba(16,185,129,.35); background: rgba(16,185,129,.08);">
+        <div>
+          <span class="alert-title">Password updated</span>
+          Sign in with your new password.
+        </div>
+      </div>
+      {% endif %}
+
       {% if error %}
       <div class="alert alert-danger" role="alert">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -155,6 +164,8 @@
       </form>
 
       <p class="auth-note">
+        <a href="/admin/forgot-password" class="text-noctra-accent hover:underline">Forgot your password?</a>
+        <br />
         Trouble signing in? Contact your administrator.
       </p>
     </div>

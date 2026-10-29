@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set status_labels = {
   'PENDING': 'Pending',
@@ -27,22 +28,15 @@
   </div>
 </div>
 
-{# ── Status chips ────────────────────────────────── #}
-<div class="mb-3 -mx-1 px-1 overflow-x-auto md:overflow-visible">
-  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
-    {# FIX (T3): preserve template filter on status chip #}
-    <a href="/admin/email-logs{{ qs(status='') }}"
-       class="badge whitespace-nowrap {% if not status_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-      All
-    </a>
-    {% for s in statuses %}
-      <a href="/admin/email-logs{{ qs(status=s) }}"
-         class="badge whitespace-nowrap {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
-        {{ status_labels.get(s, s) }}
-      </a>
-    {% endfor %}
-  </div>
-</div>
+{# ── Status tabs — qs() preserves the template filter ── #}
+{% call filter_tabs('Filter email logs by status') %}
+  {{ filter_tab('/admin/email-logs' ~ qs(status=''), 'All', not status_filter) }}
+  {% for s in statuses %}
+    {{ filter_tab('/admin/email-logs' ~ qs(status=s),
+                  status_labels.get(s, s), status_filter == s,
+                  tone='danger' if s == 'FAILED' and status_filter == s else None) }}
+  {% endfor %}
+{% endcall %}
 
 {# ── Template filter dropdown ────────────────────── #}
 {% if template_choices %}

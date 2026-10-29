@@ -5,7 +5,7 @@ the audit list filtered by user. The leftmost prefix also serves bare
 `WHERE user_id = ?`, replacing the now-redundant single-column index.
 
 Revision ID: a1f2c3d4e5b6
-Revises:     <previous_revision>
+Revises:     317eda3a7f40
 Create Date: 2026-10-21 00:01:00
 """
 
@@ -15,7 +15,10 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "a1f2c3d4e5b6"
-down_revision = None  # ← replace with your latest revision
+# Must chain onto the schema created by phase1–phase6. Leaving this as
+# None made this a second root revision: a fresh `upgrade head` applied it
+# first and failed on the missing `audit_logs` table.
+down_revision = "317eda3a7f40"
 branch_labels = None
 depends_on = None
 

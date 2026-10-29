@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set has_filters = q or status_filter or is_active_filter is not none or source_filter %}
 {% set current_per_page = request.query_params.get('per_page', '50') %}
@@ -20,40 +21,22 @@
   </div>
 </div>
 
-{# ── Status chips ────────────────────────────────── #}
-<div class="mb-4 -mx-1 px-1 overflow-x-auto md:overflow-visible">
-  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
-    {# FIX (T8): "All" now clears BOTH status and is_active #}
-    <a href="/admin/customers{{ qs(status='', is_active='') }}"
-       class="badge whitespace-nowrap {% if not status_filter and is_active_filter is none %}badge-accent{% else %}badge-neutral{% endif %}">
-      All
-    </a>
-
-    {% for s in statuses %}
-      <a href="/admin/customers{{ qs(status=s) }}"
-         class="badge whitespace-nowrap {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
-        {{ status_labels.get(s, s) }}
-        {% if stats.get('status_' ~ s) %}
-          <span class="opacity-70">· {{ stats.get('status_' ~ s) }}</span>
-        {% endif %}
-      </a>
-    {% endfor %}
-
-    {# FIX (T9): explicit "Active only" chip #}
-    <a href="/admin/customers{{ qs(status='', is_active='true') }}"
-       class="badge whitespace-nowrap {% if is_active_filter is sameas true %}badge-accent{% else %}badge-neutral{% endif %}">
-      Active only
-      {% if stats.get('active_records') %}
-        <span class="opacity-70">· {{ stats.get('active_records') }}</span>
-      {% endif %}
-    </a>
-
-    <a href="/admin/customers{{ qs(status='', is_active='false') }}"
-       class="badge whitespace-nowrap {% if is_active_filter is sameas false %}badge-accent{% else %}badge-neutral{% endif %}">
-      Disabled only
-    </a>
-  </div>
-</div>
+{# ── Status tabs ─────────────────────────────────── #}
+{% call filter_tabs('Filter customers by status') %}
+  {{ filter_tab('/admin/customers' ~ qs(status='', is_active=''), 'All',
+                not status_filter and is_active_filter is none,
+                stats.total) }}
+  {% for s in statuses %}
+    {{ filter_tab('/admin/customers' ~ qs(status=s, is_active=''),
+                  status_labels.get(s, s), status_filter == s,
+                  stats.get('status_' ~ s)) }}
+  {% endfor %}
+  {{ filter_tab('/admin/customers' ~ qs(status='', is_active='true'), 'Active only',
+                is_active_filter is sameas true,
+                stats.get('active_records')) }}
+  {{ filter_tab('/admin/customers' ~ qs(status='', is_active='false'), 'Disabled only',
+                is_active_filter is sameas false) }}
+{% endcall %}
 
 {# ── Filter form ──────────────────────────────────── #}
 <form method="get" class="panel mb-4">

@@ -61,7 +61,7 @@ async def _read_guard(
 # ════════════════════════════════════════════════════════════════
 
 @router.get("/catalog", response_model=SettingsCatalog)
-async def catalog() -> SettingsCatalog:
+async def catalog(_=Depends(_read_guard)) -> SettingsCatalog:
     return SettingsCatalog(
         known_settings=[
             KnownSettingInfo(

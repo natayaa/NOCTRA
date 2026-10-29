@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set has_filters = q or category_filter or low_stock_filter %}
 {% set filtered_count = items | length %}
@@ -94,31 +95,22 @@
   </div>
 </div>
 
-{# ── Chips + per-page selector ──────────────────────── #}
-<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-  <div class="-mx-1 px-1 overflow-x-auto md:overflow-visible min-w-0 flex-1">
-    <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
-      <a href="/admin/inventory{{ qs(category='') }}"
-         class="badge whitespace-nowrap {% if not category_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-        All
-      </a>
+{# ── Category tabs + per-page selector ─────────────── #}
+<div class="tabs-toolbar">
+  <div class="min-w-0">
+    {% call filter_tabs('Filter inventory by category') %}
+      {{ filter_tab('/admin/inventory' ~ qs(category=''), 'All',
+                    not category_filter and not low_stock_filter, items|length) }}
       {% for c in all_categories %}
         {% set bucket = by_category.get(c) %}
-        <a href="/admin/inventory{{ qs(category=c) }}"
-           class="badge whitespace-nowrap {% if category_filter == c %}badge-accent{% else %}badge-neutral{% endif %}">
-          {{ category_labels.get(c, c) }}
-          {% if bucket %}<span class="opacity-70">· {{ bucket.count }}</span>{% endif %}
-        </a>
+        {{ filter_tab('/admin/inventory' ~ qs(category=c),
+                      category_labels.get(c, c), category_filter == c,
+                      bucket.count if bucket else None) }}
       {% endfor %}
-      <a href="/admin/inventory{{ qs(low_stock='true' if not low_stock_filter else '', category='' if low_stock_filter else category_filter) }}"
-         class="badge whitespace-nowrap {% if low_stock_filter %}badge-danger{% else %}badge-neutral{% endif %}">
-        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Low stock only
-      </a>
-    </div>
+      {{ filter_tab('/admin/inventory' ~ qs(low_stock='true' if not low_stock_filter else '',
+                                            category='' if low_stock_filter else category_filter),
+                    'Low stock', low_stock_filter, low_stock_count, tone='danger') }}
+    {% endcall %}
   </div>
 
   <div class="per-page-form shrink-0" data-paginate-control>

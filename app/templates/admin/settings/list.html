@@ -96,185 +96,687 @@
   {% endfor %}
 {% endfor %}
 
-<div class="page-header">
-  <div>
-    <p class="page-eyebrow">System</p>
-    <h1 class="page-title">Settings</h1>
-    <p class="page-subtitle">
-      {{ total }} configured key{% if total != 1 %}s{% endif %} · changes apply immediately after saving.
-    </p>
-  </div>
-  <div class="page-actions">
-    <a href="/admin/audit?table_name=settings" class="btn btn-secondary">
-      <svg viewBox="0 0 24 24" fill="none" width="15" height="15" aria-hidden="true">
-        <path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="1.75"
-              stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Audit trail
-    </a>
-  </div>
-</div>
+{#
+  Which category should open first: `?tab=<category>` when it exists,
+  otherwise the first group. Panels stay in the DOM at all times so the
+  single-POST save contract still submits every key.
+#}
+{% set category_keys = settings_groups.keys() | list %}
+{% set requested_tab = request.query_params.get('tab') if request else None %}
+{% set initial_tab = requested_tab if requested_tab in category_keys else (category_keys | first) %}
+{% set tones = ['blue', 'green', 'purple', 'orange', 'teal', 'pink'] %}
 
-{% if error %}
-<div class="alert alert-danger mb-5" role="alert">
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
-    <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-  </svg>
-  <div>
-    <span class="alert-title">Couldn’t save settings</span>
-    {{ error }}
-  </div>
-</div>
-{% elif saved %}
-<div class="alert alert-success mb-5" role="alert">
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
-    <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  <div>
-    <span class="alert-title">Settings saved</span>
-    The new values apply to subsequent actions immediately.
-  </div>
-</div>
-{% endif %}
-
-{% if settings_groups %}
-<form method="post" action="/admin/settings" class="settings-layout" data-guard>
-  <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-
-  {% for category, items in settings_groups.items() | sort %}
-  {% set meta = category_meta.get(category, {}) %}
-  <section class="panel settings-section" aria-labelledby="settings-{{ category }}">
-    <div class="panel-head">
-      <div class="settings-section-heading">
-        <span class="settings-section-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="{{ meta.icon or 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z' }}"
-                  stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
-        <div>
-          <h2 class="panel-title" id="settings-{{ category }}">
-            {{ meta.title or category | replace('_', ' ') | title }}
-          </h2>
-          <p class="panel-subtitle">
-            {{ meta.desc or 'Values stored under the ' ~ category ~ ' category.' }}
-          </p>
-        </div>
-      </div>
-      <span class="badge badge-neutral settings-count">{{ items | length }} field{% if items | length != 1 %}s{% endif %}</span>
+<div class="settings-page">
+  <div class="page-header">
+    <div>
+      <p class="page-eyebrow">System</p>
+      <h1 class="page-title">Settings</h1>
+      <p class="page-subtitle">
+        {{ total }} configured key{% if total != 1 %}s{% endif %} across {{ category_keys | length }} section{% if category_keys | length != 1 %}s{% endif %} · changes apply after saving.
+      </p>
     </div>
+    <div class="page-actions">
+      <a href="/admin/audit?table_name=settings" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="none" width="15" height="15" aria-hidden="true">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Audit trail
+      </a>
+    </div>
+  </div>
 
-    <div class="settings-fields">
-      {% for s in items %}
-      {% set fm = field_meta.get(s.key, {}) %}
-      {% set spec = known_settings.get(s.key) %}
-      {% set desc = spec.description if spec else s.description %}
-      {% set field_type = fm.type or ('password' if s.is_secret else 'text') %}
-      {% set is_secret_set = s.is_secret and s.value == '***' %}
-      {% set fallback_label = s.key.split('.')[-1] | replace('_', ' ') | title %}
-      {% set current_value = (s.value or 'false') if field_type == 'boolean' else (s.value or '') %}
+  {% if error %}
+  <div class="alert alert-danger mb-5" role="alert">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <span class="alert-title">Couldn’t save settings</span>
+      {{ error }}
+    </div>
+  </div>
+  {% elif saved %}
+  <div class="alert alert-success mb-5" role="alert">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <span class="alert-title">Settings saved</span>
+      The new values apply to subsequent actions immediately.
+    </div>
+  </div>
+  {% endif %}
 
-      <div class="settings-field{% if fm.wide or field_type == 'textarea' %} is-wide{% endif %}">
-        <label class="form-label" for="setting-{{ s.key }}">
-          <span>{{ fm.label or fallback_label }}</span>
-          {% if s.is_secret %}
-            <span class="badge {% if is_secret_set %}badge-success{% else %}badge-warning{% endif %} settings-secret-badge">
-              {{ 'Configured' if is_secret_set else 'Not set' }}
-            </span>
-          {% endif %}
-          <code class="settings-key">{{ s.key }}</code>
-        </label>
+  {% if settings_groups %}
+  <noscript>
+    <style>
+      /* Without JS every section is always visible — tab switching is progressive. */
+      .settings-page .settings-section.is-hidden { display: block !important; }
+      .settings-page .settings-search { display: none; }
+    </style>
+  </noscript>
 
-        {% if field_type == 'textarea' %}
-          <textarea class="textarea settings-input"
-                    id="setting-{{ s.key }}"
-                    name="{{ s.key }}"
-                    {{ (fm.attrs or '') | safe }}>{{ '' if s.is_secret else (s.value or '') }}</textarea>
-        {% elif field_type == 'select' or field_type == 'boolean' %}
-          <select class="select settings-input"
-                  id="setting-{{ s.key }}"
-                  name="{{ s.key }}">
-            {% if field_type == 'boolean' %}
-              <option value="true" {% if current_value == 'true' %}selected{% endif %}>Enabled</option>
-              <option value="false" {% if current_value != 'true' %}selected{% endif %}>Disabled</option>
-            {% else %}
-              {% for value, label in fm.options %}
-                <option value="{{ value }}" {% if current_value == value %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            {% endif %}
-          </select>
-        {% elif s.is_secret %}
-          <div class="input-wrap">
-            <input class="input settings-input"
-                   id="setting-{{ s.key }}"
-                   name="{{ s.key }}"
-                   type="password"
-                   value=""
-                   placeholder="{{ 'Leave blank to keep the current secret' if is_secret_set else 'Enter a value' }}"
-                   {{ (fm.attrs or '') | safe }} />
-            <button type="button"
-                    class="password-toggle"
-                    data-password-toggle
-                    aria-label="Show password"
-                    aria-pressed="false">
-              <svg class="eye-on" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.75"/>
-              </svg>
-              <svg class="eye-off" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"
+  <form method="post" action="/admin/settings" class="settings-layout" data-guard data-settings>
+    <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+    <input type="hidden" name="_tab" value="{{ initial_tab }}" data-settings-tab-input />
+
+    <aside class="settings-rail" aria-label="Settings navigation">
+      <div class="settings-search">
+        <svg class="settings-search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+        <input type="search"
+               class="settings-search-input"
+               placeholder="Search settings…"
+               aria-label="Search all settings"
+               data-settings-search
+               autocomplete="off"
+               spellcheck="false" />
+        <kbd class="settings-search-kbd" aria-hidden="true" data-search-kbd>/</kbd>
+        <button type="button"
+                class="settings-search-clear is-hidden"
+                data-settings-search-clear
+                aria-label="Clear search">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <p class="settings-search-status is-hidden" data-settings-search-status role="status"></p>
+
+      <nav class="settings-tabs" role="tablist" aria-label="Settings categories" aria-orientation="vertical">
+        {% for category, items in settings_groups.items() | sort %}
+        {% set meta = category_meta.get(category, {}) %}
+        {% set tone = tones[loop.index0 % tones | length] %}
+        {% set is_active = category == initial_tab %}
+        <button type="button"
+                class="settings-tab{% if is_active %} is-active{% endif %}"
+                id="tab-{{ category }}"
+                role="tab"
+                aria-selected="{{ 'true' if is_active else 'false' }}"
+                aria-controls="panel-{{ category }}"
+                tabindex="{{ 0 if is_active else -1 }}"
+                data-settings-tab="{{ category }}"
+                data-tone="{{ tone }}">
+          <span class="settings-tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="{{ meta.icon or 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z' }}"
+                    stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="settings-tab-text">
+            <span class="settings-tab-label">{{ meta.title or category | replace('_', ' ') | title }}</span>
+            <span class="settings-tab-meta">{{ items | length }} key{% if items | length != 1 %}s{% endif %}</span>
+          </span>
+          <span class="settings-tab-dirty is-hidden" data-tab-dirty="{{ category }}" aria-hidden="true">0</span>
+        </button>
+        {% endfor %}
+      </nav>
+
+      <p class="settings-rail-foot">
+        <span class="settings-rail-dot" aria-hidden="true"></span>
+        <span data-save-summary>No unsaved changes</span>
+      </p>
+    </aside>
+
+    <div class="settings-panels">
+      {% for category, items in settings_groups.items() | sort %}
+      {% set meta = category_meta.get(category, {}) %}
+      {% set tone = tones[loop.index0 % tones | length] %}
+      {% set is_active = category == initial_tab %}
+      {% set category_title = meta.title or category | replace('_', ' ') | title %}
+
+      <section class="panel settings-section{% if not is_active %} is-hidden{% endif %}"
+               id="panel-{{ category }}"
+               role="tabpanel"
+               aria-labelledby="tab-{{ category }}"
+               tabindex="-1"
+               data-settings-panel="{{ category }}"
+               data-tone="{{ tone }}">
+
+        <div class="panel-head settings-panel-head">
+          <div class="settings-section-heading">
+            <span class="settings-section-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="{{ meta.icon or 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z' }}"
                       stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
+            </span>
+            <div>
+              <h2 class="panel-title" id="settings-{{ category }}">{{ category_title }}</h2>
+              <p class="panel-subtitle">
+                {{ meta.desc or 'Values stored under the ' ~ category ~ ' category.' }}
+              </p>
+            </div>
+          </div>
+          <div class="panel-head-actions">
+            <span class="badge badge-neutral settings-count">{{ items | length }} field{% if items | length != 1 %}s{% endif %}</span>
+            <button type="button"
+                    class="btn btn-secondary btn-sm is-hidden"
+                    data-revert-panel="{{ category }}">
+              Discard
             </button>
           </div>
-        {% else %}
-          <div class="input-wrap{% if fm.suffix %} has-suffix{% endif %}">
-            <input class="input settings-input"
-                   id="setting-{{ s.key }}"
-                   name="{{ s.key }}"
-                   type="{{ field_type }}"
-                   value="{{ s.value or '' }}"
-                   {{ (fm.attrs or '') | safe }} />
-            {% if fm.suffix %}
-              <span class="input-suffix" aria-hidden="true">{{ fm.suffix }}</span>
+        </div>
+
+        <div class="settings-fields">
+          {% for s in items %}
+          {% set fm = field_meta.get(s.key, {}) %}
+          {% set spec = known_settings.get(s.key) %}
+          {% set desc = spec.description if spec else s.description %}
+          {% set field_type = fm.type or ('password' if s.is_secret else 'text') %}
+          {% set is_secret_set = s.is_secret and s.value == '***' %}
+          {% set fallback_label = s.key.split('.')[-1] | replace('_', ' ') | title %}
+          {% set label_text = fm.label or fallback_label %}
+          {% set current_value = (s.value or '') if field_type != 'boolean' else (s.value or 'false') %}
+          {% set is_bool = field_type == 'boolean' %}
+          {% set bool_on = current_value | lower in ['true', '1', 'yes', 'on'] %}
+          {% set is_wide = fm.wide or field_type == 'textarea' %}
+
+          <div class="settings-field{% if is_wide %} is-wide{% endif %}" data-field>
+            <div class="settings-field-head">
+              <label class="form-label"
+                     {% if is_bool %}id="label-{{ s.key }}" for="bool-{{ s.key }}"{% else %}for="setting-{{ s.key }}"{% endif %}>
+                <span>{{ label_text }}</span>
+                {% if s.is_secret %}
+                  <span class="badge {% if is_secret_set %}badge-success{% else %}badge-warning{% endif %} settings-secret-badge">
+                    {{ 'Configured' if is_secret_set else 'Not set' }}
+                  </span>
+                {% endif %}
+              </label>
+              <button type="button"
+                      class="settings-key"
+                      data-copy-key="{{ s.key }}"
+                      title="Copy key"
+                      aria-label="Copy key {{ s.key }}">
+                <span>{{ s.key }}</span>
+                <svg class="key-copy-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.75"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                </svg>
+                <svg class="key-check-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+
+            {% if field_type == 'textarea' %}
+              <textarea class="textarea settings-input"
+                        id="setting-{{ s.key }}"
+                        name="{{ s.key }}"
+                        {{ (fm.attrs or '') | safe }}>{{ '' if s.is_secret else (s.value or '') }}</textarea>
+
+            {% elif is_bool %}
+              <div class="settings-switch">
+                <label class="switch">
+                  <input type="checkbox"
+                         class="switch-input"
+                         id="bool-{{ s.key }}"
+                         {% if bool_on %}checked{% endif %}
+                         data-bool
+                         aria-labelledby="label-{{ s.key }}" />
+                  <span class="switch-track" aria-hidden="true"></span>
+                  <span class="switch-thumb" aria-hidden="true"></span>
+                </label>
+                <span class="settings-switch-label" data-bool-label>{{ 'Enabled' if bool_on else 'Disabled' }}</span>
+                <input type="hidden"
+                       name="{{ s.key }}"
+                       value="{{ 'true' if bool_on else 'false' }}"
+                       data-bool-value />
+              </div>
+
+            {% elif field_type == 'select' %}
+              <select class="select settings-input"
+                      id="setting-{{ s.key }}"
+                      name="{{ s.key }}">
+                {% for value, label in fm.options %}
+                  <option value="{{ value }}" {% if current_value == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+
+            {% elif s.is_secret %}
+              <div class="input-wrap">
+                <input class="input settings-input"
+                       id="setting-{{ s.key }}"
+                       name="{{ s.key }}"
+                       type="password"
+                       value=""
+                       placeholder="{{ 'Leave blank to keep the current secret' if is_secret_set else 'Enter a value' }}"
+                       autocomplete="off"
+                       spellcheck="false"
+                       {{ (fm.attrs or '') | safe }} />
+                <button type="button"
+                        class="password-toggle"
+                        data-password-toggle
+                        aria-label="Show password"
+                        aria-pressed="false">
+                  <svg class="eye-on" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.75"/>
+                  </svg>
+                  <svg class="eye-off" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"
+                          stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+
+            {% else %}
+              <div class="input-wrap{% if fm.suffix %} has-suffix{% endif %}">
+                <input class="input settings-input"
+                       id="setting-{{ s.key }}"
+                       name="{{ s.key }}"
+                       type="{{ field_type }}"
+                       value="{{ s.value or '' }}"
+                       {{ (fm.attrs or '') | safe }} />
+                {% if fm.suffix %}
+                  <span class="input-suffix" aria-hidden="true">{{ fm.suffix }}</span>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            {% if desc and desc | lower != label_text | lower %}
+              <p class="settings-hint">{{ desc }}</p>
             {% endif %}
           </div>
-        {% endif %}
-
-        {% if desc and desc | lower != (fm.label or fallback_label) | lower %}
-          <p class="settings-hint">{{ desc }}</p>
-        {% endif %}
-        {% if s.is_secret %}
-          <p class="settings-hint">Stored value is never shown. Leave blank to keep it unchanged.</p>
-        {% endif %}
-      </div>
+          {% endfor %}
+        </div>
+      </section>
       {% endfor %}
-    </div>
-  </section>
-  {% endfor %}
 
-  <div class="settings-savebar">
-    <div class="settings-savebar-text">
-      <span class="settings-savebar-title">Save changes</span>
-      <span class="settings-savebar-sub">
-        {{ 'Leave secret fields blank to keep their current value.' if ns.has_secret else 'Changes apply immediately to new quotes and documents.' }}
-      </span>
+      <div class="settings-empty is-hidden" data-settings-empty>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+        <p class="settings-empty-title">No settings match “<span data-settings-empty-query></span>”</p>
+        <p class="settings-empty-text">
+          Try a shorter keyword, or
+          <button type="button" class="settings-link" data-settings-search-clear>clear the search</button>.
+        </p>
+      </div>
     </div>
-    <button type="submit" class="btn btn-primary">
-      <svg viewBox="0 0 24 24" fill="none" width="15" height="15" aria-hidden="true">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"
-              stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Save settings
-    </button>
+
+    <div class="settings-savebar" data-settings-savebar>
+      <div class="settings-savebar-text">
+        <span class="settings-savebar-title">
+          <span class="settings-savebar-dot" aria-hidden="true"></span>
+          <span data-save-summary>No unsaved changes</span>
+        </span>
+        <span class="settings-savebar-sub" data-save-sub>
+          {{ 'Secret fields stay unchanged while left blank.' if ns.has_secret else 'Changes apply immediately to new quotes and documents.' }}
+        </span>
+      </div>
+      <div class="settings-savebar-actions">
+        <button type="button" class="btn btn-secondary" data-settings-reset disabled>
+          Discard changes
+        </button>
+        <button type="submit" class="btn btn-primary" data-settings-submit>
+          <svg viewBox="0 0 24 24" fill="none" width="15" height="15" aria-hidden="true">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"
+                  stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Save settings
+          <kbd class="settings-kbd" data-save-kbd>Ctrl S</kbd>
+        </button>
+      </div>
+      <span class="sr-only" aria-live="polite" data-save-live></span>
+    </div>
+  </form>
+  {% else %}
+  <div class="panel text-center py-16">
+    <p class="text-neutral-400 mb-2">No settings have been registered yet.</p>
+    <p class="text-noctra-dim text-sm">Settings appear here once they are seeded in the database.</p>
   </div>
-</form>
-{% else %}
-<div class="panel text-center py-16">
-  <p class="text-neutral-400 mb-2">No settings have been registered yet.</p>
-  <p class="text-noctra-dim text-sm">Settings appear here once they are seeded in the database.</p>
+  {% endif %}
 </div>
-{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const form = document.querySelector('form[data-settings]');
+  if (!form) return;
+
+  const tabs = Array.from(form.querySelectorAll('[data-settings-tab]'));
+  const panels = Array.from(form.querySelectorAll('[data-settings-panel]'));
+  const fields = Array.from(form.querySelectorAll('[data-field]'));
+  const searchInput = form.querySelector('[data-settings-search]');
+  const searchStatus = form.querySelector('[data-settings-search-status]');
+  const clearButtons = Array.from(form.querySelectorAll('[data-settings-search-clear]'));
+  const emptyState = form.querySelector('[data-settings-empty]');
+  const savebar = form.querySelector('[data-settings-savebar]');
+  const saveBtn = form.querySelector('[data-settings-submit]');
+  const resetBtn = form.querySelector('[data-settings-reset]');
+  const saveKbd = form.querySelector('[data-save-kbd]');
+  const tabInput = form.querySelector('[data-settings-tab-input]');
+  const railFoot = form.querySelector('.settings-rail-foot');
+  const liveRegion = form.querySelector('[data-save-live]');
+
+  const controls = Array.from(form.querySelectorAll('input[name], select[name], textarea[name]'))
+    .filter((el) => el.name.charAt(0) !== '_');
+  const initial = new Map(controls.map((el) => [el, el.value]));
+
+  let dirtyCount = 0;
+  let allowLeave = false;
+  const activeTabEl = tabs.find((t) => t.classList.contains('is-active')) || tabs[0];
+  let activeTab = activeTabEl ? activeTabEl.dataset.settingsTab : '';
+
+  fields.forEach((field) => {
+    field.dataset.search = (field.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  });
+
+  /* ── Tabs ──────────────────────────────────────── */
+  function showTab(category, options) {
+    const opts = options || {};
+    if (!category) return;
+    activeTab = category;
+    tabs.forEach((tab) => {
+      const on = tab.dataset.settingsTab === category;
+      tab.classList.toggle('is-active', on);
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+      tab.tabIndex = on ? 0 : -1;
+      if (on && opts.focus) tab.focus();
+    });
+    panels.forEach((panel) => {
+      panel.classList.toggle('is-hidden', panel.dataset.settingsPanel !== category);
+    });
+
+    // On narrow screens the rail becomes a horizontal strip — keep the
+    // active tab fully visible instead of leaving it off-screen.
+    const strip = form.querySelector('.settings-tabs');
+    if (strip && strip.scrollWidth > strip.clientWidth + 1) {
+      const active = tabs.find((tab) => tab.dataset.settingsTab === category);
+      if (active) {
+        active.scrollIntoView({
+          block: 'nearest',
+          inline: 'nearest',
+          behavior: opts.instant ? 'auto' : 'smooth',
+        });
+      }
+    }
+
+    if (tabInput) tabInput.value = category;
+    if (opts.updateHash !== false) {
+      try { history.replaceState(null, '', '#' + category); } catch (err) { /* file:// etc. */ }
+    }
+  }
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      clearSearch();
+      showTab(tab.dataset.settingsTab);
+    });
+    tab.addEventListener('keydown', (event) => {
+      const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+      if (step === undefined && event.key !== 'Home' && event.key !== 'End') return;
+      event.preventDefault();
+      const index = tabs.indexOf(tab);
+      let next = index;
+      if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = tabs.length - 1;
+      else next = (index + step + tabs.length) % tabs.length;
+      clearSearch();
+      showTab(tabs[next].dataset.settingsTab, { focus: true });
+    });
+  });
+
+  /* ── Search ────────────────────────────────────── */
+  function applySearch() {
+    const query = (searchInput.value || '').trim().toLowerCase();
+    const tokens = query.split(/\s+/).filter(Boolean);
+    const searching = tokens.length > 0;
+
+    clearButtons.forEach((btn) => btn.classList.toggle('is-hidden', !searching));
+    searchInput.classList.toggle('has-value', searching);
+
+    if (!searching) {
+      fields.forEach((field) => field.classList.remove('is-hidden'));
+      tabs.forEach((tab) => tab.classList.remove('is-dim'));
+      emptyState.classList.add('is-hidden');
+      if (searchStatus) {
+        searchStatus.textContent = '';
+        searchStatus.classList.add('is-hidden');
+      }
+      showTab(activeTab, { updateHash: false });
+      return;
+    }
+
+    let total = 0;
+    let sectionCount = 0;
+    const counts = new Map();
+
+    panels.forEach((panel) => {
+      let hits = 0;
+      panel.querySelectorAll('[data-field]').forEach((field) => {
+        const hit = tokens.every((token) => (field.dataset.search || '').includes(token));
+        field.classList.toggle('is-hidden', !hit);
+        if (hit) hits += 1;
+      });
+      counts.set(panel.dataset.settingsPanel, hits);
+      panel.classList.toggle('is-hidden', hits === 0);
+      total += hits;
+      if (hits) sectionCount += 1;
+    });
+
+    tabs.forEach((tab) => tab.classList.toggle('is-dim', !counts.get(tab.dataset.settingsTab)));
+    emptyState.classList.toggle('is-hidden', total !== 0);
+
+    if (searchStatus) {
+      searchStatus.classList.remove('is-hidden');
+      searchStatus.textContent = total
+        ? total + ' match' + (total === 1 ? '' : 'es') + ' in ' + sectionCount + ' section' + (sectionCount === 1 ? '' : 's')
+        : 'No matches';
+    }
+    const querySlot = emptyState.querySelector('[data-settings-empty-query]');
+    if (querySlot) querySlot.textContent = query;
+  }
+
+  function clearSearch() {
+    if (!searchInput || !searchInput.value) return;
+    searchInput.value = '';
+    applySearch();
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', applySearch);
+    searchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        searchInput.value = '';
+        applySearch();
+        searchInput.blur();
+      }
+      if (event.key === 'Enter') event.preventDefault();
+    });
+  }
+
+  clearButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!searchInput) return;
+      searchInput.value = '';
+      applySearch();
+      searchInput.focus();
+    });
+  });
+
+  /* ── Dirty tracking ────────────────────────────── */
+  function recompute() {
+    fields.forEach((field) => field.classList.remove('is-dirty'));
+    controls.forEach((el) => {
+      if (el.value === initial.get(el)) return;
+      const field = el.closest('[data-field]');
+      if (field) field.classList.add('is-dirty');
+    });
+
+    const perPanel = new Map();
+    fields.forEach((field) => {
+      if (!field.classList.contains('is-dirty')) return;
+      const panel = field.closest('[data-settings-panel]');
+      if (!panel) return;
+      const key = panel.dataset.settingsPanel;
+      perPanel.set(key, (perPanel.get(key) || 0) + 1);
+    });
+
+    dirtyCount = 0;
+    perPanel.forEach((n) => { dirtyCount += n; });
+
+    tabs.forEach((tab) => {
+      const badge = tab.querySelector('[data-tab-dirty]');
+      if (!badge) return;
+      const n = perPanel.get(tab.dataset.settingsTab) || 0;
+      badge.textContent = String(n);
+      badge.classList.toggle('is-hidden', n === 0);
+    });
+
+    form.querySelectorAll('[data-revert-panel]').forEach((btn) => {
+      const n = perPanel.get(btn.dataset.revertPanel) || 0;
+      btn.classList.toggle('is-hidden', n === 0);
+    });
+
+    const summary = dirtyCount
+      ? dirtyCount + ' unsaved change' + (dirtyCount === 1 ? '' : 's')
+      : 'No unsaved changes';
+
+    form.querySelectorAll('[data-save-summary]').forEach((el) => {
+      el.textContent = summary;
+    });
+    form.querySelectorAll('[data-save-sub]').forEach((el) => {
+      el.textContent = dirtyCount
+        ? 'Review the highlighted fields, then save.'
+        : 'Changes apply immediately after saving.';
+    });
+
+    if (savebar) savebar.classList.toggle('is-dirty', dirtyCount > 0);
+    if (railFoot) railFoot.classList.toggle('is-dirty', dirtyCount > 0);
+    if (saveBtn) saveBtn.disabled = dirtyCount === 0;
+    if (resetBtn) resetBtn.disabled = dirtyCount === 0;
+    if (liveRegion) liveRegion.textContent = summary;
+  }
+
+  form.addEventListener('input', onControlEvent);
+  form.addEventListener('change', onControlEvent);
+
+  function onControlEvent(event) {
+    const el = event.target;
+    if (!el || !el.name || el.name.charAt(0) === '_') return;
+    recompute();
+  }
+
+  form.querySelectorAll('[data-bool]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const root = input.closest('.settings-switch');
+      if (!root) return;
+      const hidden = root.querySelector('[data-bool-value]');
+      const label = root.querySelector('[data-bool-label]');
+      if (hidden) hidden.value = input.checked ? 'true' : 'false';
+      if (label) label.textContent = input.checked ? 'Enabled' : 'Disabled';
+      recompute();
+    });
+  });
+
+  /* ── Discard / reset ───────────────────────────── */
+  function revert(scope) {
+    controls.forEach((el) => {
+      if (scope && !scope.contains(el)) return;
+      const value = initial.get(el);
+      if (el.value !== value) el.value = value;
+
+      const root = el.closest('.settings-switch');
+      if (root) {
+        const box = root.querySelector('[data-bool]');
+        const label = root.querySelector('[data-bool-label]');
+        if (box) box.checked = value === 'true';
+        if (label) label.textContent = value === 'true' ? 'Enabled' : 'Disabled';
+      }
+    });
+    const scopedFields = scope ? Array.from(scope.querySelectorAll('[data-field]')) : fields;
+    scopedFields.forEach((field) => field.classList.remove('is-dirty'));
+    recompute();
+  }
+
+  /* ── Click actions (discard, copy key) ─────────── */
+  form.addEventListener('click', (event) => {
+    const revertBtn = event.target.closest('[data-revert-panel]');
+    if (revertBtn) {
+      const panel = panels.find((p) => p.dataset.settingsPanel === revertBtn.dataset.revertPanel);
+      if (panel) revert(panel);
+      return;
+    }
+    if (event.target.closest('[data-settings-reset]')) {
+      revert(null);
+      return;
+    }
+    const copyBtn = event.target.closest('[data-copy-key]');
+    if (!copyBtn) return;
+    const key = copyBtn.dataset.copyKey || '';
+    const flash = () => {
+      copyBtn.classList.add('is-copied');
+      clearTimeout(copyBtn.__copyTimer);
+      copyBtn.__copyTimer = setTimeout(() => copyBtn.classList.remove('is-copied'), 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(key).then(flash).catch(() => {});
+    }
+  });
+
+  /* ── Keyboard shortcuts ────────────────────────── */
+  document.addEventListener('keydown', (event) => {
+    const target = event.target;
+    const typing = target && (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
+      target.isContentEditable
+    );
+
+    if (event.key === '/' && !typing && !event.metaKey && !event.ctrlKey && !event.altKey && searchInput) {
+      event.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 's' && dirtyCount > 0) {
+      event.preventDefault();
+      if (form.requestSubmit) form.requestSubmit();
+    }
+  });
+
+  /* ── Leave guard + init ────────────────────────── */
+  form.addEventListener('submit', () => { allowLeave = true; });
+  window.addEventListener('beforeunload', (event) => {
+    if (!dirtyCount || allowLeave) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
+  if (saveKbd) {
+    const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || '');
+    saveKbd.textContent = isMac ? '⌘S' : 'Ctrl S';
+  }
+
+  const hash = decodeURIComponent((window.location.hash || '').slice(1));
+  if (hash && panels.some((p) => p.dataset.settingsPanel === hash)) {
+    showTab(hash, { updateHash: false, instant: true });
+  } else {
+    showTab(activeTab, { updateHash: false, instant: true });
+  }
+
+  recompute();
+  applySearch();
+
+  // Web fonts can widen the horizontal tab strip after first paint;
+  // re-anchor once they settle so the active tab is never clipped.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      if ((searchInput && searchInput.value || '').trim()) return;
+      showTab(activeTab, { updateHash: false, instant: true });
+    });
+  }
+})();
+</script>
 {% endblock %}

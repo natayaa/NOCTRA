@@ -15,10 +15,12 @@ from pydantic import (
 
 from app.modules.finance.constants import (
     EXPENSE_CATEGORIES,
+    INVOICE_KINDS,
     INVOICE_STATUSES,
     PAYMENT_DIRECTIONS,
     PAYMENT_METHODS,
     PAYMENT_REFERENCE_TYPES,
+    InvoiceKind,
 )
 
 
@@ -77,6 +79,7 @@ class InvoiceItemOut(BaseModel):
 class InvoiceCreate(BaseModel):
     customer_id: UUID
     project_id: UUID | None = None
+    kind: str = InvoiceKind.OTHER.value
     issue_date: date
     due_date: date | None = None
 
@@ -90,12 +93,38 @@ class InvoiceCreate(BaseModel):
     # after creation, so an empty invoice would be dead data.
     items: list[InvoiceItemIn] = Field(..., min_length=1)
 
+    @field_validator("kind")
+    @classmethod
+    def _validate_kind(cls, v):
+        if v not in INVOICE_KINDS:
+            raise ValueError(f"kind must be one of {INVOICE_KINDS}")
+        return v
+
 
 class InvoiceFromProject(BaseModel):
     project_id: UUID
+    kind: str = InvoiceKind.FINAL.value
+    # Exactly one of these picks the billed amount. When both are omitted:
+    # DP falls back to DEFAULT_DP_PERCENT of the contract, FINAL bills
+    # whatever is still uninvoiced.
+    amount: float | None = Field(None, gt=0)
+    percent: float | None = Field(None, gt=0, le=100)
     issue_date: date | None = None
     due_date: date | None = None
     tax_rate_pct: float = Field(0, ge=0, lt=100)
+
+    @field_validator("kind")
+    @classmethod
+    def _validate_kind(cls, v):
+        if v not in INVOICE_KINDS:
+            raise ValueError(f"kind must be one of {INVOICE_KINDS}")
+        return v
+
+    @model_validator(mode="after")
+    def _amount_or_percent(self):
+        if self.amount is not None and self.percent is not None:
+            raise ValueError("Provide either amount or percent, not both")
+        return self
 
 
 class InvoiceUpdate(BaseModel):
@@ -136,6 +165,7 @@ class InvoiceListItem(BaseModel):
     id: UUID
     code: str
     status: str
+    kind: str
     customer_id: UUID
     project_id: UUID | None
     issue_date: date

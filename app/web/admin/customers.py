@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlencode, quote
 from uuid import UUID
 
@@ -12,6 +12,7 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 
 from app.core.constants import PermissionCode
+from app.core.csv_export import csv_safe_row
 from app.core.deps import DbSession
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
@@ -143,16 +144,16 @@ async def export_csv(
         "status", "source", "tax_id", "is_active", "created_at",
     ])
     for c in rows:
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             c.code, c.name, c.email or "", c.phone or "", c.alt_phone or "",
             c.city or "", c.province or "", c.postal_code or "", c.country or "",
             c.status, c.source or "", c.tax_id or "",
             "yes" if c.is_active else "no",
             c.created_at.isoformat() if c.created_at else "",
-        ])
+        ]))
 
     buf.seek(0)
-    filename = f"customers-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.csv"
+    filename = f"customers-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')}.csv"
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",

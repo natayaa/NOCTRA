@@ -70,6 +70,31 @@ class InvoiceStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
+class InvoiceKind(StrEnum):
+    """What a project invoice represents.
+
+    A project may be billed in stages: a DP invoice up front, then one or
+    more final bills for the remainder. Invoices not tied to a project are
+    OTHER.
+    """
+
+    DP = "DP"
+    FINAL = "FINAL"
+    OTHER = "OTHER"
+
+
+INVOICE_KINDS: list[str] = [k.value for k in InvoiceKind]
+
+INVOICE_KIND_LABELS: dict[str, str] = {
+    InvoiceKind.DP.value:    "DP / uang muka",
+    InvoiceKind.FINAL.value: "Pelunasan",
+    InvoiceKind.OTHER.value: "Lainnya",
+}
+
+# Suggested DP when the operator does not enter an amount or percentage.
+DEFAULT_DP_PERCENT = 50.0
+
+
 INVOICE_STATUSES: list[str] = [s.value for s in InvoiceStatus]
 
 INVOICE_STATUS_LABELS: dict[str, str] = {

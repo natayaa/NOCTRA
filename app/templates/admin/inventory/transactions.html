@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set has_filters = material_filter or type_filter or ref_filter %}
 {% set current_per_page = request.query_params.get('per_page', '50') %}
@@ -25,21 +26,15 @@
   </div>
 </div>
 
-{# ── Type chips ────────────────────────────────── #}
-<div class="mb-4 -mx-1 px-1 overflow-x-auto md:overflow-visible">
-  <div class="flex flex-nowrap md:flex-wrap gap-2 items-center">
-    <a href="/admin/inventory/transactions{{ qs(transaction_type='') }}"
-       class="badge whitespace-nowrap {% if not type_filter %}badge-accent{% else %}badge-neutral{% endif %}">
-      All types
-    </a>
-    {% for t in transaction_types %}
-      <a href="/admin/inventory/transactions{{ qs(transaction_type=t) }}"
-         class="badge whitespace-nowrap {% if type_filter == t %}badge-accent{% else %}badge-neutral{% endif %}">
-        {{ transaction_type_labels.get(t, t) }}
-      </a>
-    {% endfor %}
-  </div>
-</div>
+{# ── Type tabs ─────────────────────────────────── #}
+{% call filter_tabs('Filter stock movements by type') %}
+  {{ filter_tab('/admin/inventory/transactions' ~ qs(transaction_type=''), 'All types',
+                not type_filter) }}
+  {% for t in transaction_types %}
+    {{ filter_tab('/admin/inventory/transactions' ~ qs(transaction_type=t),
+                  transaction_type_labels.get(t, t), type_filter == t) }}
+  {% endfor %}
+{% endcall %}
 
 {# ── Filter form ────────────────────────────────── #}
 <form method="get" action="/admin/inventory/transactions" class="panel mb-4">

@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
 from app.core.request_id import get_request_id
+from app.modules.auth.dependencies import ACCESS_COOKIE_NAME
 
 MAX_BUCKETS = 10_000
 CLEANUP_INTERVAL_SECONDS = 60
@@ -21,6 +22,17 @@ WINDOW_SECONDS = 60
 
 EXEMPT_PREFIXES = ("/static/", "/favicon", "/media/")
 EXEMPT_PATHS = {"/health", "/healthz", "/readyz"}
+
+# Credential / account-recovery endpoints get the tight bucket. The HTML
+# login previously fell through to the 60/min public bucket, giving
+# password spraying six times the API's allowance.
+LOGIN_PATHS = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/token",
+    "/admin/login",
+    "/admin/forgot-password",
+    "/admin/reset-password",
+}
 
 
 class _Bucket:
@@ -128,8 +140,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _bucket_for(request: Request, ip: str) -> tuple[int, int, str]:
         path = request.url.path
-        if path == "/api/v1/auth/login":
+        if path in LOGIN_PATHS:
             return settings.RATE_LIMIT_LOGIN_PER_MINUTE, 60, f"login:{ip}"
         if path.startswith("/api/"):
             return settings.RATE_LIMIT_API_PER_MINUTE, 60, f"api:{ip}"
+        if path.startswith("/admin") and request.cookies.get(ACCESS_COOKIE_NAME):
+            # Signed-in operators browse far faster than anonymous visitors
+            # and an HTML page can load several fragments. Share the API
+            # allowance instead of the public one so normal clicking never
+            # surfaces a JSON 429 on a page.
+            return settings.RATE_LIMIT_API_PER_MINUTE, 60, f"admin:{ip}"
         return settings.RATE_LIMIT_PUBLIC_PER_MINUTE, 60, f"public:{ip}"

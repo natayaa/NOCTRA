@@ -163,13 +163,16 @@ class SettingsService:
                 raise ValidationError(
                     f"{key} is a registered secret and cannot be un-marked"
                 )
-            effective_secret = (
+            # A registered secret stays secret even if the row was created
+            # before the registry entry existed (or by a caller that passed
+            # is_secret=False on create).
+            effective_secret = known_secret or (
                 is_secret if is_secret is not None else existing.is_secret
             )
         else:
-            effective_secret = (
-                is_secret if is_secret is not None else known_secret
-            )
+            # Explicit False must not demote a registered secret — that would
+            # return the value raw from the API and write it into the audit log.
+            effective_secret = known_secret or bool(is_secret)
 
         # Derive category from key prefix when not specified (only on create).
         derived_category = category
@@ -248,6 +251,15 @@ class SettingsService:
         Update many settings in one transaction. Each item goes through
         the same validation as `upsert`; a single failure aborts the batch.
         """
+        # Validate every item up front. `upsert()` flushes as it goes, and
+        # AppError responses still commit pending changes, so a failure in
+        # the middle of the loop would leave a half-applied batch.
+        for key, value in items:
+            try:
+                validate_value(key, value)
+            except ValueError as exc:
+                raise ValidationError(f"{key}: {exc}") from exc
+
         results: list[AppSetting] = []
         for key, value in items:
             setting = await self.upsert(

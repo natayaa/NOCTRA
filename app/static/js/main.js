@@ -134,10 +134,19 @@
       el.classList.remove('active');
       el.removeAttribute('aria-current');
     });
+    document.querySelectorAll('.sidebar-group').forEach((el) => {
+      el.classList.remove('has-active');
+    });
 
     if (bestMatch) {
       bestMatch.link.classList.add('active');
       bestMatch.link.setAttribute('aria-current', 'page');
+
+      // Mark the owning group so the section stays recognisable even when
+      // the group is collapsed, and keep the link inside the scroll viewport.
+      const group = bestMatch.link.closest('.sidebar-group');
+      if (group) group.classList.add('has-active');
+      bestMatch.link.scrollIntoView({ block: 'nearest' });
     }
   }
 
@@ -192,6 +201,24 @@
   }
   window.formatRupiah = formatRupiah;
 
+  /* ── Filter tabs: keep the active tab visible ─── */
+  function initFilterTabs() {
+    const bars = document.querySelectorAll('.filter-tabs');
+    if (!bars.length) return;
+
+    bars.forEach((bar) => {
+      const active = bar.querySelector('.filter-tab.is-active');
+      if (!active) return;
+      const start = active.offsetLeft - 16;
+      const end = start + active.offsetWidth + 32;
+      if (start < bar.scrollLeft) {
+        bar.scrollLeft = start;
+      } else if (end > bar.scrollLeft + bar.clientWidth) {
+        bar.scrollLeft = end - bar.clientWidth;
+      }
+    });
+  }
+
   /* ── Dropdown dismiss ─────────────────────────── */
   function initDropdownDismiss() {
     if (window.__noctraDropdowns) return;
@@ -203,12 +230,36 @@
       document.querySelectorAll('details[open]').forEach((d) => (d.open = false));
     });
 
-    // Klik di luar menutup dropdown user
+    // Klik di luar menutup dropdown (user menu, quick-create)
     document.addEventListener('click', (e) => {
-      document.querySelectorAll('details.user-menu[open]').forEach((d) => {
-        if (!d.contains(e.target)) d.open = false;
-      });
+      document
+        .querySelectorAll('details.user-menu[open], details.topbar-menu[open]')
+        .forEach((d) => {
+          if (!d.contains(e.target)) d.open = false;
+        });
+
+      // A selected menu item leaves the panel behind when navigation is slow.
+      const item = e.target.closest &&
+        e.target.closest('.user-menu-panel a, .topbar-menu-panel a');
+      if (item) {
+        const menu = item.closest('details');
+        if (menu) menu.open = false;
+      }
     });
+
+    // Only one header disclosure stays open at a time.
+    document
+      .querySelectorAll('details.user-menu, details.topbar-menu')
+      .forEach((d) => {
+        d.addEventListener('toggle', () => {
+          if (!d.open) return;
+          document
+            .querySelectorAll('details.user-menu[open], details.topbar-menu[open]')
+            .forEach((other) => {
+              if (other !== d) other.open = false;
+            });
+        });
+      });
   }
 
   /* ── Password visibility toggles ──────────────── */
@@ -284,6 +335,7 @@
     initSidebarToggle();
     initSidebarGroups();
     initActiveNav();
+    initFilterTabs();
     initFlash();
     watchFlashMutations();
     initDropdownDismiss();

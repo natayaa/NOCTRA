@@ -9,10 +9,11 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    EmailStr,
     field_validator,
     model_validator,
 )
+
+from app.core.types import Email
 
 from app.modules.inventory.constants import (
     MANUAL_TRANSACTION_TYPES,
@@ -20,6 +21,7 @@ from app.modules.inventory.constants import (
     PURCHASE_ORDER_STATUSES,
     REFERENCE_TYPES,
     UNITS,
+    ReferenceType,
 )
 
 
@@ -42,7 +44,7 @@ def _clean_optional(v):
 class SupplierCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     contact_person: str | None = Field(None, max_length=255)
-    email: EmailStr | None = None
+    email: Email | None = None
     phone: str | None = Field(None, max_length=32)
     address: str | None = Field(None, max_length=2000)
     tax_id: str | None = Field(None, max_length=64)
@@ -68,7 +70,7 @@ class SupplierCreate(BaseModel):
 class SupplierUpdate(BaseModel):
     name: str | None = Field(None, min_length=2, max_length=255)
     contact_person: str | None = None
-    email: EmailStr | None = None
+    email: Email | None = None
     phone: str | None = None
     address: str | None = None
     tax_id: str | None = None
@@ -104,7 +106,7 @@ class SupplierListItem(BaseModel):
     name: str
     contact_person: str | None
     phone: str | None
-    email: EmailStr | None
+    email: Email | None
     is_active: bool
 
 
@@ -280,9 +282,22 @@ class InventoryTransactionCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_reference_pair(self):
-        if (self.reference_type is None) != (self.reference_id is None):
+        # A reference_id only makes sense alongside its type.
+        if self.reference_id is not None and self.reference_type is None:
             raise ValueError(
-                "reference_type and reference_id must be provided together"
+                "reference_id requires a reference_type"
+            )
+        # Entity-backed references need the target row. MANUAL movements are
+        # recorded from the material page and legitimately have no id.
+        if (
+            self.reference_type in {
+                ReferenceType.PURCHASE_ORDER.value,
+                ReferenceType.PROJECT.value,
+            }
+            and self.reference_id is None
+        ):
+            raise ValueError(
+                f"reference_id is required for {self.reference_type} references"
             )
         return self
 

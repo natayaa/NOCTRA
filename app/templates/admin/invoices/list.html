@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "components/empty_state.html" import empty_state %}
+{% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
 
 {% set has_filters = q or status_filter or only_unpaid %}
 {% set current_per_page = request.query_params.get('per_page', '50') %}
@@ -28,25 +29,17 @@
   </div>
 </div>
 
-{# ── Filter chips ────────────────────────────── #}
-<div class="mb-4 overflow-x-auto pb-1">
-  <div class="flex gap-2 items-center w-max">
-    <a href="/admin/invoices{{ qs(status='', only_unpaid='') }}"
-       class="badge whitespace-nowrap {% if not status_filter and not only_unpaid %}badge-accent{% else %}badge-neutral{% endif %}">
-      All
-    </a>
-    <a href="/admin/invoices{{ qs(only_unpaid='true' if not only_unpaid else '', status='') }}"
-       class="badge whitespace-nowrap {% if only_unpaid %}badge-accent{% else %}badge-neutral{% endif %}">
-      Unpaid
-    </a>
-    {% for s in statuses %}
-      <a href="/admin/invoices{{ qs(status=s, only_unpaid='') }}"
-         class="badge whitespace-nowrap {% if status_filter == s %}badge-accent{% else %}badge-neutral{% endif %}">
-        {{ status_labels.get(s, s) }}
-      </a>
-    {% endfor %}
-  </div>
-</div>
+{# ── Status tabs ─────────────────────────────── #}
+{% call filter_tabs('Filter invoices by status') %}
+  {{ filter_tab('/admin/invoices' ~ qs(status='', only_unpaid=''), 'All',
+                not status_filter and not only_unpaid) }}
+  {{ filter_tab('/admin/invoices' ~ qs(only_unpaid='true' if not only_unpaid else '', status=''),
+                'Unpaid', only_unpaid) }}
+  {% for s in statuses %}
+    {{ filter_tab('/admin/invoices' ~ qs(status=s, only_unpaid=''),
+                  status_labels.get(s, s), status_filter == s) }}
+  {% endfor %}
+{% endcall %}
 
 {# ── Filter form ────────────────────────────── #}
 <form method="get" action="/admin/invoices" class="panel mb-4 flex flex-wrap gap-3 items-end">

@@ -264,15 +264,42 @@ class CostingService:
         old_material_id = item.material_id
         old_actual_unit_cost = _effective_unit_cost(item)
 
-        for field in payload.model_fields_set:
-            setattr(item, field, getattr(payload, field))
-
+        # Validate the *prospective* values before mutating the ORM object.
+        # DBSessionMiddleware commits on AppError so side effects raised from
+        # a half-applied update would otherwise be persisted despite the 400.
+        prospective_category = (
+            payload.category if "category" in payload.model_fields_set
+            else item.category
+        )
+        prospective_material = (
+            payload.material_id if "material_id" in payload.model_fields_set
+            else item.material_id
+        )
+        prospective_employee = (
+            payload.employee_id if "employee_id" in payload.model_fields_set
+            else item.employee_id
+        )
         try:
-            _validate_item_links(item.category, item.material_id, item.employee_id)
+            _validate_item_links(
+                prospective_category, prospective_material, prospective_employee
+            )
         except ValueError as e:
             raise ValidationError(str(e)) from e
 
-        if item.category in INVENTORY_CATEGORIES or item.category in LABOR_CATEGORIES:
+        for field in payload.model_fields_set:
+            setattr(item, field, getattr(payload, field))
+
+        # Only re-resolve the authoritative unit cost when something that
+        # feeds it changed. Re-resolving on every PATCH would silently
+        # re-price the estimate (and therefore the quote) when the user
+        # merely fixes a typo in the description.
+        if (
+            item.category in INVENTORY_CATEGORIES
+            or item.category in LABOR_CATEGORIES
+            or item.category == CostCategory.OVERHEAD.value
+        ) and payload.model_fields_set & {
+            "category", "material_id", "employee_id", "estimated_unit_cost",
+        }:
             resolved = await self.resolve_unit_cost(
                 category=item.category,
                 material_id=item.material_id,
@@ -329,10 +356,12 @@ class CostingService:
                     item, actor=actor, previous_actual_qty=0.0,
                 )
             else:
-                # No prior consumption — just recompute fields.
-                item.actual_unit_cost = new_actual_unit_cost
-                item.actual_cost = (
-                    float(item.actual_quantity or 0) * new_actual_unit_cost
+                # No prior consumption. Still go through `_sync_actual_cost`:
+                # this same PATCH may be the first one to set `actual_quantity`
+                # (0 → n), and skipping the helper would book the project cost
+                # without ever decrementing stock.
+                await self._sync_actual_cost(
+                    item, actor=actor, previous_actual_qty=0.0,
                 )
         else:
             await self._sync_actual_cost(
@@ -531,12 +560,24 @@ class ProjectService:
 
         if not await CustomerRepository(self.db).get(payload.customer_id):
             raise NotFoundError("Customer not found")
-        if payload.vehicle_id and not await VehicleRepository(self.db).get(payload.vehicle_id):
-            raise NotFoundError("Vehicle not found")
+        if payload.vehicle_id:
+            vehicle = await VehicleRepository(self.db).get(payload.vehicle_id)
+            if not vehicle:
+                raise NotFoundError("Vehicle not found")
+            if vehicle.customer_id and vehicle.customer_id != payload.customer_id:
+                raise ConflictError(
+                    "Vehicle belongs to a different customer than the project."
+                )
         if payload.inquiry_id:
             from app.modules.inquiries.repository import InquiryRepository
-            if not await InquiryRepository(self.db).get(payload.inquiry_id):
+
+            inquiry = await InquiryRepository(self.db).get(payload.inquiry_id)
+            if not inquiry:
                 raise NotFoundError("Inquiry not found")
+            if inquiry.customer_id and inquiry.customer_id != payload.customer_id:
+                raise ConflictError(
+                    "Inquiry belongs to a different customer than the project."
+                )
         if payload.assigned_lead_id:
             if not await self.db.get(User, payload.assigned_lead_id):
                 raise NotFoundError("Assigned lead user not found")

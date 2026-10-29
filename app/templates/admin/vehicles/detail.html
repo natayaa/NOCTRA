@@ -102,8 +102,9 @@
         {% endif %}
       </div>
       {% if inquiries %}
-      <div class="mt-3 -mx-2 md:mx-0">
+      <div class="mt-3 table-wrap">
         <table class="table">
+          <caption class="sr-only">Inquiries linked to this vehicle</caption>
           <thead>
             <tr>
               <th>Code</th>
@@ -121,7 +122,7 @@
               <td>
                 <span class="badge {{ inq_status_tone.get(i.status, 'badge-neutral') }}">
                   <span class="badge-dot"></span>
-                  {{ i.status }}
+                  {{ inquiry_status_labels.get(i.status, i.status) }}
                 </span>
               </td>
               <td class="text-xs text-noctra-dim hidden sm:table-cell">{{ i.created_at | dt_id('%d %b') }}</td>

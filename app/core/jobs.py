@@ -14,7 +14,12 @@ Job = Callable[..., Awaitable[None]]
 
 
 class JobQueue:
-    def __init__(self, *, job_timeout: float = 60.0) -> None:
+    def __init__(self, *, job_timeout: float = 300.0) -> None:
+        # 300s covers the worst-case notification job: two sequential sends,
+        # each with 1 + SMTP_MAX_RETRIES attempts at SMTP_TIMEOUT_SECONDS
+        # (30s) plus exponential backoff (~7s). The previous 60s cap could
+        # cancel a send after delivery but before the EmailLog commit,
+        # leaving notifications unlogged and unrecoverable.
         self._queue: asyncio.Queue[tuple[Job, tuple, dict[str, Any]]] = asyncio.Queue()
         self._worker: asyncio.Task | None = None
         self._shutdown = asyncio.Event()

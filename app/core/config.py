@@ -58,6 +58,47 @@ class Settings(BaseSettings):
     CSRF_HEADER_NAME: str = "X-CSRF-Token"
     CSRF_TOKEN_BYTES: int = 32
 
+    # ── Security headers ────────────────────────────────
+    SECURITY_HEADERS_ENABLED: bool = True
+    SECURITY_CSP_ENABLED: bool = True
+    SECURITY_HSTS_MAX_AGE: int = 60 * 60 * 24 * 365  # 1 year
+    # CDN hosts the UI currently loads scripts/styles from. Everything else
+    # is blocked. Vendor these into /static and empty these lists to tighten
+    # the policy to 'self' only — that is the intended end state.
+    SECURITY_CSP_SCRIPT_ORIGINS: Annotated[list[str], NoDecode] = [
+        "https://cdn.tailwindcss.com",
+        "https://unpkg.com",
+        "https://cdn.jsdelivr.net",
+    ]
+    SECURITY_CSP_STYLE_ORIGINS: Annotated[list[str], NoDecode] = [
+        "https://fonts.googleapis.com",
+    ]
+    SECURITY_CSP_FONT_ORIGINS: Annotated[list[str], NoDecode] = [
+        "https://fonts.gstatic.com",
+    ]
+
+    # ── Password reset ──────────────────────────────────
+    PASSWORD_RESET_ENABLED: bool = True
+    PASSWORD_RESET_TTL_MINUTES: int = 60
+
+    # ── Public intake anti-abuse ────────────────────────
+    # A form must be on screen this long before it may be submitted.
+    PUBLIC_INTAKE_MIN_FILL_SECONDS: int = 2
+    # Ignore stale forms left open longer than this.
+    PUBLIC_INTAKE_FORM_TTL_SECONDS: int = 60 * 60 * 12
+    # Identical description from the same customer within this window is
+    # treated as a double-submit. 0 disables the check.
+    PUBLIC_INTAKE_DEDUPE_MINUTES: int = 5
+
+    # ── Overdue sweep / dunning ─────────────────────────
+    OVERDUE_SWEEP_ENABLED: bool = True
+    OVERDUE_SWEEP_HOUR_LOCAL: int = 2  # 02:00 in APP_TIMEZONE
+    OVERDUE_REMINDER_ENABLED: bool = True
+    # Remind for invoices due within N days or already past due.
+    OVERDUE_REMINDER_WINDOW_DAYS: int = 3
+    # Never re-remind the same invoice more often than this.
+    OVERDUE_REMINDER_COOLDOWN_HOURS: int = 72
+
     # ── Rate limiting ───────────────────────────────────
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_LOGIN_PER_MINUTE: int = 10
@@ -154,6 +195,9 @@ class Settings(BaseSettings):
     @field_validator(
         "CORS_ORIGINS", "TRUSTED_HOSTS",
         "MEDIA_URL_PREFIXES", "MEDIA_ALLOWED_HOSTS",
+        "SECURITY_CSP_SCRIPT_ORIGINS",
+        "SECURITY_CSP_STYLE_ORIGINS",
+        "SECURITY_CSP_FONT_ORIGINS",
         mode="before",
     )
     @classmethod

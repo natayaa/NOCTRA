@@ -156,7 +156,7 @@
       </tr>
 
       {% if has_diff %}
-      <tr class="bg-neutral-50/50">
+      <tr class="bg-noctra-surface2">
         <td colspan="6" class="p-0 border-t-0">
           <details class="group">
             <summary class="cursor-pointer select-none px-3 py-1.5 text-xs text-accent hover:underline list-none [&::-webkit-details-marker]:hidden">
@@ -166,18 +166,18 @@
             <div class="px-3 pb-3 space-y-2">
               {% if e.old_data %}
               <div>
-                <div class="text-[11px] uppercase tracking-wide text-red-700 font-semibold mb-1">
+                <div class="text-[11px] uppercase tracking-wide text-noctra-danger font-semibold mb-1">
                   Before
                 </div>
-                <pre class="text-[11px] leading-snug bg-white border border-neutral-200 rounded p-2 overflow-x-auto max-h-64 whitespace-pre-wrap break-all">{{ e.old_data | tojson(indent=2) }}</pre>
+                <pre class="text-[11px] leading-snug bg-noctra-surface3 border border-noctra-border rounded p-2 overflow-x-auto max-h-64 whitespace-pre-wrap break-all text-noctra-text">{{ e.old_data | tojson(indent=2) }}</pre>
               </div>
               {% endif %}
               {% if e.new_data %}
               <div>
-                <div class="text-[11px] uppercase tracking-wide text-green-700 font-semibold mb-1">
+                <div class="text-[11px] uppercase tracking-wide text-noctra-success font-semibold mb-1">
                   After
                 </div>
-                <pre class="text-[11px] leading-snug bg-white border border-neutral-200 rounded p-2 overflow-x-auto max-h-64 whitespace-pre-wrap break-all">{{ e.new_data | tojson(indent=2) }}</pre>
+                <pre class="text-[11px] leading-snug bg-noctra-surface3 border border-noctra-border rounded p-2 overflow-x-auto max-h-64 whitespace-pre-wrap break-all text-noctra-text">{{ e.new_data | tojson(indent=2) }}</pre>
               </div>
               {% endif %}
             </div>

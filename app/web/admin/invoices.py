@@ -11,18 +11,25 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 
-from app.core.constants import PermissionCode
+from app.core.constants import AuditAction, PermissionCode
 from app.core.deps import DbSession
 from app.core.exceptions import AppError, NotFoundError
+from app.core.jobs import queue
+from app.core.logging import log
 from app.core.pagination import PageParams, paginate, page_params
+from app.modules.audit.service import AuditService
 from app.modules.auth.dependencies import get_current_user
 from app.modules.customers.models import Customer
 from app.modules.customers.repository import CustomerRepository
 from app.modules.finance.constants import (
+    DEFAULT_DP_PERCENT,
+    INVOICE_KIND_LABELS,
+    INVOICE_KINDS,
     INVOICE_STATUSES,
     INVOICE_STATUS_LABELS,
     PAYMENT_METHODS,
     PAYMENT_METHOD_LABELS,
+    InvoiceKind,
     PaymentDirection,
     PaymentReferenceType,
     today_local,
@@ -41,6 +48,7 @@ from app.modules.finance.service import InvoiceService, PaymentService
 from app.modules.projects.constants import TERMINAL_PROJECT_STATUSES
 from app.modules.projects.models import Project
 from app.modules.projects.repository import ProjectRepository
+from app.modules.settings.business import business_profile
 from app.web.admin._perms import read, write
 from app.web.templates_env import templates
 
@@ -51,6 +59,15 @@ _FORM_ERRORS = (AppError, PydanticValidationError, ValueError, KeyError)
 
 def _form_error(exc: Exception) -> str:
     return (getattr(exc, "message", None) or str(exc) or "Invalid input").strip()
+
+
+def _net_paid(payments) -> float:
+    """Net amount paid by a list of already-loaded payments."""
+    total = sum(
+        p.amount if p.direction == PaymentDirection.IN.value else -p.amount
+        for p in payments
+    )
+    return float(total or 0)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -138,6 +155,7 @@ async def new_view(
     db: DbSession,
     customer_id: UUID | None = Query(None),
     project_id: UUID | None = Query(None),
+    kind: str | None = Query(None),
     error: str | None = Query(None),
     _=write(PermissionCode.INVOICE_WRITE),
     current=Depends(get_current_user),
@@ -153,6 +171,13 @@ async def new_view(
             preselected_customer = await CustomerRepository(db).get(
                 preselected_project.customer_id
             )
+
+    if kind not in INVOICE_KINDS:
+        kind = (
+            InvoiceKind.FINAL.value
+            if preselected_project
+            else InvoiceKind.OTHER.value
+        )
 
     # FIX (B1): load dropdown data — only when NOT preselecting, since
     # preselect path uses hidden inputs. Empty when preselected.
@@ -180,6 +205,52 @@ async def new_view(
             ).scalars().all()
         )
 
+    # Contract context + smart prefill when invoicing a project stage.
+    billing = None
+    form_values: dict = {}
+    if preselected_project:
+        from app.modules.finance.models import Invoice
+
+        active = list(
+            (
+                await db.execute(
+                    select(Invoice)
+                    .where(Invoice.project_id == preselected_project.id)
+                    .where(Invoice.status != "CANCELLED")
+                )
+            ).scalars().all()
+        )
+        contract = InvoiceService._contract_value(preselected_project) or 0.0
+        invoiced = sum(
+            float(i.subtotal or 0) - float(i.discount_amount or 0)
+            for i in active
+        )
+        remaining = max(contract - invoiced, 0.0)
+        billing = {
+            "contract": contract,
+            "invoiced": invoiced,
+            "remaining": remaining,
+            "invoices": active,
+        }
+
+        title = preselected_project.title or f"Project {preselected_project.code}"
+        if kind == InvoiceKind.DP.value:
+            amount = round(
+                min(contract * DEFAULT_DP_PERCENT / 100.0, remaining), 2
+            )
+            description = f"DP — {title}"
+        elif kind == InvoiceKind.FINAL.value:
+            amount = round(remaining, 2)
+            description = f"Pelunasan — {title}"
+        else:
+            amount = round(remaining, 2)
+            description = title
+        form_values = {
+            "item_description": description,
+            "item_quantity": "1",
+            "item_unit_price": str(amount),
+        }
+
     return templates.render(
         request,
         "admin/invoices/form.html",
@@ -187,13 +258,17 @@ async def new_view(
             "title": "New Invoice",
             "mode": "create",
             "invoice": None,
+            "kind": kind,
+            "invoice_kinds": INVOICE_KINDS,
+            "invoice_kind_labels": INVOICE_KIND_LABELS,
             "preselected_customer": preselected_customer,
             "preselected_project": preselected_project,
+            "billing": billing,
             "customers": customers,
             "projects": projects,
             "today": today_local(),
             "error": error,
-            "form_values": {},
+            "form_values": form_values,
         },
     )
 
@@ -225,6 +300,7 @@ async def create_submit(
         payload = InvoiceCreate(
             customer_id=UUID(form["customer_id"]),
             project_id=(UUID(form["project_id"]) if form.get("project_id") else None),
+            kind=(form.get("kind") or "").strip() or InvoiceKind.OTHER.value,
             issue_date=date.fromisoformat(form["issue_date"]),
             due_date=(
                 date.fromisoformat(form["due_date"])
@@ -268,8 +344,12 @@ async def create_submit(
                 "title": "New Invoice",
                 "mode": "create",
                 "invoice": None,
+                "kind": (form.get("kind") or InvoiceKind.OTHER.value),
+                "invoice_kinds": INVOICE_KINDS,
+                "invoice_kind_labels": INVOICE_KIND_LABELS,
                 "preselected_customer": None,
                 "preselected_project": None,
+                "billing": None,
                 "customers": customers,
                 "projects": projects,
                 "today": today_local(),
@@ -292,6 +372,7 @@ async def detail_view(
     request: Request,
     db: DbSession,
     error: str | None = Query(None),
+    notice: str | None = Query(None),
     _=read(PermissionCode.FINANCE_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
@@ -307,15 +388,11 @@ async def detail_view(
         await ProjectRepository(db).get(inv.project_id) if inv.project_id else None
     )
 
-    from app.modules.finance.models import InvoiceItem
-    items = (await db.execute(
-        select(InvoiceItem)
-        .where(InvoiceItem.invoice_id == invoice_id)
-        .order_by(InvoiceItem.created_at)
-    )).scalars().all()
+    # `repo.get` eager-loads items in creation order; do not re-query them.
+    items = inv.items
 
     payments = await repo.payments_for(invoice_id)
-    paid = await repo.paid_amount(invoice_id)
+    paid = _net_paid(payments)
     balance = float(inv.total) - paid
 
     accounts = (await db.execute(AccountRepository(db).query())).scalars().all()
@@ -336,9 +413,123 @@ async def detail_view(
             "payment_methods": PAYMENT_METHODS,
             "payment_method_labels": PAYMENT_METHOD_LABELS,
             "status_labels": INVOICE_STATUS_LABELS,
+            "kind_labels": INVOICE_KIND_LABELS,
             "today": today_local(),
             "error": error,
+            "notice": notice,
         },
+    )
+
+
+# ════════════════════════════════════════════════════════════════
+# PRINT / EMAIL
+# ════════════════════════════════════════════════════════════════
+
+@router.get("/{invoice_id}/print", response_class=HTMLResponse)
+async def print_view(
+    invoice_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=read(PermissionCode.FINANCE_READ),
+    current=Depends(get_current_user),
+) -> HTMLResponse:
+    """Print-optimized A4 document. The browser's print dialog saves PDF."""
+    repo = InvoiceRepository(db)
+    inv = await repo.get(invoice_id)
+    if not inv:
+        raise NotFoundError("Invoice not found")
+
+    customer = (
+        await CustomerRepository(db).get(inv.customer_id) if inv.customer_id else None
+    )
+    project = (
+        await ProjectRepository(db).get(inv.project_id) if inv.project_id else None
+    )
+    items = inv.items
+    payments = await repo.payments_for(invoice_id)
+    paid = _net_paid(payments)
+
+    return templates.render(
+        request,
+        "admin/invoices/print.html",
+        {
+            "title": inv.code,
+            "invoice": inv,
+            "customer": customer,
+            "project": project,
+            "items": items,
+            "payments": payments,
+            "paid": paid,
+            "balance": float(inv.total) - paid,
+            "business": await business_profile(db),
+            "kind_label": INVOICE_KIND_LABELS.get(inv.kind, inv.kind),
+            "status_label": INVOICE_STATUS_LABELS.get(inv.status, inv.status),
+        },
+    )
+
+
+@router.post("/{invoice_id}/email")
+async def email_invoice_submit(
+    invoice_id: UUID,
+    request: Request,
+    db: DbSession,
+    _=write(PermissionCode.INVOICE_WRITE),
+    current=Depends(get_current_user),
+):
+    """Queue the invoice email. Delivery is logged in `email_logs`."""
+    inv = await InvoiceRepository(db).get(invoice_id)
+    if not inv:
+        raise NotFoundError("Invoice not found")
+
+    customer = (
+        await CustomerRepository(db).get(inv.customer_id) if inv.customer_id else None
+    )
+    if customer is None or not customer.email:
+        return RedirectResponse(
+            url=f"/admin/invoices/{invoice_id}?error="
+                + quote(
+                    "Customer has no email address — add one on the customer record first.",
+                    safe="",
+                ),
+            status_code=303,
+        )
+    if inv.status == "CANCELLED":
+        return RedirectResponse(
+            url=f"/admin/invoices/{invoice_id}?error="
+                + quote("Cancelled invoices cannot be emailed", safe=""),
+            status_code=303,
+        )
+
+    target_email = customer.email
+    actor_id = current.id
+
+    await AuditService(db).log(
+        action=AuditAction.UPDATE,
+        table_name="invoices",
+        record_id=invoice_id,
+        user_id=actor_id,
+        new_data={"emailed_to": target_email},
+    )
+    await db.commit()
+
+    async def _dispatch():
+        from app.core.database import SessionLocal
+        from app.services.invoice_mailer import send_invoice_email
+
+        async with SessionLocal() as session:
+            try:
+                await send_invoice_email(session, invoice_id=invoice_id)
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                log.exception("invoice_email_failed", invoice_id=str(invoice_id))
+
+    await queue.enqueue(_dispatch)
+
+    return RedirectResponse(
+        url=f"/admin/invoices/{invoice_id}?notice="
+            + quote(f"Invoice email queued for {target_email}.", safe=""),
+        status_code=303,
     )
 
 
@@ -427,8 +618,12 @@ async def edit_view(
             "title": f"Edit {inv.code}",
             "mode": "edit",
             "invoice": inv,
+            "kind": inv.kind,
+            "invoice_kinds": INVOICE_KINDS,
+            "invoice_kind_labels": INVOICE_KIND_LABELS,
             "preselected_customer": customer,
             "preselected_project": None,
+            "billing": None,
             "customers": [],
             "projects": [],
             "today": today_local(),

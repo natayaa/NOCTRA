@@ -77,7 +77,6 @@ def _empty_analytics(
 
 def _render_error(
     request: Request,
-    current,
     *,
     error_message: str,
     preset: str,
@@ -91,7 +90,6 @@ def _render_error(
     """
     ctx = {
         "title": "Dashboard",
-        "current_user": current,
         "error": error_message,
         "period_preset": preset,
         "period_labels": PERIOD_LABELS,
@@ -122,7 +120,6 @@ async def dashboard(
     except ValueError as exc:
         return _render_error(
             request,
-            current,
             error_message=str(exc),
             preset="month",
             from_date=None,
@@ -136,7 +133,9 @@ async def dashboard(
     try:
         kpis = await svc.kpis(f, t)
         revenue_series = await svc.revenue_series(f, t)
-        gross_profit_series = await svc.gross_profit_series(f, t)
+        gross_profit_series = await svc.gross_profit_series(
+            f, t, revenue=revenue_series
+        )
         cash_flow_series = await svc.cash_flow_series(f, t)
         funnel = await svc.inquiry_funnel(f, t)
         top_customers = await svc.top_customers(f, t, limit=5)
@@ -154,7 +153,6 @@ async def dashboard(
         )
         return _render_error(
             request,
-            current,
             error_message=f"Could not load analytics: {exc.message}",
             preset=preset,
             from_date=f,
@@ -170,7 +168,6 @@ async def dashboard(
         )
         return _render_error(
             request,
-            current,
             error_message="Could not load analytics. Please try again later.",
             preset=preset,
             from_date=f,
@@ -195,7 +192,6 @@ async def dashboard(
         "admin/dashboard.html",
         {
             "title": "Dashboard",
-            "current_user": current,
             "kpis": kpis,
             "period_preset": preset,
             "period_labels": PERIOD_LABELS,

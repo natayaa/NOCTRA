@@ -81,10 +81,16 @@ class DBSessionMiddleware(BaseHTTPMiddleware):
     response has been delivered, so a failing `commit()` there cannot be
     surfaced to the client. Doing it in middleware means the response
     object is built but not yet flushed to the socket.
+
+    The session factory is read from `app.state.db_session_factory` so tests
+    can point it at the test database instead of the configured one.
     """
 
     async def dispatch(self, request: Request, call_next):
-        async with SessionLocal() as session:
+        factory = getattr(
+            request.app.state, "db_session_factory", SessionLocal
+        )
+        async with factory() as session:
             request.state.db = session
             try:
                 response = await call_next(request)

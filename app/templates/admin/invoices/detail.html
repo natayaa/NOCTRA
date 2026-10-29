@@ -19,6 +19,9 @@
         <span class="badge-dot"></span>
         {{ status_labels.get(invoice.status, invoice.status) }}
       </span>
+      {% if invoice.kind != 'OTHER' %}
+      <span class="badge badge-info" title="Jenis tagihan">{{ kind_labels.get(invoice.kind, invoice.kind) }}</span>
+      {% endif %}
     </div>
     <p class="page-subtitle">
       {% if customer %}
@@ -32,11 +35,19 @@
     {% if project %}
       <a href="/admin/projects/{{ project.id }}" class="btn btn-secondary btn-sm">← Back to Project</a>
     {% endif %}
+    <a href="/admin/invoices/{{ invoice.id }}/print" target="_blank" rel="noopener"
+       class="btn btn-secondary btn-sm">Print / PDF</a>
+    {% if customer and customer.email and invoice.status != 'CANCELLED' %}
+    <form method="post" action="/admin/invoices/{{ invoice.id }}/email" class="inline-flex" data-guard>
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+      <button class="btn btn-secondary btn-sm" type="submit">Email to customer</button>
+    </form>
+    {% endif %}
     {% if invoice.status not in TERMINAL %}
       <a href="/admin/invoices/{{ invoice.id }}/edit" class="btn btn-secondary btn-sm">Edit</a>
     {% endif %}
     {% if invoice.status == 'DRAFT' %}
-    <form method="post" action="/admin/invoices/{{ invoice.id }}/status" class="inline-flex">
+    <form method="post" action="/admin/invoices/{{ invoice.id }}/status" class="inline-flex" data-guard>
       <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
       <input type="hidden" name="status" value="SENT" />
       <button class="btn btn-primary btn-sm">Send invoice to customer</button>
@@ -44,6 +55,12 @@
     {% endif %}
   </div>
 </div>
+
+{% if notice %}
+<div class="panel mb-4" style="border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.06);">
+  <div class="text-sm text-emerald-200">{{ notice }}</div>
+</div>
+{% endif %}
 
 {% if error %}
 <div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
@@ -184,6 +201,11 @@
         <div class="text-xs uppercase tracking-wider text-noctra-dim font-semibold mb-3">
           Catat Pelunasan / Pembayaran
         </div>
+        {% if invoice.status == 'DRAFT' %}
+        <p class="text-xs text-amber-400 mb-2">
+          Invoice masih draft — mencatat pembayaran akan menerbitkan invoice ini (status menjadi Sent).
+        </p>
+        {% endif %}
         <form method="post" action="/admin/invoices/{{ invoice.id }}/payments"
               class="grid md:grid-cols-5 gap-3 items-end" data-guard>
           <input type="hidden" name="_csrf" value="{{ csrf_token }}" />

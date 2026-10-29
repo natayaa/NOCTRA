@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.datastructures import FormData
 
 from app.core.constants import PermissionCode
 from app.core.deps import DbSession
@@ -22,6 +24,16 @@ from app.web.templates_env import templates
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
 
 _FORM_ERRORS = (AppError, ValueError, KeyError)
+
+# Only category slugs survive the round-trip; anything else is dropped so
+# the redirect can never echo arbitrary user input back into the URL.
+_TAB_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+
+
+def _tab_suffix(form: FormData) -> str:
+    """Return `&tab=<category>` when the form carried a valid active tab."""
+    tab = str(form.get("_tab") or "")
+    return f"&tab={tab}" if _TAB_RE.fullmatch(tab) else ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +105,7 @@ async def update_submit(
 ):
     form = await request.form()
     svc = SettingsService(db)
+    tab_suffix = _tab_suffix(form)
 
     existing_keys = {
         s.key
@@ -127,8 +140,8 @@ async def update_submit(
             safe="",
         )
         return RedirectResponse(
-            url=f"/admin/settings?error={msg}",
+            url=f"/admin/settings?error={msg}{tab_suffix}",
             status_code=303,
         )
 
-    return RedirectResponse(url="/admin/settings?saved=1", status_code=303)
+    return RedirectResponse(url=f"/admin/settings?saved=1{tab_suffix}", status_code=303)

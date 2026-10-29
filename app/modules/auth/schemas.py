@@ -1,7 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.types import Email
 
 
 class LoginRequest(BaseModel):
@@ -15,6 +17,17 @@ class LoginRequest(BaseModel):
 class RefreshRequest(BaseModel):
     # Optional: browser clients send the refresh token via HttpOnly cookie.
     refresh_token: str | None = None
+
+
+class PasswordResetRequest(BaseModel):
+    """Username or email address. The response is always generic."""
+
+    identifier: str = Field(..., min_length=3, max_length=255)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=10, max_length=4096)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class TokenPair(BaseModel):
@@ -36,7 +49,7 @@ class MeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     username: str
-    email: EmailStr
+    email: Email
     full_name: str
     is_active: bool
     is_superuser: bool

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -38,16 +39,29 @@ router = APIRouter(prefix="/admin/purchase-orders", tags=["admin-purchase-orders
 _FORM_ERRORS = (AppError, PydanticValidationError, ValueError, KeyError)
 
 
+def _error_url(po_id: UUID, exc: Exception) -> str:
+    """Redirect back to the PO with a properly encoded error message.
+
+    `&`/`#` in a validation message would otherwise truncate the query
+    string or inject extra parameters.
+    """
+    message = getattr(exc, "message", None) or str(exc) or "Invalid input"
+    return (
+        f"/admin/purchase-orders/{po_id}?error={quote(message.strip(), safe='')}"
+    )
+
+
 @router.get("", response_class=HTMLResponse)
 async def list_view(
     request: Request,
     db: DbSession,
     params: PageParams = Depends(page_params),
     status_: str | None = Query(None, alias="status"),
+    q: str | None = Query(None, max_length=200),
     _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
-    stmt = PurchaseOrderRepository(db).query(status=status_)
+    stmt = PurchaseOrderRepository(db).query(status=status_, q=q)
     rows, meta = await paginate(db, stmt, params)
 
     suppliers = list(
@@ -64,6 +78,7 @@ async def list_view(
             "page_meta": meta,
             "suppliers_by_id": supplier_map,
             "status_filter": status_ or "",
+            "q": q or "",
             "statuses": PURCHASE_ORDER_STATUSES,
             "status_labels": PURCHASE_ORDER_STATUS_LABELS,
         },
@@ -190,11 +205,7 @@ async def add_item_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return RedirectResponse(
-            url=f"/admin/purchase-orders/{po_id}?error="
-                f"{getattr(exc, 'message', str(exc))}",
-            status_code=303,
-        )
+        return RedirectResponse(url=_error_url(po_id, exc), status_code=303)
     return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)
 
 
@@ -212,11 +223,7 @@ async def delete_item_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return RedirectResponse(
-            url=f"/admin/purchase-orders/{po_id}?error="
-                f"{getattr(exc, 'message', str(exc))}",
-            status_code=303,
-        )
+        return RedirectResponse(url=_error_url(po_id, exc), status_code=303)
     return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)
 
 
@@ -233,11 +240,7 @@ async def send_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return RedirectResponse(
-            url=f"/admin/purchase-orders/{po_id}?error="
-                f"{getattr(exc, 'message', str(exc))}",
-            status_code=303,
-        )
+        return RedirectResponse(url=_error_url(po_id, exc), status_code=303)
     return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)
 
 
@@ -256,11 +259,7 @@ async def receive_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return RedirectResponse(
-            url=f"/admin/purchase-orders/{po_id}?error="
-                f"{getattr(exc, 'message', str(exc))}",
-            status_code=303,
-        )
+        return RedirectResponse(url=_error_url(po_id, exc), status_code=303)
     return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)
 
 
@@ -277,9 +276,5 @@ async def cancel_submit(
         await db.commit()
     except _FORM_ERRORS as exc:
         await db.rollback()
-        return RedirectResponse(
-            url=f"/admin/purchase-orders/{po_id}?error="
-                f"{getattr(exc, 'message', str(exc))}",
-            status_code=303,
-        )
+        return RedirectResponse(url=_error_url(po_id, exc), status_code=303)
     return RedirectResponse(url=f"/admin/purchase-orders/{po_id}", status_code=303)

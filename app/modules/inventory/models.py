@@ -136,7 +136,9 @@ class InventoryTransaction(Base, UUIDMixin, TimestampMixin):
         nullable=False,
         index=True,
     )
-    transaction_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    transaction_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Standalone index intentionally omitted — ix_inv_tx_type_created
+    # below covers transaction_type as its leftmost prefix.
 
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))

@@ -21,10 +21,16 @@ def test_hashes_are_unique_due_to_salt():
     assert verify_password("samesame", h2)
 
 
-def test_long_password_truncated_at_72_bytes():
+def test_long_passwords_use_bytes_beyond_72():
+    """SHA-256 pre-hashing means bcrypt's 72-byte limit never truncates.
+
+    Two passwords that share their first 72 bytes must NOT verify against
+    each other — under plain bcrypt they would.
+    """
     base = "a" * 72
     hashed = hash_password(base + "X")
-    assert verify_password(base + "Y", hashed)
+    assert verify_password(base + "X", hashed)
+    assert not verify_password(base + "Y", hashed)
 
 
 def test_malformed_hash_returns_false():

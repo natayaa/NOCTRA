@@ -116,10 +116,11 @@
             </div>
             {% if po.status == 'DRAFT' %}
             <form method="post" action="/admin/purchase-orders/{{ po.id }}/items/{{ item.id }}/delete"
-                  data-confirm="Remove this line?" class="shrink-0">
+                  data-confirm="Remove this line?" data-guard class="shrink-0">
               <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
-              <button type="submit" class="btn btn-ghost btn-sm text-noctra-danger !p-1.5">
-                <svg viewBox="0 0 24 24" fill="none" class="w-4 h-4"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <button type="submit" class="btn btn-ghost btn-sm text-noctra-danger !p-1.5"
+                      title="Remove line" aria-label="Remove line {{ m.name if m else 'item' }}">
+                <svg viewBox="0 0 24 24" fill="none" class="w-4 h-4" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
               </button>
             </form>
             {% endif %}

@@ -20,7 +20,7 @@ from app.core.config import settings
 # Disable debug re-raise so error handlers return JSON
 settings.APP_DEBUG = False
 
-from app.core.database import Base, get_session  # noqa: E402
+from app.core.database import Base  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 # Register every SQLAlchemy model
@@ -84,17 +84,8 @@ async def db(engine) -> AsyncGenerator[AsyncSession, None]:
 async def client(engine) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
     Session = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def _override_get_session():
-        async with Session() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-
-    app.dependency_overrides[get_session] = _override_get_session
+    # DBSessionMiddleware owns the request session; point it at the test DB.
+    app.state.db_session_factory = Session
 
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(
@@ -102,5 +93,3 @@ async def client(engine) -> AsyncGenerator[AsyncClient, None]:
         base_url="http://localhost",
     ) as ac:
         yield ac
-
-    app.dependency_overrides.clear()

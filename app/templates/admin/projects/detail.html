@@ -20,6 +20,12 @@
     {% if vehicle %}
     <a href="/admin/vehicles/{{ vehicle.id }}" class="btn btn-secondary btn-sm">Vehicle</a>
     {% endif %}
+    {% if project.status not in TERMINAL %}
+    <button type="button" class="btn btn-secondary btn-sm"
+            data-open-add-item data-add-category="MATERIAL">
+      + Add cost item
+    </button>
+    {% endif %}
     <a href="/admin/projects/{{ project.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
     {% if project.status in ('APPROVED', 'IN_PROGRESS', 'PAINTING', 'ASSEMBLY', 'QC', 'COMPLETED', 'DELIVERED') %}
     <a href="/admin/invoices/new?customer_id={{ project.customer_id }}&project_id={{ project.id }}"
@@ -28,7 +34,7 @@
   </div>
 </div>
 
-{% if error %}
+{% if error and not open_add %}
 <div class="panel mb-4" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
   <div class="flex items-start gap-3">
     <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -96,42 +102,65 @@
   </div>
 </div>
 
-{# ── Payments ──────────────────────────────────── #}
+{# ── Billing & payments ────────────────────────── #}
 <div class="panel">
   <div class="flex items-center justify-between gap-3 flex-wrap">
-    <div class="panel-title !mb-0">Payments received</div>
+    <div class="panel-title !mb-0">Billing &amp; payments</div>
     <div class="text-xs text-noctra-dim">
-      Total: <span class="font-mono text-noctra-success">{{ total_received | rupiah }}</span>
+      Diterima: <span class="font-mono text-noctra-success">{{ total_received | rupiah }}</span>
     </div>
   </div>
 
-  {% if payments %}
-  <div class="table-wrap mt-3">
+  <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+    <div class="rounded-lg border border-noctra-border p-3">
+      <div class="text-[10px] uppercase tracking-wider text-noctra-dim">Nilai kontrak</div>
+      <div class="font-mono font-semibold">{{ billing.contract | rupiah }}</div>
+    </div>
+    <div class="rounded-lg border border-noctra-border p-3">
+      <div class="text-[10px] uppercase tracking-wider text-noctra-dim">Sudah ditagih</div>
+      <div class="font-mono font-semibold">{{ billing.invoiced | rupiah }}</div>
+    </div>
+    <div class="rounded-lg border border-noctra-border p-3">
+      <div class="text-[10px] uppercase tracking-wider text-noctra-dim">Belum ditagih</div>
+      <div class="font-mono font-semibold {% if billing.remaining > 0 %}text-amber-400{% else %}text-emerald-400{% endif %}">
+        {{ billing.remaining | rupiah }}
+      </div>
+    </div>
+    <div class="rounded-lg border border-noctra-border p-3">
+      <div class="text-[10px] uppercase tracking-wider text-noctra-dim">Sisa tagihan (AR)</div>
+      <div class="font-mono font-semibold {% if billing.outstanding > 0 %}text-amber-400{% else %}text-emerald-400{% endif %}">
+        {{ billing.outstanding | rupiah }}
+      </div>
+    </div>
+  </div>
+
+  {% if invoice_rows %}
+  <div class="table-wrap mt-4">
     <table class="table w-full">
       <thead>
         <tr>
-          <th class="text-left">Date</th>
-          <th class="text-left">Method</th>
-          <th class="text-left">Reference</th>
-          <th class="text-right">Amount</th>
+          <th class="text-left">Invoice</th>
+          <th class="text-left">Jenis</th>
+          <th class="text-left">Status</th>
+          <th class="text-right">Total</th>
+          <th class="text-right">Dibayar</th>
+          <th class="text-right">Sisa</th>
         </tr>
       </thead>
       <tbody>
-        {% for p in payments %}
+        {% for row in invoice_rows %}
+        {% set inv = row.invoice %}
         <tr>
-          <td class="text-xs whitespace-nowrap">{{ p.payment_date | date_id }}</td>
-          <td class="text-sm">{{ payment_method_labels.get(p.method, p.method) if payment_method_labels else p.method }}</td>
-          <td class="text-xs text-noctra-dim">
-            {% if p.reference_type == 'INVOICE' %}
-            <a href="/admin/invoices/{{ p.reference_id }}" class="hover:underline">
-              {{ p.reference_number or 'applied to invoice' }}
-            </a>
-            {% else %}
-            {{ p.reference_number or 'DP' }}
-            {% endif %}
+          <td class="text-xs">
+            <a href="/admin/invoices/{{ inv.id }}" class="mono hover:underline">{{ inv.code }}</a>
+            <div class="text-noctra-dim">{{ inv.issue_date | date_id }}</div>
           </td>
-          <td class="text-right font-mono text-sm text-noctra-success whitespace-nowrap">
-            {{ p.amount | rupiah }}
+          <td class="text-xs">{{ invoice_kind_labels.get(inv.kind, inv.kind) }}</td>
+          <td class="text-xs">{{ invoice_status_labels.get(inv.status, inv.status) }}</td>
+          <td class="text-right font-mono text-sm whitespace-nowrap">{{ inv.total | rupiah }}</td>
+          <td class="text-right font-mono text-sm whitespace-nowrap text-emerald-400">{{ row.paid | rupiah }}</td>
+          <td class="text-right font-mono text-sm whitespace-nowrap {% if row.balance > 0 %}text-amber-400{% else %}text-noctra-dim{% endif %}">
+            {{ row.balance | rupiah }}
           </td>
         </tr>
         {% endfor %}
@@ -139,18 +168,75 @@
     </table>
   </div>
   {% else %}
-  <p class="text-noctra-dim text-sm mt-2">No payments yet.</p>
+  <p class="text-noctra-dim text-sm mt-4">Belum ada invoice untuk proyek ini.</p>
   {% endif %}
 
   {% if project.status not in TERMINAL %}
   <div class="mt-4 flex gap-2 flex-wrap">
-    <a href="/admin/payments/new?direction=IN&reference_type=PROJECT&reference_id={{ project.id }}&customer_id={{ project.customer_id }}"
+    {% if billing.remaining > 0.01 %}
+    <a href="/admin/invoices/new?project_id={{ project.id }}&kind=DP"
+       class="btn btn-primary btn-sm">
+      + Invoice DP
+    </a>
+    <a href="/admin/invoices/new?project_id={{ project.id }}&kind=FINAL"
        class="btn btn-secondary btn-sm">
-      + Record DP
+      + Invoice pelunasan
     </a>
-    <a href="/admin/invoices/new?project_id={{ project.id }}" class="btn btn-primary btn-sm">
-      Create invoice
+    {% else %}
+    <span class="badge badge-success">Proyek sudah ditagih penuh</span>
+    {% endif %}
+    <a href="/admin/payments/new?direction=IN&customer_id={{ project.customer_id }}"
+       class="btn btn-secondary btn-sm">
+      + Catat pembayaran
     </a>
+    <a href="/admin/payments/new?direction=IN&reference_type=PROJECT&reference_id={{ project.id }}&customer_id={{ project.customer_id }}"
+       class="btn btn-ghost btn-sm">
+      + DP sebelum invoice
+    </a>
+  </div>
+  {% endif %}
+
+  {% if payments %}
+  <div class="mt-6 border-t border-noctra-border pt-4">
+    <div class="text-xs uppercase tracking-wider text-noctra-dim font-semibold mb-2">
+      Riwayat pembayaran
+    </div>
+    <div class="table-wrap">
+      <table class="table w-full">
+        <thead>
+          <tr>
+            <th class="text-left">Date</th>
+            <th class="text-left">Method</th>
+            <th class="text-left">Reference</th>
+            <th class="text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in payments %}
+          <tr>
+            <td class="text-xs whitespace-nowrap">{{ p.payment_date | date_id }}</td>
+            <td class="text-sm">{{ payment_method_labels.get(p.method, p.method) if payment_method_labels else p.method }}</td>
+            <td class="text-xs text-noctra-dim">
+              {% if p.reference_type == 'INVOICE' %}
+              <a href="/admin/invoices/{{ p.reference_id }}" class="hover:underline">Invoice</a>
+              {% if p.reference_number %} · {{ p.reference_number }}{% endif %}
+              {% else %}
+              {{ p.reference_number or 'DP / advance' }}
+              {% endif %}
+            </td>
+            <td class="text-right font-mono text-sm whitespace-nowrap {% if p.direction == 'OUT' %}text-noctra-danger{% else %}text-noctra-success{% endif %}">
+              {% if p.direction == 'OUT' %}-{% endif %}{{ p.amount | rupiah }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if advances %}
+    <p class="text-xs text-noctra-dim mt-2">
+      {{ advances | length }} DP/advance belum dialokasikan ke invoice — otomatis dipindahkan saat invoice dibuat.
+    </p>
+    {% endif %}
   </div>
   {% endif %}
 </div>
@@ -315,7 +401,15 @@
 
     {# ── Cost items ────────────────────────────────── #}
     <div class="panel">
-      <div class="panel-title">Cost items</div>
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="panel-title !mb-0">Cost items</div>
+        {% if project.status not in TERMINAL %}
+        <button type="button" class="btn btn-secondary btn-sm"
+                data-open-add-item data-add-category="MATERIAL">
+          + Add item
+        </button>
+        {% endif %}
+      </div>
 
       {% if items %}
       {% for cat in cost_categories %}
@@ -407,88 +501,17 @@
       {% endif %}
       {% endfor %}
       {% else %}
-      <p class="text-noctra-dim text-sm mt-2">No cost items yet. Add the first one below.</p>
+      <div class="flex items-center justify-between gap-3 flex-wrap mt-3">
+        <p class="text-noctra-dim text-sm">No cost items yet.</p>
+        {% if project.status not in TERMINAL %}
+        <button type="button" class="btn btn-primary btn-sm"
+                data-open-add-item data-add-category="MATERIAL">
+          Add the first item
+        </button>
+        {% endif %}
+      </div>
       {% endif %}
     </div>
-
-    {# ── Add item form ────────────────────────────── #}
-    {% if project.status not in TERMINAL %}
-    <div class="panel">
-      <div class="panel-title">Add cost item</div>
-
-      <form method="post" action="/admin/projects/{{ project.id }}/items"
-            class="mt-3 space-y-4" data-guard id="add-item-form">
-        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
-
-        <div class="grid md:grid-cols-3 gap-4">
-          <div class="form-row">
-            <label class="form-label" for="add_category">Category</label>
-            <select class="select" id="add_category" name="category" required data-category-select>
-              {% for c in cost_categories %}
-              <option value="{{ c }}">{{ cost_category_labels.get(c, c) }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-row md:col-span-2">
-            <label class="form-label" for="add_description">Description</label>
-            <input class="input" id="add_description" name="description" required maxlength="500"
-                   placeholder="e.g. Belkote 2100 clear coat" />
-          </div>
-        </div>
-
-        <div id="material-row" class="form-row">
-          <label class="form-label" for="add_material_id">Material (from inventory)</label>
-          <select class="select" id="add_material_id" name="material_id">
-            <option value="">—</option>
-            {% for m in materials %}
-            <option value="{{ m.id }}">
-              {{ m.name }} ({{ m.stock_unit }} @ {{ m.cost_per_stock_unit | rupiah(decimals=2) }})
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div id="employee-row" class="form-row" style="display:none;">
-          <label class="form-label" for="add_employee_id">Employee</label>
-          <select class="select" id="add_employee_id" name="employee_id">
-            <option value="">—</option>
-            {% for e in employees %}
-            <option value="{{ e.id }}">
-              {{ e.name }} — {{ e.position or '' }} @ {{ e.hourly_rate | rupiah }}/hour
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div id="cost-rows" class="grid md:grid-cols-4 gap-4">
-          <div class="form-row">
-            <label class="form-label" for="add_unit">Unit</label>
-            <input class="input" id="add_unit" name="unit" maxlength="16" placeholder="ml, hours, piece" />
-          </div>
-          <div class="form-row">
-            <label class="form-label" for="add_est_qty">Est. quantity</label>
-            <input class="input" type="number" step="any" id="add_est_qty" name="estimated_quantity" />
-          </div>
-          <div class="form-row">
-            <label class="form-label" for="add_est_cost">Est. unit cost</label>
-            <input class="input" type="number" step="any" id="add_est_cost" name="estimated_unit_cost"
-                   placeholder="auto from material/employee" />
-          </div>
-          <div class="form-row">
-            <label class="form-label" for="add_act_qty">Actual quantity</label>
-            <input class="input" type="number" step="any" id="add_act_qty" name="actual_quantity" />
-          </div>
-        </div>
-
-        <div class="text-xs text-noctra-dim">
-          Overhead rate: {{ overhead_rate_per_hour | rupiah }}/hour. Enter labor hours as the quantity
-          to allocate overhead proportionally.
-        </div>
-
-        <button class="btn btn-primary btn-sm">Add cost item</button>
-      </form>
-    </div>
-    {% endif %}
 
   </div>
 
@@ -590,25 +613,206 @@
 
   </aside>
 </div>
+
+{# ── Add cost item modal ───────────────────────────── #}
+{% if project.status not in TERMINAL %}
+<dialog class="form-dialog" id="add-item-dialog"
+        aria-labelledby="add-item-title"
+        data-auto-open="{{ '1' if open_add else '0' }}">
+  <div class="form-dialog-panel">
+    <div class="form-dialog-head">
+      <div>
+        <h2 class="form-dialog-title" id="add-item-title">Add cost item</h2>
+        <p class="form-dialog-sub">
+          Materials and parts consume inventory; labor bills the employee's hourly rate.
+        </p>
+      </div>
+      <button type="button" class="form-dialog-close" data-close-add-item
+              aria-label="Close dialog">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="1.75"
+                stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <form method="post" action="/admin/projects/{{ project.id }}/items"
+          class="form-dialog-form" data-guard id="add-item-form"
+          autocomplete="off">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
+
+      <div class="form-dialog-body">
+        {% if error %}
+        <div class="alert alert-danger" role="alert" tabindex="-1" data-add-error>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+            <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="1.75"
+                  stroke-linecap="round"/>
+          </svg>
+          <div>
+            <span class="alert-title">Couldn’t add the item</span>
+            {{ error }}
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="grid sm:grid-cols-3 gap-4">
+          <div class="form-row">
+            <label class="form-label" for="add_category">Category</label>
+            <select class="select" id="add_category" name="category" required
+                    data-category-select>
+              {% for c in cost_categories %}
+              <option value="{{ c }}">{{ cost_category_labels.get(c, c) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-row sm:col-span-2">
+            <label class="form-label" for="add_description">Description</label>
+            <input class="input" id="add_description" name="description" required
+                   maxlength="500" placeholder="e.g. Belkote 2100 clear coat" />
+          </div>
+        </div>
+
+        <div id="material-row" class="form-row">
+          <label class="form-label" for="add_material_id">Material (from inventory)</label>
+          <select class="select" id="add_material_id" name="material_id">
+            <option value="">— choose a material —</option>
+            {% for m in materials %}
+            <option value="{{ m.id }}"
+                    data-label="{{ m.name }}"
+                    data-unit="{{ m.stock_unit }}"
+                    data-cost="{{ m.cost_per_stock_unit }}">
+              {{ m.name }} ({{ m.stock_unit }} @ {{ m.cost_per_stock_unit | rupiah(decimals=2) }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div id="employee-row" class="form-row" style="display:none;">
+          <label class="form-label" for="add_employee_id">Employee</label>
+          <select class="select" id="add_employee_id" name="employee_id">
+            <option value="">— choose an employee —</option>
+            {% for e in employees %}
+            <option value="{{ e.id }}"
+                    data-label="{{ e.name }}"
+                    data-unit="hour"
+                    data-cost="{{ e.hourly_rate }}">
+              {{ e.name }} — {{ e.position or '' }} @ {{ e.hourly_rate | rupiah }}/hour
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div id="cost-rows" class="grid sm:grid-cols-2 gap-4">
+          <div class="form-row">
+            <label class="form-label" for="add_unit">Unit</label>
+            <input class="input" id="add_unit" name="unit" maxlength="16"
+                   placeholder="ml, hours, piece" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="add_est_qty">Est. quantity</label>
+            <input class="input" type="number" step="any" min="0"
+                   id="add_est_qty" name="estimated_quantity" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="add_est_cost">Est. unit cost</label>
+            <input class="input" type="number" step="any" min="0"
+                   id="add_est_cost" name="estimated_unit_cost"
+                   placeholder="auto from material/employee" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="add_act_qty">Actual quantity</label>
+            <input class="input" type="number" step="any" min="0"
+                   id="add_act_qty" name="actual_quantity" />
+          </div>
+        </div>
+
+        <div class="text-xs text-noctra-dim">
+          Overhead rate: {{ overhead_rate_per_hour | rupiah }}/hour. For overhead, enter the
+          labor hours as the quantity to allocate it proportionally.
+        </div>
+      </div>
+
+      <div class="form-dialog-foot">
+        <button type="button" class="btn btn-ghost btn-sm" data-close-add-item>Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Add cost item</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script>
 (() => {
-  const sel = document.querySelector('[data-category-select]');
-  if (!sel) return;
-  const matRow = document.getElementById('material-row');
-  const empRow = document.getElementById('employee-row');
-  const costRows = document.getElementById('cost-rows');
+  const dlg = document.getElementById('add-item-dialog');
+  if (!dlg) return;
 
-  function update() {
+  const sel = dlg.querySelector('[data-category-select]');
+  const matRow = dlg.querySelector('#material-row');
+  const empRow = dlg.querySelector('#employee-row');
+  const matSel = dlg.querySelector('#add_material_id');
+  const empSel = dlg.querySelector('#add_employee_id');
+  const desc = dlg.querySelector('#add_description');
+  const unit = dlg.querySelector('#add_unit');
+  const estCost = dlg.querySelector('#add_est_cost');
+
+  // Show only the link field the chosen category needs. Hidden selects are
+  // disabled so a stale material/employee never rides along in the POST.
+  function syncFields() {
     const v = sel.value;
-    if (matRow) matRow.style.display = (v === 'MATERIAL' || v === 'PART') ? 'block' : 'none';
-    if (empRow) empRow.style.display = (v === 'LABOR') ? 'block' : 'none';
-    if (costRows) costRows.style.display = (v === 'OVERHEAD') ? 'none' : 'block';
+    const isInventory = v === 'MATERIAL' || v === 'PART';
+    const isLabor = v === 'LABOR';
+
+    matRow.style.display = isInventory ? '' : 'none';
+    matSel.disabled = !isInventory;
+    matSel.required = isInventory;
+
+    empRow.style.display = isLabor ? '' : 'none';
+    empSel.disabled = !isLabor;
+    empSel.required = isLabor;
   }
-  sel.addEventListener('change', update);
-  update();
+
+  // Fill still-empty fields from the chosen material/employee. The server
+  // remains the source of truth for unit cost; this just saves typing.
+  function prefill(source) {
+    const opt = source.selectedOptions[0];
+    if (!opt || !opt.value) return;
+    if (desc && !desc.value.trim() && opt.dataset.label) desc.value = opt.dataset.label;
+    if (unit && !unit.value.trim() && opt.dataset.unit) unit.value = opt.dataset.unit;
+    if (estCost && !estCost.value.trim() && opt.dataset.cost) estCost.value = opt.dataset.cost;
+  }
+
+  function open(category) {
+    if (category) sel.value = category;
+    syncFields();
+    if (!dlg.open) dlg.showModal();
+    const err = dlg.querySelector('[data-add-error]');
+    (err || desc).focus();
+  }
+
+  document.querySelectorAll('[data-open-add-item]').forEach((btn) => {
+    btn.addEventListener('click', () => open(btn.dataset.addCategory || ''));
+  });
+
+  dlg.querySelectorAll('[data-close-add-item]').forEach((btn) => {
+    btn.addEventListener('click', () => dlg.close());
+  });
+
+  dlg.addEventListener('click', (e) => {
+    if (e.target === dlg) dlg.close();
+  });
+
+  sel.addEventListener('change', syncFields);
+  matSel.addEventListener('change', () => prefill(matSel));
+  empSel.addEventListener('change', () => prefill(empSel));
+
+  syncFields();
+
+  // A rejected submission comes back as ?error=…&add=1 — reopen the modal
+  // so the operator lands back in the form, with the reason in view.
+  if (dlg.dataset.autoOpen === '1') open('');
 })();
 </script>
 {% endblock %}

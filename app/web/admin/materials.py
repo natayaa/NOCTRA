@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote, urlencode
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.constants import PermissionCode
+from app.core.csv_export import csv_safe_row
 from app.core.deps import DbSession
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams, paginate, page_params
@@ -46,6 +47,21 @@ from app.web.templates_env import templates
 router = APIRouter(prefix="/admin/materials", tags=["admin-materials"])
 
 _FORM_ERRORS = (AppError, PydanticValidationError, ValueError, KeyError)
+
+
+def _active_filter(raw: str | None) -> bool | None:
+    """Tri-state `is_active` from the query string.
+
+    The list has All / Active / Disabled tabs, so the value must be able to
+    say "no filter" — which a plain `bool | None = Query(True)` cannot.
+    Unknown values fall back to "no filter" rather than 422-ing the page.
+    """
+    value = (raw or "").strip().lower()
+    if value in ("true", "1", "yes"):
+        return True
+    if value in ("false", "0", "no"):
+        return False
+    return None
 
 
 def _catalog_context() -> dict:
@@ -117,14 +133,15 @@ async def list_view(
     params: PageParams = Depends(page_params),
     q: str | None = Query(None, max_length=200),
     category: str | None = Query(None),
-    is_active: bool | None = Query(True),
+    is_active: str | None = Query(None),
     sort: str = Query("category_name"),
     _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ) -> HTMLResponse:
+    is_active_filter = _active_filter(is_active)
     repo = MaterialRepository(db)
     stmt = repo.query(
-        q=q, category=category, is_active=is_active,
+        q=q, category=category, is_active=is_active_filter,
         sort=sort if sort in MATERIAL_SORT_OPTIONS else "category_name",
     )
     rows, meta = await paginate(db, stmt, params)
@@ -142,7 +159,10 @@ async def list_view(
         base = {
             "q": q or "",
             "category": category or "",
-            "is_active": "" if is_active is None else ("true" if is_active else "false"),
+            "is_active": (
+                "" if is_active_filter is None
+                else ("true" if is_active_filter else "false")
+            ),
             "sort": sort,
         }
         if page is not None:
@@ -161,7 +181,7 @@ async def list_view(
             "stock_map": stock_map,
             "q": q or "",
             "category_filter": category or "",
-            "is_active_filter": is_active,
+            "is_active_filter": is_active_filter,
             "sort": sort,
             "all_categories": MATERIAL_CATEGORIES,
             "qs": qs,
@@ -179,12 +199,12 @@ async def export_csv(
     db: DbSession,
     q: str | None = Query(None),
     category: str | None = Query(None),
-    is_active: bool | None = Query(True),
+    is_active: str | None = Query(None),
     _=read(PermissionCode.INVENTORY_READ),
     current=Depends(get_current_user),
 ):
     stmt = MaterialRepository(db).query(
-        q=q, category=category, is_active=is_active,
+        q=q, category=category, is_active=_active_filter(is_active),
     )
     rows = (await db.execute(stmt)).scalars().all()
 
@@ -207,17 +227,17 @@ async def export_csv(
     for m in rows:
         stock = stock_map.get(m.id, 0.0)
         cost_per_unit = m.cost_per_stock_unit
-        writer.writerow([
+        writer.writerow(csv_safe_row([
             m.code, m.name, m.brand or "", m.category, m.sku or "",
             m.purchase_unit, m.stock_unit, float(m.stock_units_per_purchase),
             float(m.current_purchase_price), f"{cost_per_unit:.4f}",
             f"{stock:.4f}", f"{stock * cost_per_unit:.2f}",
             float(m.reorder_point), float(m.min_stock),
             m.location or "", "yes" if m.is_active else "no",
-        ])
+        ]))
 
     buf.seek(0)
-    filename = f"materials-{datetime.utcnow().strftime('%Y%m%d-%H%M')}.csv"
+    filename = f"materials-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')}.csv"
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv",

@@ -1,0 +1,24 @@
+{#
+  Filter tab bar for list pages.
+
+  Usage:
+    {% from "components/filter_tabs.html" import filter_tabs, filter_tab %}
+    {% call filter_tabs('Filter by status') %}
+      {{ filter_tab('/admin/invoices' ~ qs(status=''), 'All', not status_filter) }}
+      {{ filter_tab('/admin/invoices' ~ qs(status=s), label, status_filter == s, count) }}
+    {% endcall %}
+#}
+
+{% macro filter_tabs(label='Filters') %}
+<nav class="filter-tabs" aria-label="{{ label }}">{{ caller() }}</nav>
+{% endmacro %}
+
+
+{% macro filter_tab(href, label, active=False, count=None, tone=None) %}
+<a href="{{ href }}"
+   class="filter-tab{% if active %} is-active{% endif %}{% if tone %} is-{{ tone }}{% endif %}"
+   {% if active %}aria-current="page"{% endif %}>
+  {{ label }}
+  {% if count %}<span class="filter-tab-count">{{ count }}</span>{% endif %}
+</a>
+{% endmacro %}

@@ -1,7 +1,7 @@
 """Read/write helpers for the inquiries module."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import Select, and_, func, or_, select, text
@@ -26,6 +26,31 @@ class InquiryRepository:
 
     async def get_by_code(self, code: str) -> Inquiry | None:
         stmt = select(Inquiry).where(Inquiry.code == code)
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def recent_duplicate(
+        self, *, customer_id: UUID, description: str, within_minutes: int
+    ) -> Inquiry | None:
+        """Same customer, same text, recent — almost always a double-submit.
+
+        Only exact description matches count. Two different jobs for one
+        customer rarely share their request text verbatim, and a false
+        merge would silently swallow a real inquiry, so the check is
+        deliberately narrow.
+        """
+        if within_minutes <= 0:
+            return None
+        cutoff = datetime.now(UTC) - timedelta(minutes=within_minutes)
+        stmt = (
+            select(Inquiry)
+            .where(
+                Inquiry.customer_id == customer_id,
+                Inquiry.description == description,
+                Inquiry.created_at >= cutoff,
+            )
+            .order_by(Inquiry.created_at.desc())
+            .limit(1)
+        )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     def query(

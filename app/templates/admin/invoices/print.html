@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>{{ invoice.code }} — {{ business.name }}</title>
+  <style>
+    @page { size: A4; margin: 16mm 14mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px 16px 48px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #18181b; font-size: 12px; line-height: 1.5; background: #f4f4f5;
+    }
+    .sheet { max-width: 190mm; margin: 0 auto; background: #fff; padding: 14mm 12mm;
+             border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .top { display: flex; justify-content: space-between; gap: 32px; }
+    .brand-name { font-size: 20px; font-weight: 800; letter-spacing: .04em; }
+    .brand-tag { color: #71717a; font-size: 11px; margin-top: 2px; }
+    .brand-meta { color: #52525b; font-size: 10.5px; margin-top: 10px; line-height: 1.6; }
+    .doc-title { text-align: right; }
+    .doc-title h1 { margin: 0; font-size: 22px; letter-spacing: .08em; text-transform: uppercase; }
+    .doc-code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px; margin-top: 4px; }
+    .chip { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px;
+            border: 1px solid #d4d4d8; color: #52525b; font-size: 10px; letter-spacing: .06em;
+            text-transform: uppercase; }
+    .rule { border: 0; border-top: 2px solid #18181b; margin: 14px 0 16px; }
+    .cols { display: flex; gap: 32px; justify-content: space-between; }
+    .col-title { font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: #71717a;
+                 margin-bottom: 4px; font-weight: 700; }
+    .bill-to strong { font-size: 13px; }
+    .muted { color: #71717a; }
+    .meta { min-width: 190px; }
+    .meta div { display: flex; justify-content: space-between; gap: 20px; padding: 2px 0; }
+    .meta dt { color: #71717a; }
+    .meta dd { margin: 0; font-weight: 600; text-align: right; }
+    table.items { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    table.items th { text-align: left; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+                     color: #71717a; border-bottom: 1px solid #e4e4e7; padding: 8px 6px; }
+    table.items td { padding: 8px 6px; border-bottom: 1px solid #f4f4f5; vertical-align: top; }
+    .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .totals { margin-left: auto; width: 62mm; margin-top: 12px; }
+    .totals div { display: flex; justify-content: space-between; padding: 3px 0; color: #52525b; }
+    .totals .grand { border-top: 2px solid #18181b; margin-top: 6px; padding-top: 8px;
+                     font-size: 14px; font-weight: 700; color: #18181b; }
+    .totals .paid { color: #047857; }
+    .totals .balance { color: #18181b; font-weight: 700; }
+    .notes { margin-top: 22px; padding: 10px 14px; background: #fafafa; border-left: 3px solid #f97316;
+             white-space: pre-line; }
+    .foot { margin-top: 28px; display: flex; justify-content: space-between; gap: 40px; align-items: flex-end; }
+    .sign { min-width: 60mm; text-align: center; }
+    .sign-line { border-top: 1px solid #a1a1aa; margin-top: 48px; padding-top: 6px; color: #71717a; font-size: 10.5px; }
+    .thanks { color: #71717a; max-width: 95mm; font-size: 10.5px; }
+    .toolbar { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; }
+    .toolbar a, .toolbar button {
+      font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none;
+      padding: 8px 14px; border-radius: 6px; border: 1px solid #d4d4d8; background: #fff; color: #18181b;
+    }
+    .toolbar button { background: #18181b; color: #fff; border-color: #18181b; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .sheet { box-shadow: none; border-radius: 0; padding: 0; max-width: none; }
+      .toolbar { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <a href="/admin/invoices/{{ invoice.id }}">← Kembali</a>
+    <button type="button" onclick="window.print()">Cetak / Simpan PDF</button>
+  </div>
+
+  <div class="sheet">
+    <div class="top">
+      <div>
+        <div class="brand-name">{{ business.name }}</div>
+        {% if business.tagline %}<div class="brand-tag">{{ business.tagline }}</div>{% endif %}
+        <div class="brand-meta">
+          {% if business.address %}{{ business.address }}<br />{% endif %}
+          {% if business.phone %}Telp. {{ business.phone }}{% endif %}
+          {% if business.email %} · {{ business.email }}{% endif %}
+          {% if business.tax_id %}<br />NPWP: {{ business.tax_id }}{% endif %}
+        </div>
+      </div>
+      <div class="doc-title">
+        <h1>Invoice</h1>
+        <div class="doc-code">{{ invoice.code }}</div>
+        <span class="chip">{{ kind_label }}</span>
+        <span class="chip">{{ status_label }}</span>
+      </div>
+    </div>
+
+    <hr class="rule" />
+
+    <div class="cols">
+      <div class="bill-to">
+        <div class="col-title">Ditagihkan kepada</div>
+        {% if customer %}
+          <strong>{{ customer.name }}</strong><br />
+          {% if customer.address_line1 %}{{ customer.address_line1 }}<br />{% endif %}
+          {% if customer.address_line2 %}{{ customer.address_line2 }}<br />{% endif %}
+          {% if customer.city or customer.province or customer.postal_code %}
+            {{ customer.city or '' }}{% if customer.province %}, {{ customer.province }}{% endif %}
+            {% if customer.postal_code %} {{ customer.postal_code }}{% endif %}<br />
+          {% endif %}
+          {% if customer.phone %}<span class="muted">{{ customer.phone }}</span>{% endif %}
+          {% if customer.email %} · <span class="muted">{{ customer.email }}</span>{% endif %}
+        {% else %}
+          <span class="muted">—</span>
+        {% endif %}
+      </div>
+      <div class="meta">
+        <div><span>Tanggal terbit</span><span>{{ invoice.issue_date | date_id }}</span></div>
+        <div><span>Jatuh tempo</span><span>{{ invoice.due_date | date_id if invoice.due_date else '—' }}</span></div>
+        {% if project %}
+        <div><span>Proyek</span><span>{{ project.code }}</span></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <table class="items">
+      <thead>
+        <tr>
+          <th>Deskripsi</th>
+          <th class="num" style="width:20mm;">Qty</th>
+          <th class="num" style="width:30mm;">Harga</th>
+          <th class="num" style="width:32mm;">Jumlah</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td class="num">{{ item.quantity | qty(decimals=2) }}</td>
+          <td class="num">{{ item.unit_price | rupiah }}</td>
+          <td class="num">{{ item.amount | rupiah }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <div><span>Subtotal</span><span>{{ invoice.subtotal | rupiah }}</span></div>
+      {% if invoice.discount_amount and invoice.discount_amount > 0 %}
+      <div><span>Diskon</span><span>−{{ invoice.discount_amount | rupiah }}</span></div>
+      {% endif %}
+      {% if invoice.tax_amount and invoice.tax_amount > 0 %}
+      <div><span>Pajak ({{ invoice.tax_rate_pct | qty(decimals=2) }}%)</span><span>{{ invoice.tax_amount | rupiah }}</span></div>
+      {% endif %}
+      <div class="grand"><span>Total</span><span>{{ invoice.total | rupiah }}</span></div>
+      {% if paid > 0 %}
+      <div class="paid"><span>Sudah dibayar</span><span>{{ paid | rupiah }}</span></div>
+      <div class="balance"><span>Sisa tagihan</span><span>{{ balance | rupiah }}</span></div>
+      {% endif %}
+    </div>
+
+    {% if invoice.terms %}
+    <div class="notes"><strong>Ketentuan:</strong><br />{{ invoice.terms }}</div>
+    {% endif %}
+    {% if invoice.notes %}
+    <div class="notes"><strong>Catatan:</strong><br />{{ invoice.notes }}</div>
+    {% endif %}
+
+    <div class="foot">
+      <div class="thanks">
+        Terima kasih atas kepercayaan Anda.
+        {% if business.phone %}Jika ada pertanyaan, hubungi {{ business.phone }}.{% endif %}
+      </div>
+      <div class="sign">
+        <div class="sign-line">Hormat kami, {{ business.name }}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

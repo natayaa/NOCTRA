@@ -5,6 +5,7 @@ BaseHTTPMiddleware that consumed stream is not replayed downstream, so
 the route used to receive an empty form ("Name is required").
 """
 
+import time
 from io import BytesIO
 
 import pytest
@@ -13,8 +14,14 @@ from PIL import Image
 from sqlalchemy import select
 
 import app.core.upload as upload
+from app.core.form_guard import make_form_timestamp
 from app.modules.customers.models import Customer
 from app.modules.inquiries.models import Inquiry, InquiryPhoto
+
+
+def _form_ts(*, age_seconds: int = 10) -> str:
+    """A render timestamp old enough to pass the min-fill-time check."""
+    return make_form_timestamp(now=time.time() - age_seconds)
 
 
 def _jpeg_bytes() -> bytes:
@@ -26,6 +33,7 @@ def _jpeg_bytes() -> bytes:
 def _form(csrf: str) -> dict[str, str]:
     return {
         "_csrf": csrf,
+        "_form_ts": _form_ts(),
         "name": "Budi Santoso",
         "phone": "081234567890",
         "email": "budi@example.com",
@@ -59,6 +67,29 @@ async def test_multipart_fields_reach_validation(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("vehicle_year", "not-a-year"),
+        ("vehicle_year", "3000"),
+        ("desired_date", "31-12-2026"),
+    ],
+)
+async def test_malformed_payload_returns_400_without_inquiry(
+    client: AsyncClient, db, field, value
+):
+    """Garbage year/date must not escape as a 500 on a public endpoint."""
+    csrf = await _csrf_token(client)
+    data = _form(csrf) | {field: value}
+
+    r = await client.post("/contact", data=data)
+
+    assert r.status_code == 400, r.text
+    assert "periksa kembali" in r.text
+    assert (await db.execute(select(Inquiry))).scalars().all() == []
+
+
+@pytest.mark.asyncio
 async def test_contact_submission_with_photo_creates_inquiry(
     client: AsyncClient, db, tmp_path, monkeypatch
 ):
@@ -85,3 +116,44 @@ async def test_contact_submission_with_photo_creates_inquiry(
     assert photo.inquiry_id == inquiry.id
     assert photo.is_primary is True
     assert photo.file_path.startswith("/media/inquiries/")
+
+
+@pytest.mark.asyncio
+async def test_instant_submission_is_silently_dropped(client: AsyncClient, db):
+    """A form filled in milliseconds is a bot. Answer success, store nothing."""
+    csrf = await _csrf_token(client)
+    data = _form(csrf) | {"_form_ts": make_form_timestamp()}
+
+    r = await client.post("/contact", data=data)
+
+    assert r.status_code == 303
+    assert r.headers["location"] == "/contact/success"
+    assert (await db.execute(select(Inquiry))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_missing_timestamp_is_silently_dropped(client: AsyncClient, db):
+    csrf = await _csrf_token(client)
+    data = _form(csrf)
+    data.pop("_form_ts")
+
+    r = await client.post("/contact", data=data)
+
+    assert r.status_code == 303
+    assert (await db.execute(select(Inquiry))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_double_submit_returns_same_inquiry(client: AsyncClient, db):
+    """Retries and double-clicks must not create a second inquiry."""
+    csrf = await _csrf_token(client)
+    data = _form(csrf)
+
+    first = await client.post("/contact", data=data)
+    second = await client.post("/contact", data=data)
+
+    assert first.status_code == 303 and second.status_code == 303
+    assert first.headers["location"] == second.headers["location"]
+    assert first.headers["location"].startswith("/contact/success?ref=NOCTRA-I-")
+    inquiries = (await db.execute(select(Inquiry))).scalars().all()
+    assert len(inquiries) == 1

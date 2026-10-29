@@ -1,0 +1,123 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+{% set display_name = user_obj.full_name or user_obj.username %}
+{% set role_names = user_obj.roles | map(attribute='name') | list %}
+
+<div class="page-header">
+  <div>
+    <div class="page-eyebrow">Account</div>
+    <h1 class="page-title">My Profile</h1>
+    <p class="page-subtitle">Your account details and password.</p>
+  </div>
+  <div class="page-actions">
+    <a href="/admin/settings" class="btn btn-secondary btn-sm">Settings</a>
+  </div>
+</div>
+
+{% if notice %}
+<div class="panel mb-4" role="status" style="border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.06);">
+  <div class="text-sm text-emerald-200">{{ notice }}</div>
+</div>
+{% endif %}
+{% if error %}
+<div class="panel mb-4" role="alert" style="border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.06);">
+  <div class="text-sm text-red-200">{{ error }}</div>
+</div>
+{% endif %}
+
+<div class="grid gap-5 items-start lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+
+  {# ── Account summary ──────────────────────────── #}
+  <section class="panel" aria-labelledby="account-heading">
+    <div class="flex items-center gap-4 mb-5">
+      <div class="avatar" aria-hidden="true">{{ display_name[:1] | upper }}</div>
+      <div class="min-w-0">
+        <h2 id="account-heading" class="text-lg font-semibold truncate">{{ display_name }}</h2>
+        <div class="mono text-xs text-noctra-dim truncate">{{ user_obj.username }}</div>
+      </div>
+    </div>
+
+    <dl class="space-y-3 text-sm">
+      <div class="flex items-start justify-between gap-4">
+        <dt class="text-noctra-muted">Email</dt>
+        <dd class="text-right break-all">{{ user_obj.email or '—' }}</dd>
+      </div>
+      <div class="flex items-start justify-between gap-4">
+        <dt class="text-noctra-muted">Roles</dt>
+        <dd class="flex flex-wrap gap-1 justify-end">
+          {% if role_names %}
+            {% for name in role_names %}
+              <span class="badge badge-neutral">{{ name }}</span>
+            {% endfor %}
+          {% else %}
+            <span class="text-noctra-dim">No roles</span>
+          {% endif %}
+          {% if user_obj.is_superuser %}
+            <span class="badge badge-accent">Superuser</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="flex items-start justify-between gap-4">
+        <dt class="text-noctra-muted">Status</dt>
+        <dd>
+          {% if user_obj.is_active %}
+            <span class="badge badge-success"><span class="badge-dot"></span>Active</span>
+          {% else %}
+            <span class="badge badge-danger">Inactive</span>
+          {% endif %}
+        </dd>
+      </div>
+      <div class="flex items-start justify-between gap-4">
+        <dt class="text-noctra-muted">Last sign-in</dt>
+        <dd class="text-right">
+          {{ user_obj.last_login_at | dt_id if user_obj.last_login_at else 'Never' }}
+        </dd>
+      </div>
+      <div class="flex items-start justify-between gap-4">
+        <dt class="text-noctra-muted">Member since</dt>
+        <dd class="text-right">
+          {{ user_obj.created_at | dt_id('%d %b %Y') if user_obj.created_at else '—' }}
+        </dd>
+      </div>
+    </dl>
+  </section>
+
+  {# ── Password change ───────────────────────────── #}
+  <section class="panel" aria-labelledby="password-heading">
+    <h2 id="password-heading" class="text-lg font-semibold mb-1">Change password</h2>
+    <p class="text-xs text-noctra-muted mb-5">
+      You will be signed out after saving and asked to sign in again with the new password.
+    </p>
+
+    <form method="post" action="/admin/profile/password" class="space-y-5" data-guard>
+      <input type="hidden" name="_csrf" value="{{ csrf_value(request) }}" />
+
+      <div class="form-row">
+        <label class="form-label" for="old_password">Current password <span class="req">*</span></label>
+        <input class="input" type="password" id="old_password" name="old_password"
+               required maxlength="128" autocomplete="current-password" />
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-5">
+        <div class="form-row">
+          <label class="form-label" for="new_password">New password <span class="req">*</span></label>
+          <input class="input" type="password" id="new_password" name="new_password"
+                 required minlength="8" maxlength="128" autocomplete="new-password" />
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="confirm_password">Confirm new password <span class="req">*</span></label>
+          <input class="input" type="password" id="confirm_password" name="confirm_password"
+                 required minlength="8" maxlength="128" autocomplete="new-password" />
+        </div>
+      </div>
+
+      <div class="form-hint">At least 8 characters, and different from your current password.</div>
+
+      <div class="flex gap-2 pt-1">
+        <button type="submit" class="btn btn-primary">Update password</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

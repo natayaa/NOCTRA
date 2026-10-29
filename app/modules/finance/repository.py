@@ -290,10 +290,15 @@ class PaymentRepository:
         return bool((await self.db.execute(stmt)).scalar_one())
 
     async def payments_for_project(self, project_id: UUID) -> list[Payment]:
+        """All payments tied to a project, including refunds.
+
+        Refunds (direction OUT) are needed so callers can net them against
+        receipts; filtering to IN here silently overstated "total received"
+        after a reversal.
+        """
         invoice_ids_subq = select(Invoice.id).where(Invoice.project_id == project_id)
         stmt = (
             select(Payment)
-            .where(Payment.direction == PaymentDirection.IN.value)
             .where(
                 or_(
                     and_(

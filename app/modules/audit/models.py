@@ -16,10 +16,13 @@ class AuditLog(Base, UUIDMixin, TimestampMixin):
         Index("ix_audit_logs_table_record", "table_name", "record_id"),
         # Covers: ORDER BY created_at DESC  (default unfiltered listing)
         Index("ix_audit_logs_created_at", "created_at"),
+        # Covers: user_id=? ORDER BY created_at DESC (audit filtered by user).
+        # Replaces a standalone user_id index — see revision a1f2c3d4e5b6.
+        Index("ix_audit_logs_user_created", "user_id", "created_at"),
     )
 
     user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), index=True
+        ForeignKey("users.id", ondelete="SET NULL")
     )
     # No standalone index — covered by ix_audit_logs_action_created prefix.
     action: Mapped[str] = mapped_column(String(32), nullable=False)
