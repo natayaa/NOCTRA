@@ -36,8 +36,10 @@ aiosmtplib==3.0.2
 structlog==26.1.0
 pillow==12.3.0
 
-# ZoneInfo database fallback for Windows hosts.
-tzdata==2026.3; platform_system == "Windows"
+# IANA timezone database. Windows has no system copy; slim Linux images
+# often omit it too, and `zoneinfo.ZoneInfo("Asia/Jakarta")` must work in
+# both places. The PyPI package takes precedence over the system one.
+tzdata==2026.3
 
 
 # ── Development & tests ───────────────────────────────────────────

@@ -26,38 +26,31 @@ depends_on = None
 def upgrade() -> None:
     # Create new composite index BEFORE dropping the old one so that
     # queries against `user_id` never lose an index mid-migration.
-    # CONCURRENTLY avoids blocking writes — safe on a live table.
+    # CONCURRENTLY avoids blocking writes — safe on a live table. Those
+    # statements commit immediately, so IF [NOT] EXISTS keeps a retry
+    # after a later failure safe.
     with op.get_context().autocommit_block():
-        op.create_index(
-            "ix_audit_logs_user_created",
-            "audit_logs",
-            ["user_id", "created_at"],
-            unique=False,
-            postgresql_concurrently=True,
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+            "ix_audit_logs_user_created "
+            "ON audit_logs (user_id, created_at)"
         )
 
     with op.get_context().autocommit_block():
-        op.drop_index(
-            "ix_audit_logs_user_id",
-            table_name="audit_logs",
-            postgresql_concurrently=True,
+        op.execute(
+            "DROP INDEX CONCURRENTLY IF EXISTS ix_audit_logs_user_id"
         )
 
 
 def downgrade() -> None:
     # Recreate the single-column index, then drop the composite.
     with op.get_context().autocommit_block():
-        op.create_index(
-            "ix_audit_logs_user_id",
-            "audit_logs",
-            ["user_id"],
-            unique=False,
-            postgresql_concurrently=True,
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+            "ix_audit_logs_user_id ON audit_logs (user_id)"
         )
 
     with op.get_context().autocommit_block():
-        op.drop_index(
-            "ix_audit_logs_user_created",
-            table_name="audit_logs",
-            postgresql_concurrently=True,
+        op.execute(
+            "DROP INDEX CONCURRENTLY IF EXISTS ix_audit_logs_user_created"
         )

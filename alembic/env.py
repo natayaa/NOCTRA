@@ -1,13 +1,27 @@
 """
 Alembic environment for NOCTRA Autoworks.
 
-Async-aware. Reads the DB URL from app settings so .env is the single
-source of truth. Supports both offline (SQL dump) and online modes.
+The database URL is derived from the application settings (`.env` is the
+single source of truth), so no credentials are stored in `alembic.ini`.
+
+Two optional environment overrides exist for automation:
+
+    ALEMBIC_DATABASE_URL   Full SQLAlchemy URL. Defaults to the URL built
+                           from `.env` — handy for one-off checks against a
+                           staging database without editing `.env`.
+    ALEMBIC_SCHEMA         Apply/compare migrations in an isolated schema.
+                           Used by `make migrate-check` to validate the
+                           whole chain on a throwaway schema instead of
+                           touching real tables.
+
+Offline mode (`alembic upgrade head --sql`) uses the synchronous URL and
+emits SQL with literal binds, so a DBA can review it before execution.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -18,53 +32,43 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import settings
 from app.core.database import Base
 
-# ────────────────────────────────────────────────────────────
-# Model imports — REQUIRED for autogenerate to see every table.
-# Any module that defines a Base subclass must be imported here.
-# ────────────────────────────────────────────────────────────
-from app.modules.auth import models as _auth_models          # noqa: F401
-from app.modules.rbac import models as _rbac_models          # noqa: F401
-from app.modules.audit import models as _audit_models        # noqa: F401
-from app.modules.settings import models as _settings_models  # noqa: F401
-
+# Register every model. `models_registry` is the single import point used by
+# the app, tests, and Alembic — a new model only needs to be added there.
 import app.core.models_registry  # noqa: F401
 
-# ── Phase 2a — uncomment when the model files exist ─────────
-# from app.modules.customers import models as _customer_models  # noqa: F401
-# from app.modules.vehicles import models as _vehicle_models    # noqa: F401
-
-# ------------------------------------------------------------
-# Alembic config
-# ------------------------------------------------------------
 config = context.config
 
-# Inject the DB URL from app settings (overrides alembic.ini's empty value).
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# `ALEMBIC_DATABASE_URL` wins over the configuration derived from `.env`.
+_database_url = os.getenv("ALEMBIC_DATABASE_URL") or settings.database_url
+config.set_main_option("sqlalchemy.url", _database_url)
 
-# Python logging config from alembic.ini.
+# Optional isolated schema (e.g. `noctra_mig_check`). Empty/unset = default.
+_schema = (os.getenv("ALEMBIC_SCHEMA") or "").strip() or None
+_connect_args: dict = {}
+if _schema:
+    _connect_args = {"server_settings": {"search_path": f"{_schema},public"}}
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
 
 
-# ------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------
 def include_object(object_, name, type_, reflected, compare_to) -> bool:
+    """Exclude scratch tables (`_` prefix) from autogenerate and checks.
+
+    `alembic_version` is filtered explicitly because Alembic only skips it
+    automatically when it lives in the default schema; with
+    `ALEMBIC_SCHEMA` it otherwise shows up as a removed table.
     """
-    Skip tables/objects we never want migrated.
-    Currently: anything prefixed with `_` (scratch tables).
-    """
-    if type_ == "table" and name.startswith("_"):
-        return False
+    if type_ == "table":
+        if name == "alembic_version" or name.startswith("_"):
+            return False
     return True
 
 
 def process_revision_directives(context_, revision, directives):
-    """
-    Prevent empty autogenerate migrations from being written.
-    """
+    """Never write an empty autogenerate revision."""
     if getattr(config.cmd_opts, "autogenerate", False):
         script = directives[0]
         if script.upgrade_ops.is_empty():
@@ -81,14 +85,15 @@ def _common_options(connection: Connection | None = None) -> dict:
         "include_object": include_object,
         "process_revision_directives": process_revision_directives,
     }
+    if _schema:
+        # Keep `alembic_version` beside the migrated tables when running in
+        # an isolated schema.
+        opts["version_table_schema"] = _schema
     if connection is not None:
         opts["connection"] = connection
     return opts
 
 
-# ------------------------------------------------------------
-# Offline — emit SQL without a live connection
-# ------------------------------------------------------------
 def run_migrations_offline() -> None:
     context.configure(
         url=settings.sync_database_url,
@@ -99,14 +104,12 @@ def run_migrations_offline() -> None:
         compare_server_default=True,
         include_object=include_object,
         process_revision_directives=process_revision_directives,
+        version_table_schema=_schema,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
-# ------------------------------------------------------------
-# Online — connect and apply
-# ------------------------------------------------------------
 def do_run_migrations(connection: Connection) -> None:
     context.configure(**_common_options(connection))
     with context.begin_transaction():
@@ -119,6 +122,7 @@ async def run_async_migrations() -> None:
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=_connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

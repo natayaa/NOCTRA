@@ -24,19 +24,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # `IF NOT EXISTS` resolves against the table in the current search_path,
+    # so an equally-named column in another schema cannot mask the check.
     op.execute(
-        """
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'project_items'
-                  AND column_name = 'occurred_at'
-            ) THEN
-                ALTER TABLE project_items ADD COLUMN occurred_at timestamptz;
-            END IF;
-        END $$;
-        """
+        "ALTER TABLE project_items "
+        "ADD COLUMN IF NOT EXISTS occurred_at timestamptz"
     )
     op.execute(
         "UPDATE project_items SET occurred_at = created_at "

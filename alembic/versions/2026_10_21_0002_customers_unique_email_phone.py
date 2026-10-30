@@ -111,42 +111,34 @@ def upgrade() -> None:
 
     # ── 2. Create new unique indexes (before dropping old ones) ───
     # `postgresql_where` gives a partial index — multiple NULL emails
-    # or phones must remain allowed.
+    # or phones must remain allowed. CONCURRENTLY cannot run in a
+    # transaction, so a later failure leaves the index committed; the
+    # IF NOT EXISTS clauses make a retry safe.
     with op.get_context().autocommit_block():
         op.execute(sa.text("""
-            CREATE UNIQUE INDEX CONCURRENTLY uq_customers_email_lower
+            CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS
+                uq_customers_email_lower
             ON customers (lower(email))
             WHERE email IS NOT NULL
         """))
 
     with op.get_context().autocommit_block():
         op.execute(sa.text("""
-            CREATE UNIQUE INDEX CONCURRENTLY uq_customers_phone
+            CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS
+                uq_customers_phone
             ON customers (phone)
             WHERE phone IS NOT NULL
         """))
 
     # ── 3. Drop redundant single-column indexes ───────────────────
     with op.get_context().autocommit_block():
-        op.drop_index(
-            "ix_customers_email",
-            table_name="customers",
-            postgresql_concurrently=True,
-        )
+        op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_customers_email")
 
     with op.get_context().autocommit_block():
-        op.drop_index(
-            "ix_customers_phone",
-            table_name="customers",
-            postgresql_concurrently=True,
-        )
+        op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_customers_phone")
 
     with op.get_context().autocommit_block():
-        op.drop_index(
-            "ix_customers_status",
-            table_name="customers",
-            postgresql_concurrently=True,
-        )
+        op.execute("DROP INDEX CONCURRENTLY IF EXISTS ix_customers_status")
 
 
 def downgrade() -> None:

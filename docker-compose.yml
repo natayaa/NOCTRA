@@ -1,0 +1,124 @@
+# ══════════════════════════════════════════════════════════════════
+# NOCTRA — production-shaped local stack
+#
+#   make docker-env     # once: creates .env.docker with strong secrets
+#   make docker-up      # build + start db, app and nginx
+#   open http://localhost:8080
+#
+# Only nginx publishes a port. PostgreSQL and the app stay on internal
+# networks. The app waits for the database and applies Alembic
+# migrations before serving traffic.
+#
+# Always pass the env file explicitly:
+#   docker compose --env-file .env.docker <command>
+# (the make targets do this for you).
+# ══════════════════════════════════════════════════════════════════
+
+name: noctra
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-noctra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.docker}
+      POSTGRES_DB: ${POSTGRES_DB:-NOCTRADB}
+      TZ: ${APP_TIMEZONE:-Asia/Jakarta}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - backend
+    logging: *default-logging
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: noctra:local
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env.docker
+    environment:
+      # Container-specific overrides. `environment` wins over env_file.
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      MEDIA_ROOT: media
+      RUN_MIGRATIONS: "1"
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - backend
+      - edge
+    logging: *default-logging
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1/healthz >/dev/null || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - edge
+    logging: *default-logging
+
+networks:
+  # Public-facing bridge: nginx ↔ app.
+  edge:
+  # Private bridge: app ↔ PostgreSQL. `internal` removes the default
+  # gateway, so neither service can reach the internet through it.
+  backend:
+    internal: true
+
+volumes:
+  db_data:
+  media_data:

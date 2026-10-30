@@ -18,7 +18,6 @@ Existing rows are backfilled from `created_at`; legacy data is preserved.
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "f0c1d2e3a4b5"
@@ -28,72 +27,96 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Everything here is written idempotently: databases bootstrapped with
+    # `Base.metadata.create_all()` already carry some of these objects,
+    # while genuinely migration-built databases do not. Either way the
+    # revision must succeed and converge on the same schema.
+    #
     # ── inventory_transactions.occurred_at ────────────────────────
-    op.add_column(
-        "inventory_transactions",
-        sa.Column(
-            "occurred_at",
-            sa.DateTime(timezone=True),
-            nullable=True,
-        ),
+    op.execute(
+        "ALTER TABLE inventory_transactions "
+        "ADD COLUMN IF NOT EXISTS occurred_at timestamptz"
     )
     op.execute(
         "UPDATE inventory_transactions "
         "SET occurred_at = created_at "
         "WHERE occurred_at IS NULL"
     )
-    op.alter_column(
-        "inventory_transactions",
-        "occurred_at",
-        nullable=False,
-        server_default=sa.text("now()"),
+    op.execute(
+        "ALTER TABLE inventory_transactions "
+        "ALTER COLUMN occurred_at SET NOT NULL"
     )
-    op.create_index(
-        "ix_inventory_transactions_occurred_at",
-        "inventory_transactions",
-        ["occurred_at"],
-        unique=False,
+    op.execute(
+        "ALTER TABLE inventory_transactions "
+        "ALTER COLUMN occurred_at SET DEFAULT now()"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS "
+        "ix_inventory_transactions_occurred_at "
+        "ON inventory_transactions (occurred_at)"
     )
 
     # ── payments.reversal_of_id integrity ─────────────────────────
+    # The column itself was ORM-only until now — a migration-built
+    # database has no `reversal_of_id`, so it must be created before the
+    # constraint that references it.
     # A payment may be reversed at most once, and a reversal must point
-    # at a real payment. Verified: no duplicate/orphan values exist.
-    op.create_unique_constraint(
-        "uq_payments_reversal_of_id",
-        "payments",
-        ["reversal_of_id"],
+    # at a real payment. Multiple NULLs remain allowed.
+    op.execute(
+        "ALTER TABLE payments "
+        "ADD COLUMN IF NOT EXISTS reversal_of_id uuid"
     )
-    op.create_foreign_key(
-        "fk_payments_reversal_of_id_payments",
-        "payments",
-        "payments",
-        ["reversal_of_id"],
-        ["id"],
-        ondelete="RESTRICT",
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'uq_payments_reversal_of_id'
+                  AND conrelid = 'payments'::regclass
+            ) THEN
+                ALTER TABLE payments
+                    ADD CONSTRAINT uq_payments_reversal_of_id
+                    UNIQUE (reversal_of_id);
+            END IF;
+        END $$;
+        """
+    )
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'fk_payments_reversal_of_id_payments'
+                  AND conrelid = 'payments'::regclass
+            ) THEN
+                ALTER TABLE payments
+                    ADD CONSTRAINT fk_payments_reversal_of_id_payments
+                    FOREIGN KEY (reversal_of_id)
+                    REFERENCES payments (id)
+                    ON DELETE RESTRICT;
+            END IF;
+        END $$;
+        """
     )
 
     # ── Indexes the models declare but the schema lacked ──────────
-    op.create_index(
-        "ix_materials_active_category",
-        "materials",
-        ["is_active", "category"],
-        unique=False,
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_materials_active_category "
+        "ON materials (is_active, category)"
     )
-    op.create_index(
-        "ix_suppliers_active_name",
-        "suppliers",
-        ["is_active", "name"],
-        unique=False,
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_suppliers_active_name "
+        "ON suppliers (is_active, name)"
     )
-    op.create_index(
-        "ix_vehicles_brand",
-        "vehicles",
-        ["brand_id"],
-        unique=False,
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_vehicles_brand "
+        "ON vehicles (brand_id)"
     )
 
     # Superseded by ix_audit_logs_action_created (leftmost prefix).
-    op.drop_index("ix_audit_logs_action", table_name="audit_logs")
+    op.execute("DROP INDEX IF EXISTS ix_audit_logs_action")
 
 
 def downgrade() -> None:

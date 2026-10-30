@@ -1,0 +1,46 @@
+# ══════════════════════════════════════════════════════════════════
+# NOCTRA — Docker build context
+#
+# Keep the context small and never ship secrets, local uploads, or
+# development state inside the image.
+# ══════════════════════════════════════════════════════════════════
+
+.git
+.gitignore
+.github
+
+# Local environment and secrets — injected at runtime instead.
+.env
+.env.*
+!.env.example
+!.env.docker.example
+*.pem
+*.key
+
+# Virtualenvs and caches
+venv
+.venv
+env
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+
+# Local data and uploads
+media
+app.bak
+backups
+*.sql
+*.dump
+*.log
+
+# Tests and editor state are not needed in the runtime image
+tests
+.idea
+.vscode
+
+# Deployment configs are mounted into the nginx container, not the app
+deploy/nginx
+readme.md

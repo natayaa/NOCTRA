@@ -25,10 +25,17 @@ DB_NAME ?= NOCTRADB
 TEST_DB_NAME ?= NOCTRADB_test
 message ?=
 
+COMPOSE ?= docker compose
+COMPOSE_ENV ?= .env.docker
+COMPOSE_CMD = $(COMPOSE) --env-file $(COMPOSE_ENV)
 
-.PHONY: help venv install run migrate revision downgrade seed seed-settings \
-        superuser db-create test-db wait-db test test-unit test-integration \
-        test-cov check clean
+
+.PHONY: help venv install run migrate migrate-check migrate-sql revision \
+        downgrade seed seed-settings superuser db-create test-db wait-db \
+        test test-unit test-integration test-cov check clean \
+        docker-env docker-config docker-build docker-up docker-down \
+        docker-logs docker-ps docker-migrate docker-seed docker-superuser \
+        docker-shell
 
 
 help: ## Show this help
@@ -67,6 +74,12 @@ wait-db: ## Block until PostgreSQL accepts connections
 
 migrate: ## Apply every pending migration
 	$(PYTHON) -m alembic upgrade head
+
+migrate-check: ## Build the whole chain on a scratch schema and check drift
+	$(PYTHON) -m scripts.migrate_check
+
+migrate-sql: ## Print pending migration SQL without applying it
+	$(PYTHON) -m alembic upgrade head --sql
 
 revision: ## Autogenerate a migration: make revision message="..."
 	@if [ -z "$(message)" ]; then \
@@ -112,3 +125,42 @@ check: ## Validate .env and byte-compile app, scripts and tests
 clean: ## Remove Python and test caches
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf .pytest_cache .ruff_cache .mypy_cache htmlcov .coverage
+
+
+# -- Containers ----------------------------------------------------
+
+docker-env: ## Create .env.docker with generated secrets (if missing)
+	$(PYTHON) -m scripts.gen_docker_env
+
+docker-config: docker-env ## Validate the Compose file
+	$(COMPOSE_CMD) config --quiet
+	@echo "compose config OK"
+
+docker-build: docker-env ## Build the application image
+	$(COMPOSE_CMD) build
+
+docker-up: docker-env ## Build and start db + app + nginx in the background
+	$(COMPOSE_CMD) up -d --build --remove-orphans
+	@port=$$(grep -E '^HTTP_PORT=' $(COMPOSE_ENV) | cut -d= -f2 | tail -1); \
+	 echo "NOCTRA is starting — http://localhost:$${port:-8080}"
+
+docker-down: ## Stop the stack (keeps the database/media volumes)
+	$(COMPOSE_CMD) down
+
+docker-ps: ## Show container status and health
+	$(COMPOSE_CMD) ps
+
+docker-logs: ## Follow logs from all services
+	$(COMPOSE_CMD) logs -f --tail=200
+
+docker-migrate: ## Apply migrations inside the running app container
+	$(COMPOSE_CMD) exec app alembic -c /app/alembic.ini upgrade head
+
+docker-seed: ## Seed reference data inside the running app container
+	$(COMPOSE_CMD) exec app python -m scripts.seed_all
+
+docker-superuser: ## Create a superuser inside the running app container
+	$(COMPOSE_CMD) exec app python -m scripts.create_superuser
+
+docker-shell: ## Open a shell in the app container
+	$(COMPOSE_CMD) exec app sh
